@@ -1,0 +1,35 @@
+# Secrets
+.env
+client_secret.json
+token.json
+
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# Node
+node_modules/
+frontend/dist/
+frontend/.next/
+
+# Storage (generated assets — don't commit renders)
+storage/audio/
+storage/visuals/
+storage/renders/
+storage/projects/
+*.db
+*.db-shm
+*.db-wal
+
+# Misc
+.DS_Store
+*.log
+.vscode/
+.idea/
