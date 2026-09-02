@@ -1,0 +1,66 @@
+niches:
+  kids_facts:
+    label: "Kids Fun Facts"
+    description: "Short, age-appropriate surprising facts for children 4-10"
+    tone: "warm, curious, playful"
+    voice: "en-US-AnaNeural"        # child-friendly Microsoft Neural voice
+    topics:
+      - "Why do cats purr?"
+      - "How do butterflies grow from caterpillars?"
+      - "Why is the sky blue?"
+      - "How do bees make honey?"
+      - "Why do we have fingerprints?"
+      - "How do fish breathe underwater?"
+      - "Why do leaves change colour in autumn?"
+      - "How do birds know where to fly in winter?"
+      - "Why do we yawn when we see someone else yawn?"
+      - "How does a rainbow form?"
+      - "Why do some animals hibernate?"
+      - "How do spiders make webs?"
+      - "Why do stars twinkle?"
+      - "How do elephants use their trunks?"
+      - "Why do dogs wag their tails?"
+      - "How do volcanoes work?"
+      - "Why do we have two eyes?"
+      - "How do plants eat sunlight?"
+      - "Why do some animals glow in the dark?"
+      - "How do crabs walk sideways?"
+
+  science_wow:
+    label: "Science in 60 Seconds"
+    description: "Jaw-dropping science facts explained simply"
+    tone: "enthusiastic, wonder-inducing, accessible"
+    voice: "en-US-GuyNeural"
+    topics:
+      - "The human brain uses 20% of all body energy"
+      - "A day on Venus is longer than a year on Venus"
+      - "There are more trees on Earth than stars in the Milky Way"
+      - "Octopuses have three hearts"
+      - "Honey never expires — archaeologists found 3000-year-old honey"
+      - "A bolt of lightning is five times hotter than the sun's surface"
+      - "Bananas are slightly radioactive"
+      - "The ocean produces 50% of Earth's oxygen"
+
+  tech_mysteries:
+    label: "Tech Mysteries"
+    description: "Surprising technology facts and hidden mechanisms"
+    tone: "curious, intelligent, slightly dramatic"
+    voice: "en-GB-RyanNeural"
+    topics:
+      - "Why your phone battery degrades over time"
+      - "How GPS satellites actually know your location"
+      - "Why CAPTCHA trains AI models"
+      - "How noise-cancelling headphones work"
+      - "Why websites load faster the second time"
+      - "How touchscreens detect your finger"
+
+# Global pipeline defaults
+defaults:
+  max_duration_seconds: 55
+  min_duration_seconds: 28
+  target_fps: 30
+  resolution: [1080, 1920]
+  subtitle_style: "dynamic"        # dynamic | static
+  auto_upload: false               # always human-reviewed first
+  privacy_status: "private"        # private | unlisted | public
+  quality_threshold: 70            # minimum quality score to proceed
