@@ -10,6 +10,7 @@ import json
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
+# pyrefly: ignore [missing-import]
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -41,7 +42,7 @@ def main():
 
     os.makedirs("storage/audio", exist_ok=True)
     audio_path = "storage/audio/test_voice.mp3"
-    srt_path   = "storage/audio/test_subs.srt"
+    sub_path   = "storage/audio/test_subs.ass"
 
     print(f"\n{'='*60}")
     print(f"  Voice : {NICHE_VOICES.get(niche, 'en-US-GuyNeural')}")
@@ -51,17 +52,18 @@ def main():
 
     print("⏳ Generating voiceover...")
     import asyncio
-    result = asyncio.run(generate_voiceover(text, niche=niche, audio_path=audio_path, srt_path=srt_path))
+    result = asyncio.run(generate_voiceover(text, niche=niche, audio_path=audio_path, sub_path=sub_path))
 
     print(f"\n✅ Done!")
     print(f"  Audio  → {result['audio_path']}")
-    print(f"  SRT    → {result['srt_path']}")
+    print(f"  Sub    → {result['sub_path']}")
     print(f"  Duration: {result['duration']:.2f}s")
     print(f"  Voice  : {result['voice']}")
+    print(f"  Words  : {len(result.get('word_boundaries', []))} boundary events")
 
     # Print first few subtitle lines
-    if os.path.exists(srt_path):
-        lines = open(srt_path).readlines()[:20]
+    if os.path.exists(sub_path):
+        lines = open(sub_path).readlines()[:20]
         print(f"\n📝 First subtitle lines:\n{''.join(lines)}")
 
 

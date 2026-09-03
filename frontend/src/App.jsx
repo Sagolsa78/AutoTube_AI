@@ -1,26 +1,36 @@
-import { Routes, Route, Link, useLocation } from 'react-router-dom';
+import { Routes, Route, Link, useLocation, Navigate, Outlet } from 'react-router-dom';
+import Landing from './pages/Landing';
 import Dashboard from './pages/Dashboard';
 import Ideas from './pages/Ideas';
 import Scripts from './pages/Scripts';
 import Videos from './pages/Videos';
 import Profile from './pages/Profile';
+import Channels from './pages/Channels';
+import Publications from './pages/Publications';
+import Logs from './pages/Logs';
+import Health from './pages/Health';
 import Icon from './components/Icon';
+import { Toaster } from 'sonner';
 import './index.css';
 
 const nav = [
-  { to: '/',         label: 'Dashboard', icon: 'home' },
-  { to: '/ideas',    label: 'Ideas',     icon: 'layers' },
-  { to: '/scripts',  label: 'Scripts',   icon: 'fileText' },
-  { to: '/videos',   label: 'Videos',    icon: 'video' },
+  { to: '/app',             label: 'Dashboard',    icon: 'home' },
+  { to: '/app/ideas',        label: 'Ideas',        icon: 'layers' },
+  { to: '/app/scripts',      label: 'Scripts',      icon: 'fileText' },
+  { to: '/app/videos',       label: 'Videos',       icon: 'video' },
+  { to: '/app/publications', label: 'Publications', icon: 'youtube' },
 ];
 
 const accountNav = [
-  { to: '/profile',  label: 'Settings',  icon: 'settings' },
+  { to: '/app/channels', label: 'Channels',  icon: 'hash' },
+  { to: '/app/logs',     label: 'Activity',  icon: 'activity' },
+  { to: '/app/health',   label: 'Health',    icon: 'heart' },
+  { to: '/app/profile',  label: 'Settings',  icon: 'settings' },
 ];
 
 function NavItem({ to, label, icon }) {
   const loc = useLocation();
-  const active = to === '/' ? loc.pathname === '/' : loc.pathname.startsWith(to);
+  const active = to === '/app' ? loc.pathname === '/app' : loc.pathname.startsWith(to);
   return (
     <Link to={to} className={`nav-item${active ? ' active' : ''}`}>
       <Icon name={icon} /> {label}
@@ -28,10 +38,20 @@ function NavItem({ to, label, icon }) {
   );
 }
 
-export default function App() {
+function StudioLayout() {
   const loc = useLocation();
-  const titles = { '/': 'Dashboard', '/ideas': 'Ideas', '/scripts': 'Scripts', '/videos': 'Videos', '/profile': 'Settings' };
-  const pageTitle = Object.entries(titles).find(([k]) => k === '/' ? loc.pathname === '/' : loc.pathname.startsWith(k));
+  const titles = { 
+    '/app': 'Dashboard', 
+    '/app/ideas': 'Ideas', 
+    '/app/scripts': 'Scripts', 
+    '/app/videos': 'Videos', 
+    '/app/publications': 'Publications',
+    '/app/channels': 'Channels',
+    '/app/logs': 'Activity & Logs',
+    '/app/health': 'System Health',
+    '/app/profile': 'Settings' 
+  };
+  const pageTitle = Object.entries(titles).find(([k]) => k === '/app' ? loc.pathname === '/app' : loc.pathname.startsWith(k));
 
   return (
     <div className="app">
@@ -47,7 +67,7 @@ export default function App() {
         <nav className="sidebar-nav">
           <div className="nav-section">Production</div>
           {nav.map(n => <NavItem key={n.to} {...n} />)}
-          <div className="nav-section">Account</div>
+          <div className="nav-section">System</div>
           {accountNav.map(n => <NavItem key={n.to} {...n} />)}
         </nav>
 
@@ -60,19 +80,36 @@ export default function App() {
         <header className="topbar">
           <span className="topbar-title">{pageTitle?.[1] || 'AutoShorts Studio'}</span>
           <div className="topbar-right">
-            <Link to="/profile" className="btn btn-sm btn-secondary"><Icon name="settings" size={14} /> Settings</Link>
+            <Link to="/app/profile" className="btn btn-sm btn-secondary"><Icon name="settings" size={14} /> Settings</Link>
           </div>
         </header>
         <div className="page">
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/ideas" element={<Ideas />} />
-            <Route path="/scripts" element={<Scripts />} />
-            <Route path="/videos" element={<Videos />} />
-            <Route path="/profile" element={<Profile />} />
-          </Routes>
+          <Outlet />
         </div>
       </main>
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <>
+      <Toaster position="bottom-right" richColors theme="dark" />
+      <Routes>
+        <Route path="/" element={<Landing />} />
+        <Route path="/app" element={<StudioLayout />}>
+          <Route index element={<Dashboard />} />
+          <Route path="ideas" element={<Ideas />} />
+          <Route path="scripts" element={<Scripts />} />
+          <Route path="videos" element={<Videos />} />
+          <Route path="publications" element={<Publications />} />
+          <Route path="channels" element={<Channels />} />
+          <Route path="logs" element={<Logs />} />
+          <Route path="health" element={<Health />} />
+          <Route path="profile" element={<Profile />} />
+        </Route>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </>
   );
 }

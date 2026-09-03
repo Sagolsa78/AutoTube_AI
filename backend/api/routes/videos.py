@@ -4,16 +4,19 @@ Integrates user profile for caption style, watermark, and custom CTA.
 """
 from __future__ import annotations
 import os
-from fastapi import APIRouter, Depends, HTTPException
+import logging
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.db.database import get_db
+from backend.db.database import get_db, AsyncSessionLocal
 from backend.models.models import Video, VideoStatus, Script, Channel, Idea, UserProfile
+from engine.models import RenderJob
 
 router = APIRouter()
+log = logging.getLogger(__name__)
 
 DEFAULT_PROFILE_ID = "default-user"
 
@@ -58,11 +61,79 @@ async def list_videos(
     return [_fmt(v) for v in result.scalars().all()]
 
 
-@router.post("/render", response_model=VideoOut, status_code=201)
-async def render_video(body: RenderIn, db: AsyncSession = Depends(get_db)):
+async def _run_render(video_id: str, job: RenderJob):
+    """Background render task — runs after HTTP response is sent."""
+    async with AsyncSessionLocal() as db:
+        try:
+            video = await db.get(Video, video_id)
+            if not video:
+                log.warning(f"Video {video_id} not found in _run_render.")
+                return
+
+            log.info(f"Starting background render for video {video_id} (Script: {job.script_full_text[:30]}...)")
+            # TTS
+            from engine.tts.voiceover import generate_voiceover
+            audio_dir = f"storage/audio/{video.id}"
+            os.makedirs(audio_dir, exist_ok=True)
+            tts = await generate_voiceover(
+                job.script_full_text, niche=job.niche,
+                audio_path=f"{audio_dir}/voice.mp3",
+                sub_path=f"{audio_dir}/subs.ass",
+            )
+            job.audio_path = tts["audio_path"]
+            job.sub_path = tts["sub_path"]
+            job.duration = tts["duration"]
+            job.voice = tts["voice"]
+            job.word_boundaries = tts.get("word_boundaries", [])
+
+            # Visuals
+            from engine.visuals.fetcher import async_fetch_clips
+            visual_dir = f"storage/visuals/{video.id}"
+            script = await db.get(Script, video.script_id)
+            idea = await db.get(Idea, script.idea_id) if script else None
+            queries = script.visual_prompts or [idea.topic if idea else "nature"]
+            
+            clips = await async_fetch_clips(queries[:3], clips_per_query=2, out_dir=visual_dir)
+            if not clips:
+                raise RuntimeError("No stock clips found — check Pexels/Pixabay API keys")
+            # Filter out zero-byte clips (failed/corrupt downloads)
+            valid_clips = [c for c in clips if os.path.getsize(c["path"]) > 10_000]
+            if not valid_clips:
+                raise RuntimeError(
+                    f"All {len(clips)} downloaded clip(s) are empty or corrupt. "
+                    "Check Pexels API key and network connectivity."
+                )
+            if len(valid_clips) < len(clips):
+                log.warning(
+                    "Discarded %d zero-byte/corrupt clip(s), proceeding with %d valid clip(s).",
+                    len(clips) - len(valid_clips), len(valid_clips)
+                )
+            job.clip_paths = [c["path"] for c in valid_clips]
+
+            # Assembly
+            from engine.rendering.assembler import async_assemble_job
+            await async_assemble_job(job)
+
+            video.path = job.output_path
+            video.duration = job.duration
+            video.status = VideoStatus.ready
+            video.ai_used = True
+            video.notes = None
+            await db.commit()
+            log.info(f"Background render completed successfully for video {video_id} -> {job.output_path}")
+        except Exception as exc:
+            log.exception(f"Background render failed for video {video_id}: {exc}")
+            video = await db.get(Video, video_id)
+            if video:
+                video.status = VideoStatus.failed
+                video.notes = str(exc)
+                await db.commit()
+
+
+@router.post("/render", response_model=VideoOut, status_code=202)
+async def render_video(body: RenderIn, bg: BackgroundTasks, db: AsyncSession = Depends(get_db)):
     """
-    Full render pipeline: TTS → visuals → FFmpeg assembly.
-    Uses the user profile for caption style, CTA text, and watermark.
+    Queue render pipeline: TTS → visuals → FFmpeg assembly.
     """
     script = await db.get(Script, body.script_id)
     if not script:
@@ -98,68 +169,27 @@ async def render_video(body: RenderIn, db: AsyncSession = Depends(get_db)):
         status=VideoStatus.rendering,
     )
     db.add(video)
-    await db.flush()
+    await db.commit()
+    await db.refresh(video)
 
-    try:
-        # TTS
-        from engine.tts.voiceover import generate_voiceover
-        audio_dir = f"storage/audio/{video.id}"
-        os.makedirs(audio_dir, exist_ok=True)
-        tts = await generate_voiceover(
-            script.full_text, niche=niche,
-            audio_path=f"{audio_dir}/voice.mp3",
-            srt_path=f"{audio_dir}/subs.srt",
-        )
+    job = RenderJob(
+        video_id=video.id,
+        script_full_text=script.full_text,
+        niche=niche,
+        caption_style=caption_style,
+        style=body.style,
+    )
+    
+    if profile and profile.watermark_enabled and profile.logo_path:
+        from pathlib import Path
+        if Path(profile.logo_path).exists():
+            job.watermark_path = profile.logo_path
+            job.watermark_opacity = profile.watermark_opacity or 0.4
+            job.watermark_position = profile.watermark_position or "bottom_right"
+            job.watermark_scale = profile.watermark_scale or 0.12
 
-        # Visuals
-        from engine.visuals.fetcher import fetch_clips
-        visual_dir = f"storage/visuals/{video.id}"
-        queries = script.visual_prompts or [idea.topic if idea else "nature"]
-        clips = fetch_clips(queries[:3], clips_per_query=1, out_dir=visual_dir)
-        if not clips:
-            raise RuntimeError("No stock clips found — check Pexels/Pixabay API keys")
-
-        # Watermark setup from profile
-        watermark_path = None
-        wm_opacity = 0.4
-        wm_position = "bottom_right"
-        wm_scale = 0.12
-        if profile and profile.watermark_enabled and profile.logo_path:
-            from pathlib import Path
-            if Path(profile.logo_path).exists():
-                watermark_path = profile.logo_path
-                wm_opacity = profile.watermark_opacity or 0.4
-                wm_position = profile.watermark_position or "bottom_right"
-                wm_scale = profile.watermark_scale or 0.12
-
-        # Assembly
-        from engine.rendering.assembler import assemble_video
-        out_path = f"storage/renders/{video.id}.mp4"
-        assemble_video(
-            [c["path"] for c in clips],
-            audio_path=tts["audio_path"],
-            srt_path=tts["srt_path"],
-            out_path=out_path,
-            style=body.style,
-            caption_style=caption_style,
-            watermark_path=watermark_path,
-            watermark_opacity=wm_opacity,
-            watermark_position=wm_position,
-            watermark_scale=wm_scale,
-        )
-
-        video.path     = out_path
-        video.duration = tts["duration"]
-        video.status   = VideoStatus.ready
-        video.ai_used  = True
-
-    except Exception as exc:
-        video.status = VideoStatus.failed
-        video.notes  = str(exc)
-        await db.flush()
-        raise HTTPException(500, f"Render failed: {exc}")
-
-    await db.flush()
+    import asyncio
+    asyncio.create_task(_run_render(video.id, job))
     return _fmt(video)
 
 
@@ -249,7 +279,7 @@ def _fmt(v: Video) -> dict:
         "style":         v.style,
         "caption_style": v.caption_style or "bold_centered",
         "status":        v.status.value if hasattr(v.status, "value") else v.status,
-        "ai_used":       v.ai_used or True,
+        "ai_used":       v.ai_used,
         "notes":         v.notes,
         "created_at":    str(v.created_at),
     }

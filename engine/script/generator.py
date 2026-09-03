@@ -11,6 +11,9 @@ from integrations.providers.ai_providers import generate_with_fallback
 log = logging.getLogger(__name__)
 
 # ── Prompt templates per niche ─────────────────────────────────────────────────
+# IMPORTANT: The example visual_prompts in each template use << >> placeholders
+# so the LLM cannot copy them verbatim. They must be replaced with
+# topic-specific phrases from the actual content being written.
 
 _PROMPTS: dict[str, str] = {
     "kids_facts": """You are a friendly, enthusiastic scriptwriter for a children's YouTube Shorts channel (audience: ages 4-10).
@@ -26,15 +29,18 @@ Rules:
 - Plain, simple words — as if explaining to a 6-year-old
 - NO scary, violent, or adult themes
 - NO unsupported claims
-- visual_prompts must contain 3 exact 3-4 word visually concrete search phrases (e.g. "child holding plastic skull" or "animated smiling sun") NOT generic nouns.
+- visual_prompts: exactly 3 SPECIFIC 3-5 word search phrases for stock footage directly relevant to {topic}.
+  Each phrase must describe something VISUALLY CONCRETE and UNIQUE to this specific topic.
+  BAD (too generic): "nature", "child playing", "colorful background"
+  GOOD (topic-specific): for butterflies → "monarch butterfly close up wings", "caterpillar spinning cocoon", "butterfly emerging from chrysalis"
 
-Respond ONLY with valid JSON (no markdown fences) in this exact format:
+Respond ONLY with valid JSON (no markdown fences) — replace <<EXAMPLE>> with real values:
 {{
   "hook": "...",
   "body": ["...", "...", "..."],
   "payoff": "...",
   "cta": "Follow us to learn more amazing stuff!",
-  "visual_prompts": ["happy child exploring nature", "colorful plastic dinosaur toy", "kid looking through telescope"],
+  "visual_prompts": ["<<SPECIFIC_VISUAL_1_FOR_{topic}>>", "<<SPECIFIC_VISUAL_2_FOR_{topic}>>", "<<SPECIFIC_VISUAL_3_FOR_{topic}>>"],
   "estimated_duration": 40
 }}""",
 
@@ -50,7 +56,12 @@ Rules:
 - CTA: "Follow for a new mind-blowing fact every day."
 - No clickbait or false claims
 - No markdown, no stage directions
-- visual_prompts must contain exactly 3 specific, visually concrete 3-4 word search phrases for stock footage (e.g. "glowing blue brain scan", "astronaut walking on moon", "close up falling water") — DO NOT use single abstract keywords.
+- visual_prompts: exactly 3 SPECIFIC 3-5 word search phrases for stock footage directly relevant to {topic}.
+  Each phrase must describe something VISUALLY CONCRETE and UNIQUE to this specific topic.
+  DO NOT use single abstract keywords. DO NOT copy the example values below.
+  BAD: "glowing blue dna double helix", "scientist looking into microscope", "earth spinning in space" (these are GENERIC PLACEHOLDERS — never use them)
+  GOOD (for tardigrades): "tardigrade under electron microscope", "water bear cryptobiosis closeup", "extreme survival organism space"
+  GOOD (for neutron stars): "neutron star collision animation", "massive star collapsing supernova", "gravitational wave detection screen"
 
 Respond ONLY with valid JSON (no markdown fences):
 {{
@@ -58,7 +69,7 @@ Respond ONLY with valid JSON (no markdown fences):
   "body": ["...", "...", "..."],
   "payoff": "...",
   "cta": "Follow for a new mind-blowing fact every day.",
-  "visual_prompts": ["glowing blue dna double helix", "scientist looking into microscope", "earth spinning in space"],
+  "visual_prompts": ["<<SPECIFIC_VISUAL_1_FOR_{topic}>>", "<<SPECIFIC_VISUAL_2_FOR_{topic}>>", "<<SPECIFIC_VISUAL_3_FOR_{topic}>>"],
   "estimated_duration": 45
 }}""",
 
@@ -73,7 +84,10 @@ Rules:
 - Payoff: the "aha" moment of understanding
 - CTA: "Follow for more tech secrets you never knew."
 - Accurate — no speculation presented as fact
-- visual_prompts must contain exactly 3 specific, visually concrete 3-4 word search phrases for stock footage (e.g. "circuit board glowing blue", "person typing on keyboard", "fiber optic cables flashing") — DO NOT use single abstract keywords.
+- visual_prompts: exactly 3 SPECIFIC 3-5 word search phrases for stock footage directly relevant to {topic}.
+  Each phrase must describe something VISUALLY CONCRETE and UNIQUE to this specific topic.
+  DO NOT copy the example values below — replace with content-specific phrases.
+  GOOD (for WiFi): "wifi router signal animation", "radio waves traveling through air", "router blinking lights closeup"
 
 Respond ONLY with valid JSON (no markdown fences):
 {{
@@ -81,7 +95,7 @@ Respond ONLY with valid JSON (no markdown fences):
   "body": ["...", "...", "..."],
   "payoff": "...",
   "cta": "Follow for more tech secrets you never knew.",
-  "visual_prompts": ["glowing computer circuit board", "person typing fast keyboard", "fiber optic cable flashing"],
+  "visual_prompts": ["<<SPECIFIC_VISUAL_1_FOR_{topic}>>", "<<SPECIFIC_VISUAL_2_FOR_{topic}>>", "<<SPECIFIC_VISUAL_3_FOR_{topic}>>"],
   "estimated_duration": 43
 }}""",
 }
@@ -108,25 +122,44 @@ def generate_script(topic: str, niche: str = "science_wow") -> dict:
 
     try:
         data = _extract_json(raw)
-    except json.JSONDecodeError:
-        log.warning("Failed to parse JSON from provider — returning raw text")
-        # Graceful degradation: wrap as plain script
-        sentences = [s.strip() for s in raw.split(".") if s.strip()]
-        data = {
-            "hook": sentences[0] if sentences else topic,
-            "body": sentences[1:-1] if len(sentences) > 2 else sentences,
-            "payoff": sentences[-1] if len(sentences) > 1 else "",
-            "cta": "Follow for more!",
-            "visual_prompts": [f"{topic} stock footage", "interesting background loop"],
-            "estimated_duration": 40,
-        }
+    except (json.JSONDecodeError, ValueError) as exc:
+        log.error(
+            "Provider '%s' returned non-JSON response for topic='%s'. Raw output (first 300 chars): %s",
+            provider, topic, raw[:300]
+        )
+        raise RuntimeError(
+            f"LLM provider '{provider}' returned invalid JSON for topic '{topic}'. "
+            f"Cannot safely generate visual_prompts — aborting to avoid bad footage selection. "
+            f"JSON error: {exc}"
+        ) from exc
 
     data["provider_used"] = provider
     data["topic"] = topic
     data["niche"] = niche
 
+    # Validate visual_prompts — catch cases where the LLM returned the placeholder text
+    prompts = data.get("visual_prompts", [])
+    bad_placeholders = ["glowing blue dna double helix", "scientist looking into microscope",
+                        "earth spinning in space", "glowing computer circuit board",
+                        "person typing fast keyboard", "fiber optic cable flashing"]
+    generic_count = sum(1 for p in prompts if any(bad in p.lower() for bad in bad_placeholders))
+    if generic_count == len(prompts) and len(prompts) > 0:
+        log.warning(
+            "visual_prompts for topic='%s' appear to be template placeholders, not topic-specific. "
+            "Generating fallback prompts from topic keywords.",
+            topic
+        )
+        # Build minimal topic-derived prompts — better than copying template examples
+        words = [w for w in topic.lower().split() if len(w) > 4][:3]
+        data["visual_prompts"] = [
+            f"{' '.join(words[:2])} closeup" if len(words) >= 2 else f"{topic} closeup",
+            f"{topic} scientific animation",
+            f"{topic} natural world",
+        ]
+        log.info("Fallback visual_prompts: %s", data["visual_prompts"])
+
     # Build full_text for TTS
-    body_text = " ".join(data.get("body", []))
+    body_text = " ".join(data.get("body", []) if isinstance(data.get("body"), list) else [])
     data["full_text"] = " ".join(filter(None, [
         data.get("hook", ""),
         body_text,

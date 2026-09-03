@@ -10,7 +10,8 @@ import uuid
 from pathlib import Path
 
 from backend.settings import RENDER_DIR
-from engine.captions.styles import get_caption_style
+from engine.captions.styles import build_karaoke_ass
+from engine.models import RenderJob
 
 log = logging.getLogger(__name__)
 
@@ -33,18 +34,47 @@ def _ffprobe_duration(path: str) -> float:
         return 10.0
 
 
-def _escape_srt_path(raw_path: str) -> str:
-    """Make an SRT path safe for the FFmpeg subtitles= filtergraph."""
+def _escape_sub_path(raw_path: str) -> str:
+    """Make a subtitle path safe for the FFmpeg subtitles= filtergraph."""
     abs_path = Path(raw_path).absolute().as_posix()
     # FFmpeg filtergraph needs colons and single quotes escaped
     return abs_path.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
 
 
+def _validate_subtitle_content(sub_path: str) -> None:
+    """Raise if the subtitle file is missing, empty, or just a placeholder stub."""
+    p = Path(sub_path)
+    if not p.exists():
+        raise FileNotFoundError(f"Subtitle file not found: {sub_path}")
+    text = p.read_text(encoding="utf-8").strip()
+
+    # ASS files use "Dialogue:" lines; SRT files use "-->" timing lines
+    is_ass = sub_path.endswith(".ass")
+    if is_ass:
+        dialogue_count = text.count("Dialogue:")
+        if dialogue_count < 3:
+            raise ValueError(
+                f"ASS subtitle has only {dialogue_count} Dialogue line(s) — "
+                f"TTS word-boundary capture likely failed upstream: {sub_path}"
+            )
+    else:
+        # Legacy SRT path (shouldn't be hit anymore, but just in case)
+        if "-->" not in text:
+            raise ValueError(
+                f"SRT has no timing cues — likely a placeholder stub: {sub_path}"
+            )
+        cue_count = text.count("-->")
+        if cue_count < 3:
+            raise ValueError(
+                f"SRT only has {cue_count} cue(s) — TTS word-boundary capture "
+                f"likely failed upstream: {sub_path}"
+            )
+
+
 def _build_filtergraph(
     n_clips: int,
     audio_dur: float,
-    srt_path: str,
-    caption_style_key: str = "bold_centered",
+    sub_path: str,
     watermark_path: str | None = None,
     watermark_opacity: float = 0.4,
     watermark_position: str = "bottom_right",
@@ -55,7 +85,7 @@ def _build_filtergraph(
     1. Scale+crops each clip to 1080×1920 portrait
     2. Color normalizes each clip (brightness/contrast)
     3. Trims and Crossfades all clips (xfade)
-    4. Burns SRT subtitles with the chosen caption style
+    4. Burns ASS subtitles (style is embedded in the .ass file itself)
     5. Optionally overlays a watermark logo
     """
     fade_dur = 0.3
@@ -95,13 +125,11 @@ def _build_filtergraph(
             )
             last_out = out_name
 
-    # -- Subtitles with the chosen caption style ------------------------------
-    safe_srt = _escape_srt_path(srt_path)
-    preset = get_caption_style(caption_style_key)
+    # -- Subtitles (ASS with embedded style — no force_style needed) ----------
+    safe_sub = _escape_sub_path(sub_path)
     after_subs = "subbed"
     parts.append(
-        f"{after_concat}subtitles=filename='{safe_srt}':"
-        f"force_style='{preset.force_style}'"
+        f"{after_concat}subtitles=filename='{safe_sub}'"
         f"[{after_subs}];"
     )
 
@@ -143,6 +171,7 @@ def assemble_video(
     out_path: str | None = None,
     style: str = "fast_facts",
     caption_style: str = "bold_centered",
+    word_boundaries: list[dict] | None = None,
     watermark_path: str | None = None,
     watermark_opacity: float = 0.4,
     watermark_position: str = "bottom_right",
@@ -151,9 +180,29 @@ def assemble_video(
     """
     Build the final MP4 with styled captions and optional watermark.
     Returns path to the finished video file.
+
+    If word_boundaries are provided (from the TTS step), the ASS subtitle
+    file is (re)generated with the correct caption_style before rendering.
+    This ensures the visual style matches the user's selection rather than
+    whatever default the TTS step wrote.
     """
     if not clip_paths:
         raise ValueError("No clips provided to assemble_video")
+
+    # ── Generate / regenerate ASS with the correct caption style ─────────
+    if word_boundaries:
+        # Derive .ass path next to the audio
+        sub_path = str(Path(srt_path).with_suffix(".ass"))
+        build_karaoke_ass(
+            word_boundaries, sub_path,
+            style_key=caption_style,
+        )
+        log.info("Built ASS subtitle with style='%s' → %s", caption_style, sub_path)
+    else:
+        sub_path = srt_path
+
+    # ── Pre-render subtitle validation ───────────────────────────────────
+    _validate_subtitle_content(sub_path)
 
     out_path = out_path or str(RENDER_DIR / f"short_{uuid.uuid4().hex[:8]}.mp4")
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
@@ -165,7 +214,7 @@ def assemble_video(
     # Build input flags — clips first, then audio, then optional watermark
     input_flags: list[str] = []
     for cp in clip_paths:
-        input_flags += ["-stream_loop", "-1", "-i", cp]
+        input_flags += ["-stream_loop", "-1", "-t", str(audio_dur + 0.5), "-i", cp]
     input_flags += ["-i", audio_path]
 
     if watermark_path and Path(watermark_path).exists():
@@ -175,8 +224,7 @@ def assemble_video(
     fg = _build_filtergraph(
         n_clips=len(clip_paths),
         audio_dur=audio_dur,
-        srt_path=srt_path,
-        caption_style_key=caption_style,
+        sub_path=sub_path,
         watermark_path=watermark_path,
         watermark_opacity=watermark_opacity,
         watermark_position=watermark_position,
@@ -218,3 +266,33 @@ def assemble_video(
 
     log.info("Video assembled → %s", out_path)
     return out_path
+
+
+import asyncio
+
+async def async_assemble_video(**kwargs) -> str:
+    """Async wrapper — runs FFmpeg in a thread pool to avoid blocking the event loop."""
+    return await asyncio.to_thread(assemble_video, **kwargs)
+
+def assemble_job(job: RenderJob) -> str:
+    """Assemble a video using a RenderJob object."""
+    job.output_path = job.output_path or str(RENDER_DIR / f"short_{uuid.uuid4().hex[:8]}.mp4")
+    out_path = assemble_video(
+        clip_paths=job.clip_paths,
+        audio_path=job.audio_path,
+        srt_path=job.sub_path,
+        out_path=job.output_path,
+        style=job.style,
+        caption_style=job.caption_style,
+        word_boundaries=job.word_boundaries,
+        watermark_path=job.watermark_path,
+        watermark_opacity=job.watermark_opacity,
+        watermark_position=job.watermark_position,
+        watermark_scale=job.watermark_scale,
+    )
+    job.output_path = out_path
+    return out_path
+
+async def async_assemble_job(job: RenderJob) -> str:
+    """Async wrapper for assemble_job."""
+    return await asyncio.to_thread(assemble_job, job)

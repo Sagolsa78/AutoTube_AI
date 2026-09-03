@@ -10,6 +10,7 @@ import os
 import glob
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
+# pyrefly: ignore [missing-import]
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -47,9 +48,10 @@ def main():
         script["full_text"],
         niche=niche,
         audio_path="storage/audio/pipeline_voice.mp3",
-        srt_path="storage/audio/pipeline_subs.srt",
+        sub_path="storage/audio/pipeline_subs.ass",
     ))
     print(f"  ✅ Audio: {tts['audio_path']}  ({tts['duration']:.1f}s)")
+    print(f"  ✅ Word boundaries: {len(tts.get('word_boundaries', []))} events")
 
     # ── Step 3: Visuals ────────────────────────────────────────────────────────
     from engine.visuals.fetcher import fetch_clips
@@ -75,8 +77,9 @@ def main():
     video_path = assemble_video(
         clip_paths,
         audio_path=tts["audio_path"],
-        srt_path=tts["srt_path"],
+        srt_path=tts["sub_path"],
         style="fast_facts",
+        word_boundaries=tts.get("word_boundaries"),
     )
     print(f"\n{'='*60}")
     print(f"  🎉 DONE!  Video saved → {video_path}")

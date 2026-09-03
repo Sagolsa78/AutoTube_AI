@@ -1,12 +1,20 @@
-"""
+r"""
 Caption style definitions for FFmpeg ASS subtitle burn-in.
 Each style maps to a set of ASS force_style parameters that produce
 a distinct visual appearance in the rendered video.
 
 Users pick a style key from the frontend; the assembler applies it.
+
+Since v0.3 the pipeline generates full ASS files with karaoke (\kf)
+tags rather than plain SRT, so the style is embedded in the [V4+ Styles]
+header.  The `ass_*` fields on CaptionPreset drive that header.
 """
 from __future__ import annotations
-from dataclasses import dataclass
+import logging
+from dataclasses import dataclass, field
+from pathlib import Path
+
+log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -16,7 +24,20 @@ class CaptionPreset:
     name:        str   # display name for the UI
     description: str   # short blurb shown under the preview
     preview_css: str   # CSS snippet the frontend uses for a live text preview
-    force_style: str   # the actual FFmpeg ASS force_style string
+    force_style: str   # legacy FFmpeg force_style string (kept for compat)
+    # ── ASS V4+ Style fields for karaoke subtitle generation ──
+    ass_fontname:        str = "Arial Black"
+    ass_fontsize:        int = 72
+    ass_primary_colour:  str = "&H00FFFFFF"   # post-highlight (spoken) colour
+    ass_secondary_colour:str = "&H0000D7FF"   # fill colour during \kf highlight
+    ass_outline_colour:  str = "&H00000000"
+    ass_back_colour:     str = "&H00000000"
+    ass_bold:            int = 1
+    ass_border_style:    int = 1              # 1 = outline+shadow, 4 = opaque box
+    ass_outline:         int = 4
+    ass_shadow:          int = 0
+    ass_alignment:       int = 5              # 5 = middle-center
+    ass_margin_v:        int = 0
 
 
 # ── Preset Library ────────────────────────────────────────────────────────────
@@ -38,6 +59,10 @@ _register(CaptionPreset(
         "PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,"
         "Outline=2,Shadow=1,Alignment=2,MarginV=80"
     ),
+    ass_fontname="Arial Black", ass_fontsize=72,
+    ass_primary_colour="&H00FFFFFF", ass_secondary_colour="&H0000D7FF",
+    ass_outline_colour="&H00000000",
+    ass_outline=4, ass_shadow=1, ass_margin_v=0,
 ))
 
 _register(CaptionPreset(
@@ -50,6 +75,10 @@ _register(CaptionPreset(
         "PrimaryColour=&H00FFFF00,OutlineColour=&H00FF8800,"
         "Outline=3,Shadow=0,Alignment=2,MarginV=80"
     ),
+    ass_fontname="Arial", ass_fontsize=72,
+    ass_primary_colour="&H00FFFF00", ass_secondary_colour="&H0088FF00",
+    ass_outline_colour="&H00FF8800",
+    ass_outline=5, ass_shadow=0, ass_margin_v=0,
 ))
 
 _register(CaptionPreset(
@@ -62,6 +91,10 @@ _register(CaptionPreset(
         "PrimaryColour=&H0000D7FF,OutlineColour=&H00000000,"
         "Outline=3,Shadow=0,Alignment=2,MarginV=80"
     ),
+    ass_fontname="Impact", ass_fontsize=78,
+    ass_primary_colour="&H0000D7FF", ass_secondary_colour="&H000000FF",
+    ass_outline_colour="&H00000000",
+    ass_outline=4, ass_shadow=0, ass_margin_v=0,
 ))
 
 _register(CaptionPreset(
@@ -74,6 +107,10 @@ _register(CaptionPreset(
         "PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,"
         "Outline=1,Shadow=0,Alignment=2,MarginV=60"
     ),
+    ass_fontname="Arial", ass_fontsize=56, ass_bold=0,
+    ass_primary_colour="&H00FFFFFF", ass_secondary_colour="&H0000D7FF",
+    ass_outline_colour="&H00000000",
+    ass_outline=2, ass_shadow=0, ass_margin_v=0,
 ))
 
 _register(CaptionPreset(
@@ -86,6 +123,10 @@ _register(CaptionPreset(
         "PrimaryColour=&H00FFFFFF,BackColour=&H80000000,"
         "BorderStyle=4,Outline=0,Shadow=0,Alignment=2,MarginV=80"
     ),
+    ass_fontname="Arial", ass_fontsize=68,
+    ass_primary_colour="&H00FFFFFF", ass_secondary_colour="&H0000D7FF",
+    ass_outline_colour="&H00000000", ass_back_colour="&H80000000",
+    ass_border_style=4, ass_outline=0, ass_shadow=0, ass_margin_v=0,
 ))
 
 _register(CaptionPreset(
@@ -98,6 +139,10 @@ _register(CaptionPreset(
         "PrimaryColour=&H003568FF,OutlineColour=&H00000000,"
         "Outline=3,Shadow=1,Alignment=2,MarginV=80"
     ),
+    ass_fontname="Arial Black", ass_fontsize=72,
+    ass_primary_colour="&H003568FF", ass_secondary_colour="&H0048C9FF",
+    ass_outline_colour="&H00000000",
+    ass_outline=4, ass_shadow=1, ass_margin_v=0,
 ))
 
 _register(CaptionPreset(
@@ -110,6 +155,10 @@ _register(CaptionPreset(
         "PrimaryColour=&H0088FF00,OutlineColour=&H00000000,"
         "Outline=2,Shadow=0,Alignment=2,MarginV=80"
     ),
+    ass_fontname="Courier New", ass_fontsize=64,
+    ass_primary_colour="&H0088FF00", ass_secondary_colour="&H0000FF88",
+    ass_outline_colour="&H00000000",
+    ass_outline=3, ass_shadow=0, ass_margin_v=0,
 ))
 
 
@@ -129,3 +178,79 @@ def list_caption_styles() -> list[dict]:
         }
         for p in CAPTION_STYLES.values()
     ]
+
+
+# ── Karaoke ASS Generator ────────────────────────────────────────────────────
+
+def build_karaoke_ass(
+    word_boundaries: list[dict],
+    out_path: str,
+    style_key: str = "bold_centered",
+    group_size: int = 4,
+) -> str:
+    """
+    Build an ASS subtitle file with karaoke-style per-word highlighting.
+
+    word_boundaries: list of {"text": str, "offset": float, "duration": float}
+                     (seconds), as returned by voiceover.generate_voiceover().
+    style_key:       key into CAPTION_STYLES for the visual look.
+    group_size:      how many words are shown on screen at once (TikTok-style
+                     typically uses 2-4).
+
+    Each word group appears as a Dialogue line; within it, \\kf tags drive
+    a smooth left-to-right fill highlight as each word is spoken.
+    Returns the output path.
+    """
+    preset = get_caption_style(style_key)
+
+    header = (
+        "[Script Info]\n"
+        "ScriptType: v4.00+\n"
+        "PlayResX: 1080\n"
+        "PlayResY: 1920\n"
+        "WrapStyle: 0\n"
+        "\n"
+        "[V4+ Styles]\n"
+        "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, "
+        "OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, "
+        "ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
+        "Alignment, MarginL, MarginR, MarginV, Encoding\n"
+        f"Style: Default,{preset.ass_fontname},{preset.ass_fontsize},"
+        f"{preset.ass_primary_colour},{preset.ass_secondary_colour},"
+        f"{preset.ass_outline_colour},{preset.ass_back_colour},"
+        f"{preset.ass_bold},0,0,0,100,100,0,0,"
+        f"{preset.ass_border_style},{preset.ass_outline},{preset.ass_shadow},"
+        f"{preset.ass_alignment},40,40,{preset.ass_margin_v},1\n"
+        "\n"
+        "[Events]\n"
+        "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
+    )
+
+    def _ts(t: float) -> str:
+        """Format seconds as ASS timestamp H:MM:SS.cc"""
+        h, rem = divmod(max(0, t), 3600)
+        m, s = divmod(rem, 60)
+        return f"{int(h)}:{int(m):02d}:{s:05.2f}"
+
+    lines: list[str] = []
+    for i in range(0, len(word_boundaries), group_size):
+        group = word_boundaries[i : i + group_size]
+        start = group[0]["offset"]
+        end   = group[-1]["offset"] + group[-1]["duration"] + 0.15  # overlap pad
+
+        # Each word gets a \kf tag (centiseconds) for the fill-highlight sweep
+        parts: list[str] = []
+        for w in group:
+            cs = max(1, int(w["duration"] * 100))
+            parts.append(f"{{\\kf{cs}}}{w['text']} ")
+
+        text = f"{{\\an5\\pos(540,1350)\\fad(100,100)}}" + "".join(parts).rstrip()
+        lines.append(
+            f"Dialogue: 0,{_ts(start)},{_ts(end)},Default,,0,0,0,,{text}"
+        )
+
+    Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+    Path(out_path).write_text(header + "\n".join(lines) + "\n", encoding="utf-8")
+
+    log.info("ASS karaoke subtitle → %s (%d dialogue lines)", out_path, len(lines))
+    return out_path

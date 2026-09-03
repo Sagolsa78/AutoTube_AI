@@ -4,8 +4,13 @@ import { api } from '../services/api';
 import Icon from '../components/Icon';
 
 export default function Dashboard() {
-  const [stats, setStats] = useState({ ideas: 0, scripts: 0, videos: 0, rendered: 0 });
+  const [stats, setStats] = useState({
+    ideas: 0, pendingIdeas: 0,
+    scripts: 0, approvedScripts: 0,
+    rendering: 0, ready: 0, uploaded: 0,
+  });
   const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
@@ -13,67 +18,195 @@ export default function Dashboard() {
         const [ideas, scripts, videos, prof] = await Promise.all([
           api.getIdeas(), api.getScripts(), api.getVideos(), api.getProfile(),
         ]);
-        const rendered = videos.filter(v => ['ready', 'approved', 'uploaded'].includes(v.status)).length;
-        setStats({ ideas: ideas.length, scripts: scripts.length, videos: videos.length, rendered });
+        const pendingIdeas   = ideas.filter(i => i.status === 'pending').length;
+        const approvedScripts = scripts.filter(s => s.status === 'approved' || s.status === 'pending').length;
+        const rendering = videos.filter(v => v.status === 'rendering').length;
+        const ready     = videos.filter(v => ['ready', 'approved'].includes(v.status)).length;
+        const uploaded  = videos.filter(v => v.status === 'uploaded').length;
+        setStats({
+          ideas: ideas.length, pendingIdeas,
+          scripts: scripts.length, approvedScripts,
+          rendering, ready, uploaded,
+        });
         setProfile(prof);
       } catch (e) { console.error(e); }
+      setLoading(false);
     })();
   }, []);
 
+  const totalReview = stats.pendingIdeas + stats.approvedScripts + stats.ready;
+
   return (
-    <div>
+    <div className="dashboard-page">
       <div className="page-header">
         <div>
           <h1>{profile ? `Welcome, ${profile.display_name}` : 'Dashboard'}</h1>
           <p>Your content production pipeline at a glance.</p>
         </div>
-        <Link to="/ideas" className="btn btn-primary"><Icon name="plus" size={14} /> New Ideas</Link>
+        <Link to="/app/ideas" className="btn btn-primary"><Icon name="plus" size={14} /> New Ideas</Link>
       </div>
 
-      <div className="stats-grid">
-        <div className="stat-card">
-          <div className="stat-label">Ideas</div>
-          <div className="stat-value">{stats.ideas}</div>
-          <div className="stat-sub">in pipeline</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">Scripts</div>
-          <div className="stat-value c-accent">{stats.scripts}</div>
-          <div className="stat-sub">generated</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">Videos</div>
-          <div className="stat-value c-amber">{stats.videos}</div>
-          <div className="stat-sub">total</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">Completed</div>
-          <div className="stat-value c-green">{stats.rendered}</div>
-          <div className="stat-sub">ready or uploaded</div>
+      {/* ── Production Pipeline ────────────────────────────────────────── */}
+      <div className="pipeline-container">
+        <h3 className="card-title mb-4">Production Pipeline</h3>
+        <div className="pipeline-rail">
+
+          <div className="pipeline-step">
+            <div className="pipeline-node bg-surface-3">
+              <span className="pipeline-count mono c-text-1">{stats.ideas}</span>
+            </div>
+            <div className="pipeline-label">Ideas</div>
+          </div>
+
+          <div className="pipeline-line"></div>
+
+          <div className="pipeline-step">
+            <div className="pipeline-node bg-surface-3">
+              <span className="pipeline-count mono c-info">{stats.scripts}</span>
+            </div>
+            <div className="pipeline-label">Scripts</div>
+          </div>
+
+          <div className="pipeline-line"></div>
+
+          <div className="pipeline-step">
+            <div className={`pipeline-node ${stats.rendering > 0 ? 'node-rendering' : 'bg-surface-3'}`}>
+              <span className="pipeline-count mono c-warning">{stats.rendering}</span>
+            </div>
+            <div className="pipeline-label">Rendering</div>
+          </div>
+
+          <div className="pipeline-line"></div>
+
+          <div className="pipeline-step">
+            <div className="pipeline-node bg-surface-3">
+              <span className="pipeline-count mono c-success">{stats.ready}</span>
+            </div>
+            <div className="pipeline-label">Ready</div>
+          </div>
+
+          <div className="pipeline-line"></div>
+
+          <div className="pipeline-step">
+            <div className="pipeline-node bg-surface-3">
+              <span className="pipeline-count mono c-text-1">{stats.uploaded}</span>
+            </div>
+            <div className="pipeline-label">Uploaded</div>
+          </div>
+
         </div>
       </div>
 
-      <div className="grid-2">
-        <div className="card">
-          <div className="card-header"><h3 className="card-title">Production Pipeline</h3></div>
-          <ol style={{ paddingLeft: '1.2rem', display: 'flex', flexDirection: 'column', gap: 8, color: 'var(--text-1)', fontSize: 13, lineHeight: 1.7 }}>
-            <li><strong>Ideas</strong> — Generate topic batches from your niche config.</li>
-            <li><strong>Approve</strong> — Review and green-light ideas before scripting.</li>
-            <li><strong>Scripts</strong> — AI writes structured scripts with quality scoring.</li>
-            <li><strong>Render</strong> — TTS + stock clips + FFmpeg assembly with your caption style.</li>
-            <li><strong>Upload</strong> — Review the video and publish to YouTube.</li>
-          </ol>
+      {/* ── Dashboard Widgets Grid ─────────────────────────────────────── */}
+      <div className="grid-2 mt-4">
+
+        {/* ── Unified Action Queue ──────────────────────────────────────── */}
+        <div className="card" style={{ padding: '20px' }}>
+          <div className="card-header mb-3">
+            <h3 className="card-title flex items-center gap-2">
+              <Icon name="clock" size={16} className="c-accent" /> Needs Your Review
+            </h3>
+            {totalReview > 0 && (
+              <span className="badge badge-pending">{totalReview} items</span>
+            )}
+          </div>
+          <div className="flex-col gap-2">
+            <Link to="/app/ideas" className="nav-item" style={{ background: 'var(--surface-3)', border: '1px solid var(--border-1)', padding: '12px 16px', borderRadius: 'var(--r-sm)' }}>
+              <div className="flex justify-between items-center w-full">
+                <span className="flex items-center gap-2"><Icon name="layers" size={16} className="text-muted" /> Ideas Pending Approval</span>
+                <span className={`badge ${stats.pendingIdeas > 0 ? 'badge-pending' : 'badge-approved'}`}>
+                  {stats.pendingIdeas} {stats.pendingIdeas === 1 ? 'Idea' : 'Ideas'}
+                </span>
+              </div>
+            </Link>
+            <Link to="/app/scripts" className="nav-item" style={{ background: 'var(--surface-3)', border: '1px solid var(--border-1)', padding: '12px 16px', borderRadius: 'var(--r-sm)' }}>
+              <div className="flex justify-between items-center w-full">
+                <span className="flex items-center gap-2"><Icon name="fileText" size={16} className="text-muted" /> Scripts Ready to Generate</span>
+                <span className={`badge ${stats.approvedScripts > 0 ? 'badge-scripted' : 'badge-approved'}`}>
+                  {stats.approvedScripts} {stats.approvedScripts === 1 ? 'Script' : 'Scripts'}
+                </span>
+              </div>
+            </Link>
+            <Link to="/app/videos" className="nav-item" style={{ background: 'var(--surface-3)', border: '1px solid var(--border-1)', padding: '12px 16px', borderRadius: 'var(--r-sm)' }}>
+              <div className="flex justify-between items-center w-full">
+                <span className="flex items-center gap-2"><Icon name="video" size={16} className="text-muted" /> Videos Ready for Upload</span>
+                <span className={`badge ${stats.ready > 0 ? 'badge-ready' : 'badge-approved'}`}>
+                  {stats.ready} {stats.ready === 1 ? 'Video' : 'Videos'}
+                </span>
+              </div>
+            </Link>
+          </div>
         </div>
 
-        <div className="card">
-          <div className="card-header"><h3 className="card-title">Quick Setup</h3></div>
-          <ol style={{ paddingLeft: '1.2rem', display: 'flex', flexDirection: 'column', gap: 8, color: 'var(--text-1)', fontSize: 13, lineHeight: 1.7 }}>
-            <li>Go to <Link to="/profile" style={{ color: 'var(--accent-strong)', fontWeight: 600 }}>Settings</Link> — set your channel name and upload your logo.</li>
-            <li>Choose your default caption style and CTA text.</li>
-            <li>Add your Pexels API key in <code className="mono" style={{ color: 'var(--accent-strong)', fontSize: 12 }}>.env</code></li>
-            <li>Start generating ideas and producing Shorts!</li>
-          </ol>
+        {/* ── System & Providers Column ─────────────────────────────────── */}
+        <div className="flex-col gap-3">
+          {/* Provider Status Strip */}
+          <div className="card" style={{ padding: '16px 20px' }}>
+            <div className="card-header mb-3">
+              <h3 className="card-title flex items-center gap-2"><Icon name="server" size={16} className="c-blue" /> Active Providers</h3>
+              <Link to="/app/health" className="btn btn-sm btn-secondary" style={{ fontSize: '11px', padding: '3px 10px' }}>Details</Link>
+            </div>
+            <div className="flex-col gap-2">
+              <div className="flex justify-between items-center" style={{ fontSize: '13px', background: 'var(--surface-3)', padding: '10px 14px', borderRadius: 'var(--r-sm)', border: '1px solid var(--border-1)' }}>
+                <div className="flex items-center gap-2"><span className="dot"></span> Ollama (LLM Primary)</div>
+                <span className="text-xs text-muted">Local — Unlimited</span>
+              </div>
+              <div className="flex justify-between items-center" style={{ fontSize: '13px', background: 'var(--surface-3)', padding: '10px 14px', borderRadius: 'var(--r-sm)', border: '1px solid var(--border-1)' }}>
+                <div className="flex items-center gap-2"><span className="dot"></span> Edge-TTS</div>
+                <span className="text-xs text-muted">Unlimited</span>
+              </div>
+              <div className="flex justify-between items-center" style={{ fontSize: '13px', background: 'var(--surface-3)', padding: '10px 14px', borderRadius: 'var(--r-sm)', border: '1px solid var(--border-1)' }}>
+                <div className="flex items-center gap-2"><span className="dot"></span> Pexels (Footage)</div>
+                <span className="text-xs text-muted">Free Tier</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Storage / Disk Widget */}
+          <div className="card" style={{ padding: '16px 20px' }}>
+            <div className="card-header mb-3">
+              <h3 className="card-title flex items-center gap-2"><Icon name="hardDrive" size={16} className="c-amber" /> Storage Usage</h3>
+            </div>
+            <div className="flex justify-between items-center mb-2">
+              <span style={{ fontSize: '13px', color: 'var(--text-1)' }}>/audio & /visuals temp</span>
+              <span style={{ fontSize: '14px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--warning)' }}>—</span>
+            </div>
+            <div className="progress-bar-track">
+              <div className="progress-bar-fill" style={{ width: '0%' }}></div>
+            </div>
+            <p className="text-xs text-muted mt-2">Storage monitoring requires a backend endpoint. Coming soon.</p>
+          </div>
         </div>
+
+        {/* ── Path to Monetization (YPP) ────────────────────────────────── */}
+        <div className="card" style={{ padding: '20px', gridColumn: '1 / -1' }}>
+          <div className="card-header mb-4">
+            <h3 className="card-title flex items-center gap-2"><Icon name="youtube" size={16} className="c-accent" /> Path to Monetization (YPP)</h3>
+            <span className="text-xs text-muted">Goal: Feb 2027</span>
+          </div>
+          <div className="grid-2 gap-4">
+            <div>
+              <div className="flex justify-between text-sm mb-2">
+                <span className="font-bold">Subscribers</span>
+                <span className="text-muted mono">— / 1,000</span>
+              </div>
+              <div className="progress-bar-track">
+                <div className="progress-bar-fill" style={{ width: '0%' }}></div>
+              </div>
+            </div>
+            <div>
+              <div className="flex justify-between text-sm mb-2">
+                <span className="font-bold">Shorts Views (90 Days)</span>
+                <span className="text-muted mono">— / 10M</span>
+              </div>
+              <div className="progress-bar-track">
+                <div className="progress-bar-fill" style={{ width: '0%' }}></div>
+              </div>
+            </div>
+          </div>
+          <p className="text-xs text-muted mt-3">YPP progress will auto-populate once YouTube Analytics data flows in.</p>
+        </div>
+
       </div>
     </div>
   );

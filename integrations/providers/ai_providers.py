@@ -72,6 +72,7 @@ class GroqProvider(BaseProvider):
         return bool(GROQ_API_KEY)
 
     def generate(self, prompt: str) -> str:
+        # pyrefly: ignore [missing-import]
         from groq import Groq
         client = Groq(api_key=GROQ_API_KEY)
         resp = client.chat.completions.create(
@@ -90,6 +91,7 @@ class OpenRouterProvider(BaseProvider):
         return bool(OPENROUTER_API_KEY)
 
     def generate(self, prompt: str) -> str:
+        # pyrefly: ignore [missing-import]
         from openai import OpenAI
         client = OpenAI(
             base_url="https://openrouter.ai/api/v1",
