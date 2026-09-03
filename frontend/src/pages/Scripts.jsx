@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import Icon from '../components/Icon';
+import { toast } from 'sonner';
 
 export default function Scripts() {
   const [ideas, setIdeas] = useState([]);
@@ -13,19 +15,22 @@ export default function Scripts() {
   const [customCta, setCustomCta] = useState('');
   const [rendering, setRendering] = useState(false);
   const [profile, setProfile] = useState(null);
+  const [videos, setVideos] = useState([]);
+  const navigate = useNavigate();
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const [allIdeas, allScripts, styles, prof] = await Promise.all([
-        api.getIdeas(), api.getScripts(), api.getCaptionStyles(), api.getProfile(),
+      const [allIdeas, allScripts, styles, prof, allVideos] = await Promise.all([
+        api.getIdeas(), api.getScripts(), api.getCaptionStyles(), api.getProfile(), api.getVideos()
       ]);
-      setIdeas(allIdeas.filter(i => i.status === 'approved'));
+      setIdeas(allIdeas);
       setScripts(allScripts.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
       setCaptionStyles(styles);
       setProfile(prof);
       setSelectedCaption(prof.caption_style || 'bold_centered');
       setCustomCta(prof.default_cta || 'Follow for more!');
+      setVideos(allVideos);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   };
@@ -34,8 +39,8 @@ export default function Scripts() {
 
   const generateScript = async (ideaId) => {
     setGenerating(ideaId);
-    try { await api.generateScript(ideaId); await loadData(); }
-    catch (e) { alert(`Script generation failed: ${e.message}`); }
+    try { await api.generateScript(ideaId); await loadData(); toast.success('Script generated successfully!'); }
+    catch (e) { toast.error(`Script generation failed: ${e.message}`); }
     finally { setGenerating(null); }
   };
 
@@ -51,8 +56,9 @@ export default function Scripts() {
     try {
       await api.renderVideo(renderModal.id, 'fast_facts', selectedCaption, customCta);
       setRenderModal(null);
-      alert('Render started! Check the Videos tab.');
-    } catch (e) { alert(`Render failed: ${e.message}`); }
+      toast.success('Render queued — check Videos for progress.');
+      navigate('/app/videos');
+    } catch (e) { toast.error(`Render failed: ${e.message}`); }
     finally { setRendering(false); }
   };
 
@@ -70,13 +76,13 @@ export default function Scripts() {
         <div className="card">
           <div className="card-header">
             <h3 className="card-title">Approved Ideas</h3>
-            <span className="badge badge-approved">{ideas.length}</span>
+            <span className="badge badge-approved">{ideas.filter(i => i.status === 'approved').length}</span>
           </div>
-          {ideas.length === 0 ? (
+          {ideas.filter(i => i.status === 'approved').length === 0 ? (
             <p className="text-muted text-sm">No approved ideas waiting for scripts.</p>
           ) : (
             <div className="flex-col gap-1">
-              {ideas.map(idea => (
+              {ideas.filter(i => i.status === 'approved').map(idea => (
                 <div key={idea.id} className="flex items-center justify-between gap-2" style={{ padding: '10px 14px', background: 'var(--surface-input)', borderRadius: 'var(--r-sm)', border: '1px solid var(--border-1)' }}>
                   <span className="font-bold text-sm truncate" style={{ flex: 1 }}>{idea.topic}</span>
                   <button className="btn btn-sm btn-primary" onClick={() => generateScript(idea.id)} disabled={generating === idea.id}>
@@ -99,19 +105,30 @@ export default function Scripts() {
             <p className="text-muted text-sm">No scripts yet. Generate one from an approved idea.</p>
           ) : (
             <div className="flex-col gap-1">
-              {scripts.map(s => (
-                <div key={s.id} onClick={() => openRender(s)} role="button" tabIndex={0}
-                  onKeyDown={e => e.key === 'Enter' && openRender(s)}
-                  style={{ padding: '12px 14px', background: 'var(--surface-input)', borderRadius: 'var(--r-sm)', border: '1px solid var(--border-1)', cursor: 'pointer', transition: 'border-color 0.15s' }}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="mono text-xs text-muted">{s.id.substring(0, 8)}</span>
-                    <span className={`badge ${s.quality_score >= 70 ? 'badge-approved' : 'badge-rejected'}`}>
-                      {s.quality_score}/100
-                    </span>
+              {scripts.map(s => {
+                const isRendering = videos.some(v => v.script_id === s.id && v.status === 'rendering');
+                return (
+                <div key={s.id} onClick={() => !isRendering && openRender(s)} role="button" tabIndex={0}
+                  onKeyDown={e => e.key === 'Enter' && !isRendering && openRender(s)}
+                  style={{ padding: '12px 14px', background: 'var(--surface-input)', borderRadius: 'var(--r-sm)', border: '1px solid var(--border-1)', cursor: isRendering ? 'not-allowed' : 'pointer', transition: 'border-color 0.15s', opacity: isRendering ? 0.6 : 1 }}>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-sm" style={{ color: 'var(--text-0)' }}>
+                        {ideas.find(i => i.id === s.idea_id)?.topic || `Script #${s.id.substring(0, 8)}`}
+                      </span>
+                      <span className="mono text-xs text-muted">({s.id.substring(0, 8)})</span>
+                    </div>
+                    <div className="flex gap-1 flex-wrap justify-end">
+                      {isRendering && <span className="badge badge-rendering">Rendering...</span>}
+                      <span className="badge" style={{ background: 'var(--surface-3)', color: 'var(--text-1)', fontSize: '10px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <Icon name="sparkles" size={10} />
+                        Generated by {s.provider_used || 'AI'}
+                      </span>
+                    </div>
                   </div>
-                  <p className="truncate text-sm" style={{ color: 'var(--text-1)' }}>{s.hook}</p>
+                  <p className="truncate text-sm text-muted" style={{ lineHeight: 1.4 }}>{s.full_text}</p>
                 </div>
-              ))}
+              )})}
             </div>
           )}
         </div>

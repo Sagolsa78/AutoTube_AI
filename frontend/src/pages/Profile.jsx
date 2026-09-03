@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { api } from '../services/api';
 import Icon from '../components/Icon';
+import { toast } from 'sonner';
 
 export default function Profile() {
   const [profile, setProfile] = useState(null);
@@ -54,8 +55,8 @@ export default function Profile() {
         watermark_scale: wmScale,
       });
       setProfile(prof);
-      alert('Settings saved successfully!');
-    } catch (e) { console.error(e); alert('Save failed.'); }
+      toast.success('Settings saved successfully!');
+    } catch (e) { console.error(e); toast.error('Save failed.'); }
     finally { setSaving(false); }
   };
 
@@ -66,7 +67,8 @@ export default function Profile() {
     try {
       const prof = await api.uploadLogo(file);
       setProfile(prof);
-    } catch (e) { console.error(e); alert('Logo upload failed.'); }
+      toast.success('Logo uploaded successfully!');
+    } catch (e) { console.error(e); toast.error('Logo upload failed.'); }
     finally { setUploading(false); }
   };
 
@@ -99,11 +101,48 @@ export default function Profile() {
       <div className="profile-layout">
         {/* Left: Logo */}
         <div className="logo-panel">
-          <button className="logo-frame" onClick={() => fileRef.current?.click()} aria-label="Upload logo">
+          <button 
+            className="logo-frame" 
+            onClick={() => fileRef.current?.click()} 
+            aria-label="Upload logo"
+            style={{
+              position: 'relative',
+              width: '100%',
+              aspectRatio: '9/16',
+              background: 'linear-gradient(135deg, #2a2d3e 0%, #17181c 100%)',
+              border: '1px solid var(--border-2)',
+              borderRadius: 'var(--r-md)',
+              overflow: 'hidden',
+              display: 'block',
+              cursor: 'pointer',
+              padding: 0
+            }}
+          >
+            {/* Fake video elements to look like a frame */}
+            <div style={{ position: 'absolute', top: '16px', left: '16px', right: '16px', display: 'flex', justifyContent: 'space-between' }}>
+              <div style={{ width: '40px', height: '4px', background: 'rgba(255,255,255,0.2)', borderRadius: '2px' }} />
+              <div style={{ width: '12px', height: '12px', background: 'rgba(255,255,255,0.2)', borderRadius: '50%' }} />
+            </div>
+            
             {profile.logo_path ? (
-              <img src={`/static/logos/${profile.logo_path.split('/').pop()}`} alt="Channel Watermark Logo" />
+              <img 
+                src={`/static/logos/${profile.logo_path.split('/').pop()}`} 
+                alt="Channel Watermark Logo" 
+                style={{
+                  position: 'absolute',
+                  width: `${Math.max(10, Math.min(50, wmScale * 100))}%`,
+                  opacity: wmEnabled ? wmOpacity : 0,
+                  transition: 'all 0.2s ease',
+                  pointerEvents: 'none',
+                  ...(wmPosition.includes('top') ? { top: '32px' } : { bottom: '32px' }),
+                  ...(wmPosition.includes('left') ? { left: '16px' } : { right: '16px' })
+                }}
+              />
             ) : (
-              <Icon name="image" size={32} />
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px', color: 'var(--text-2)' }}>
+                <Icon name="image" size={32} />
+                <span style={{ fontSize: '12px', fontWeight: 500 }}>Upload Logo</span>
+              </div>
             )}
           </button>
           <input ref={fileRef} type="file" accept="image/*" hidden onChange={uploadLogo} aria-hidden="true" />

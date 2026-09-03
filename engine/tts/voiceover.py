@@ -1,13 +1,13 @@
 """
 TTS engine — uses edge-tts with word-boundary events to generate
-both the audio file and an SRT subtitle file in one pass.
+both the audio file and an ASS subtitle file with karaoke-style
+per-word timing in one pass.
 """
 from __future__ import annotations
-import asyncio
 import logging
-import os
 from pathlib import Path
 
+# pyrefly: ignore [missing-import]
 import edge_tts
 
 log = logging.getLogger(__name__)
@@ -20,75 +20,88 @@ NICHE_VOICES: dict[str, str] = {
 }
 DEFAULT_VOICE = "en-US-GuyNeural"
 
+# edge-tts reports offsets/durations in 100-nanosecond ticks
+_TICKS_PER_SEC = 10_000_000
+
 
 async def _generate_tts(
     text: str,
     voice: str,
     audio_path: str,
-    srt_path: str,
-) -> float:
+) -> tuple[float, list[dict]]:
     """
-    Internal async generator.
-    Returns the estimated duration in seconds based on word count.
+    Stream audio to disk and capture per-word boundary events.
+    Returns (duration_seconds, word_boundaries).
+    Each boundary: {"text": str, "offset": float, "duration": float} in seconds.
+
+    Raises RuntimeError if zero word-boundary events are captured —
+    this means captions would be empty and we must not silently continue.
     """
-    communicate = edge_tts.Communicate(text, voice)
-    submaker    = edge_tts.SubMaker()
+    # CRITICAL: boundary="WordBoundary" — edge-tts >= 7.x defaults to
+    # SentenceBoundary, which gives one event per sentence (useless for
+    # per-word karaoke captions).  This was the root cause of empty SRTs.
+    communicate = edge_tts.Communicate(
+        text, voice, boundary="WordBoundary",
+    )
+    word_boundaries: list[dict] = []
 
     Path(audio_path).parent.mkdir(parents=True, exist_ok=True)
-    Path(srt_path).parent.mkdir(parents=True, exist_ok=True)
 
     with open(audio_path, "wb") as af:
         async for chunk in communicate.stream():
             if chunk["type"] == "audio":
                 af.write(chunk["data"])
             elif chunk["type"] == "WordBoundary":
-                submaker.feed(chunk)
+                word_boundaries.append({
+                    "text":     chunk["text"],
+                    "offset":   chunk["offset"] / _TICKS_PER_SEC,
+                    "duration": chunk["duration"] / _TICKS_PER_SEC,
+                })
 
-    srt_text = submaker.get_srt()
-    if not srt_text.strip():
-        # FFmpeg crashes if the SRT file is completely empty.
-        srt_text = "1\n00:00:00,000 --> 00:00:01,000\n \n"
-        
-    with open(srt_path, "w", encoding="utf-8") as sf:
-        sf.write(srt_text)
+    if not word_boundaries:
+        raise RuntimeError(
+            "edge-tts produced zero WordBoundary events — cannot generate "
+            "timed captions.  Check edge-tts version and voice availability."
+        )
 
-    # Estimate duration from SRT (last timestamp)
-    duration = _parse_srt_duration(srt_text)
-    return duration
-
-
-def _parse_srt_duration(srt: str) -> float:
-    """Extract end time of last SRT block as seconds."""
-    import re
-    times = re.findall(r"(\d{2}:\d{2}:\d{2},\d{3}) --> (\d{2}:\d{2}:\d{2},\d{3})", srt)
-    if not times:
-        return 40.0
-    last_end = times[-1][1]  # HH:MM:SS,mmm
-    h, m, rest = last_end.split(":")
-    s, ms = rest.split(",")
-    return int(h) * 3600 + int(m) * 60 + int(s) + int(ms) / 1000
+    last = word_boundaries[-1]
+    duration = last["offset"] + last["duration"]
+    log.info(
+        "Captured %d word-boundary events (%.1fs total)",
+        len(word_boundaries), duration,
+    )
+    return duration, word_boundaries
 
 
 async def generate_voiceover(
     text: str,
     niche: str = "science_wow",
     audio_path: str = "storage/audio/voice.mp3",
-    srt_path:   str = "storage/audio/subs.srt",
+    sub_path:   str = "storage/audio/subs.ass",
     voice: str | None = None,
 ) -> dict:
     """
-    Generate voiceover and subtitles.
-    Returns dict with audio_path, srt_path, duration, voice.
+    Generate voiceover and capture word-boundary timing data.
+    The ASS subtitle file is generated later by the assembler (which knows
+    the chosen caption style).  This function returns the raw word_boundaries
+    so the assembler can build a correctly-styled ASS.
+
+    Returns dict with audio_path, sub_path, duration, voice, word_boundaries.
+    Raises RuntimeError if word-boundary capture fails.
     """
     selected_voice = voice or NICHE_VOICES.get(niche, DEFAULT_VOICE)
     log.info("Generating TTS with voice=%s", selected_voice)
 
-    duration = await _generate_tts(text, selected_voice, audio_path, srt_path)
+    duration, word_boundaries = await _generate_tts(
+        text, selected_voice, audio_path,
+    )
 
     log.info("TTS complete: %.1fs audio → %s", duration, audio_path)
     return {
-        "audio_path": audio_path,
-        "srt_path":   srt_path,
-        "duration":   duration,
-        "voice":      selected_voice,
+        "audio_path":      audio_path,
+        "sub_path":        sub_path,
+        "srt_path":        sub_path,          # backward-compat key
+        "duration":        duration,
+        "voice":           selected_voice,
+        "word_boundaries": word_boundaries,
     }

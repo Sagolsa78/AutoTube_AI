@@ -120,27 +120,50 @@ def chunk_download(url: str, dest: Path, chunk_size: int = 1 << 20):
 
 def fetch_clips(
     queries: list[str],
-    clips_per_query: int = 1,
+    clips_per_query: int = 2,
     out_dir: str | None = None,
 ) -> list[dict]:
     """
     Fetch stock clips for a list of search queries.
     Falls back from Pexels → Pixabay per query.
-    Returns list of asset dicts with path + metadata.
+    Returns list of asset dicts with path + metadata, shuffled for variety.
+    clips_per_query=2 by default so a 3-query script gets up to 6 clips,
+    reducing visible repetition in the rendered output.
     """
+    import random
     target_dir = Path(out_dir) if out_dir else VISUAL_DIR
     target_dir.mkdir(parents=True, exist_ok=True)
 
     results: list[dict] = []
+    seen_urls: set[str] = set()
     for query in queries:
         clips = _pexels_fetch(query, clips_per_query, target_dir)
         if not clips:
             log.info("Pexels returned nothing for '%s', trying Pixabay", query)
             clips = _pixabay_fetch(query, clips_per_query, target_dir)
-        if clips:
-            results.extend(clips)
-            log.info("Got %d clip(s) for query='%s'", len(clips), query)
-        else:
-            log.warning("No clips found for query='%s'", query)
+        for clip in clips:
+            # Deduplicate by source URL to prevent the same video appearing twice
+            url = clip.get("url", "")
+            if url and url in seen_urls:
+                log.debug("Skipping duplicate clip URL: %s", url)
+                continue
+            seen_urls.add(url)
+            results.append(clip)
+            log.info("Got clip for query='%s' from %s", query, clip.get("source", "?"))
+        if not any(c for c in clips if c.get("url") not in seen_urls):
+            log.warning("No unique clips found for query='%s'", query)
 
+    # Shuffle for variety so rendered videos don't cycle clips in the same order
+    random.shuffle(results)
     return results
+
+
+import asyncio
+
+async def async_fetch_clips(
+    queries: list[str],
+    clips_per_query: int = 1,
+    out_dir: str | None = None,
+) -> list[dict]:
+    """Async wrapper — runs the sync HTTP downloads in a thread pool."""
+    return await asyncio.to_thread(fetch_clips, queries, clips_per_query, out_dir)

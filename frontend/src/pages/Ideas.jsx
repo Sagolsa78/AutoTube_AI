@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import Icon from '../components/Icon';
+import { toast } from 'sonner';
 
 export default function Ideas() {
   const [ideas, setIdeas] = useState([]);
@@ -23,11 +24,12 @@ export default function Ideas() {
     try {
       const channels = await api.getChannels();
       const channelId = channels[0]?.id;
-      if (!channelId) { alert('Create a channel first.'); return; }
+      if (!channelId) { toast.error('Create a channel first.'); return; }
       const prof = await api.getProfile();
       await api.generateIdeas(channelId, 5, prof.default_niche || 'science_wow');
       await load();
-    } catch (e) { console.error(e); alert(`Generation failed: ${e.message}`); }
+      toast.success('Ideas generated successfully!');
+    } catch (e) { console.error(e); toast.error(`Generation failed: ${e.message}`); }
     finally { setGenerating(false); }
   };
 
@@ -70,8 +72,8 @@ export default function Ideas() {
                 <tr><td colSpan={4} className="text-muted" style={{ textAlign: 'center', padding: 40 }}>No ideas yet. Click &quot;Generate Ideas&quot; to begin.</td></tr>
               ) : ideas.map(i => (
                 <tr key={i.id}>
-                  <td className="font-bold">{i.topic}</td>
-                  <td className="text-muted text-sm truncate" style={{ maxWidth: 240 }}>{i.angle || '—'}</td>
+                  <td className="font-bold" style={{ fontSize: '14px', color: 'var(--text-0)' }}>{i.topic}</td>
+                  <td className="text-muted text-sm truncate" style={{ maxWidth: 280, fontStyle: 'italic', letterSpacing: '0.02em' }}>{i.angle || '—'}</td>
                   <td><span className={`badge badge-${i.status}`}>{i.status}</span></td>
                   <td>
                     {i.status === 'pending' && (

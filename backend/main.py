@@ -6,8 +6,11 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 
+# pyrefly: ignore [missing-import]
 from fastapi import FastAPI
+# pyrefly: ignore [missing-import]
 from fastapi.middleware.cors import CORSMiddleware
+# pyrefly: ignore [missing-import]
 from fastapi.staticfiles import StaticFiles
 
 from backend.db.database import init_db
@@ -25,6 +28,31 @@ async def lifespan(app: FastAPI):
     log.info("Starting AutoShorts Studio...")
     await init_db()
     log.info("Database ready.")
+
+    # Reconciliation: mark any videos stuck in 'rendering' as failed.
+    # These were orphaned by a server crash or restart — they will never complete.
+    from backend.db.database import AsyncSessionLocal
+    from backend.models.models import Video, VideoStatus
+    from sqlalchemy import select
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(Video).where(Video.status == VideoStatus.rendering)
+        )
+        stuck = result.scalars().all()
+        if stuck:
+            log.warning(
+                "Found %d video(s) stuck in 'rendering' state — marking as failed "
+                "(server was restarted mid-render).",
+                len(stuck)
+            )
+            for v in stuck:
+                v.status = VideoStatus.failed
+                v.notes = "Render interrupted: server restarted while render was in progress. Re-submit to render again."
+            await db.commit()
+            log.info("Reconciliation complete — %d video(s) marked failed.", len(stuck))
+        else:
+            log.info("Reconciliation: no stuck renders found.")
+
     yield
     log.info("Shutting down.")
 

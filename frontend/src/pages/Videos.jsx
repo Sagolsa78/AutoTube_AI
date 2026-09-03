@@ -1,32 +1,157 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { api } from '../services/api';
 import Icon from '../components/Icon';
+import { toast } from 'sonner';
+
+const CustomPlayer = ({ src }) => {
+  const videoRef = useRef(null);
+  const [playing, setPlaying] = useState(false);
+  const [muted, setMuted] = useState(false);
+  const [progress, setProgress] = useState(0);
+
+  const togglePlay = () => {
+    if (videoRef.current.paused) {
+      videoRef.current.play();
+      setPlaying(true);
+    } else {
+      videoRef.current.pause();
+      setPlaying(false);
+    }
+  };
+
+  const handleTimeUpdate = () => {
+    if (videoRef.current.duration) {
+      setProgress((videoRef.current.currentTime / videoRef.current.duration) * 100);
+    }
+  };
+
+  const handleSeek = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const pos = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    if (videoRef.current && videoRef.current.duration) {
+      videoRef.current.currentTime = pos * videoRef.current.duration;
+    }
+  };
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      videoRef.current.parentElement.requestFullscreen().catch(err => {
+        console.error(`Error attempting to enable fullscreen: ${err.message}`);
+      });
+    } else {
+      document.exitFullscreen();
+    }
+  };
+
+  return (
+    <div className="custom-player-wrapper" style={{ position: 'relative', width: '100%', aspectRatio: '9/16', background: '#000', borderRadius: 'var(--r-md)', overflow: 'hidden' }}>
+      <video 
+        ref={videoRef} 
+        src={src} 
+        style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+        onTimeUpdate={handleTimeUpdate}
+        onEnded={() => setPlaying(false)}
+        muted={muted}
+        onClick={togglePlay}
+        playsInline
+      />
+      <div className="custom-player-controls" style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '30px 20px 20px', background: 'linear-gradient(to top, rgba(0,0,0,0.8), transparent)' }}>
+        <div className="progress-bar" style={{ width: '100%', height: '6px', background: 'rgba(255,255,255,0.3)', borderRadius: '3px', cursor: 'pointer', marginBottom: '16px' }}
+             onClick={handleSeek}>
+          <div style={{ width: `${progress}%`, height: '100%', background: 'var(--accent)', borderRadius: '3px', transition: 'width 0.1s linear' }} />
+        </div>
+        <div className="flex justify-between items-center">
+          <button className="btn btn-icon" onClick={togglePlay} style={{ color: '#fff', background: 'rgba(255,255,255,0.1)', border: 'none' }}>
+            <Icon name={playing ? 'pause' : 'play'} size={20} />
+          </button>
+          <div className="flex gap-2">
+            <button className="btn btn-icon" onClick={() => setMuted(!muted)} style={{ color: '#fff', background: 'rgba(255,255,255,0.1)', border: 'none' }}>
+              <Icon name={muted ? 'volume-x' : 'volume-2'} size={20} />
+            </button>
+            <button className="btn btn-icon" onClick={toggleFullscreen} style={{ color: '#fff', background: 'rgba(255,255,255,0.1)', border: 'none' }}>
+              <Icon name="maximize" size={20} />
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export default function Videos() {
   const [videos, setVideos] = useState([]);
+  const [scripts, setScripts] = useState([]);
+  const [ideas, setIdeas] = useState([]);
   const [loading, setLoading] = useState(false);
   const [uploadModal, setUploadModal] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [activeVideoId, setActiveVideoId] = useState(null);
 
   const load = async () => {
     setLoading(true);
     try {
-      const data = await api.getVideos();
-      setVideos(data.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
+      const [data, allScripts, allIdeas] = await Promise.all([
+        api.getVideos(),
+        api.getScripts(),
+        api.getIdeas()
+      ]);
+      const sorted = data.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      setVideos(sorted);
+      setScripts(allScripts);
+      setIdeas(allIdeas);
+      if (sorted.length > 0 && !activeVideoId) {
+        setActiveVideoId(sorted[0].id);
+      }
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   };
 
   useEffect(() => {
     load();
-    const iv = setInterval(load, 6000);
-    return () => clearInterval(iv);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    const isRendering = videos.some(v => v.status === 'rendering');
+    const iv = setInterval(load, isRendering ? 3000 : 6000);
+    return () => clearInterval(iv);
+  }, [videos]);
+  
+  // Keyboard shortcuts for review mode
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (uploadModal) return;
+      const activeIndex = videos.findIndex(v => v.id === activeVideoId);
+      if (activeIndex === -1) return;
+      
+      const v = videos[activeIndex];
+      
+      if (e.key === 'ArrowRight' && activeIndex < videos.length - 1) {
+        setActiveVideoId(videos[activeIndex + 1].id);
+      } else if (e.key === 'ArrowLeft' && activeIndex > 0) {
+        setActiveVideoId(videos[activeIndex - 1].id);
+      } else if (e.key === 'a' && v.status === 'ready') {
+        action(v.id, 'approve');
+      } else if (e.key === 'r' && v.status === 'ready') {
+        action(v.id, 'reject');
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [videos, activeVideoId, uploadModal]);
 
   const action = async (id, act) => {
     try {
       if (act === 'approve') await api.approveVideo(id);
       else await api.rejectVideo(id);
+      
+      // Move to next video if available
+      const activeIndex = videos.findIndex(v => v.id === id);
+      if (activeIndex !== -1 && activeIndex < videos.length - 1) {
+        setActiveVideoId(videos[activeIndex + 1].id);
+      }
+      
       await load();
     } catch (e) { console.error(e); }
   };
@@ -43,19 +168,23 @@ export default function Videos() {
         privacy_status: fd.get('privacy'),
         made_for_kids: fd.get('kids') === 'true',
       });
-      alert('Upload completed successfully.');
+      toast.success('Upload completed successfully.');
       setUploadModal(null);
       await load();
-    } catch (e) { console.error(e); alert(`Upload failed: ${e.message}`); }
+    } catch (e) { console.error(e); toast.error(`Upload failed: ${e.message}`); }
     finally { setUploading(false); }
   };
+  
+  const activeVideo = videos.find(v => v.id === activeVideoId) || videos[0];
+  const activeScript = activeVideo ? scripts.find(s => s.id === activeVideo.script_id) : null;
+  const activeIdea = activeScript ? ideas.find(i => i.id === activeScript.idea_id) : null;
 
   return (
     <div>
       <div className="page-header">
         <div>
-          <h1>Videos</h1>
-          <p>Preview, approve, and upload your rendered Shorts.</p>
+          <h1>Review Studio</h1>
+          <p>Review, approve, and upload your rendered Shorts.</p>
         </div>
       </div>
 
@@ -69,53 +198,127 @@ export default function Videos() {
           <p>No videos yet. Go to the Scripts page and render your first Short.</p>
         </div>
       ) : (
-        <div className="grid-3">
-          {videos.map(v => (
-            <div key={v.id} className="card flex-col gap-2">
-              <div className="flex items-center justify-between">
-                <span className="mono text-xs text-muted">{v.id.substring(0, 8)}</span>
-                <span className={`badge badge-${v.status}`}>{v.status}</span>
+        <div className="review-mode-layout" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+          
+          {/* Main Stage */}
+          {activeVideo && (
+            <div className="main-stage" style={{ display: 'flex', gap: '32px', alignItems: 'flex-start', background: 'var(--surface-3)', padding: '24px', borderRadius: 'var(--r-md)', border: '1px solid var(--border-1)' }}>
+              
+              <div style={{ flex: '0 0 320px' }}>
+                {['ready', 'approved', 'uploaded'].includes(activeVideo.status) ? (
+                  <CustomPlayer src={`/api/videos/${activeVideo.id}/preview`} />
+                ) : (
+                  <div style={{ width: '100%', aspectRatio: '9/16', background: 'var(--surface-input)', display: 'grid', placeItems: 'center', borderRadius: 'var(--r-md)', border: '1px solid var(--border-2)' }}>
+                    {activeVideo.status === 'rendering' ? (
+                      <div className="flex-col items-center gap-3">
+                        <span className="spinner spinner-lg badge-rendering" />
+                        <span className="text-lg font-bold" style={{ color: 'var(--warning)' }}>Rendering...</span>
+                        <span className="text-sm text-muted text-center" style={{ padding: '0 20px', lineHeight: 1.5 }}>Generating voiceover... Fetching visuals... Assembling...</span>
+                      </div>
+                    ) : <span className="text-muted">—</span>}
+                  </div>
+                )}
               </div>
-
-              {['ready', 'approved', 'uploaded'].includes(v.status) ? (
-                <video src={`/api/videos/${v.id}/preview`} controls
-                  style={{ width: '100%', borderRadius: 'var(--r-sm)', background: '#000', aspectRatio: '9/16' }} />
-              ) : (
-                <div style={{ width: '100%', aspectRatio: '9/16', background: 'var(--surface-input)', display: 'grid', placeItems: 'center', borderRadius: 'var(--r-sm)' }}>
-                  {v.status === 'rendering' ? <span className="spinner spinner-lg" /> : <span className="text-muted">—</span>}
+              
+              <div className="video-metadata" style={{ flex: '1', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h2 style={{ fontSize: '24px', marginBottom: '4px', color: 'var(--text-0)' }}>
+                      {activeIdea ? activeIdea.topic : `Render #${activeVideo.id.substring(0, 8)}`}
+                    </h2>
+                    <p className="text-muted text-sm" style={{ marginBottom: '12px' }}>
+                      Script ID: {activeVideo.script_id.substring(0, 8)}
+                    </p>
+                    <div className="flex gap-2 items-center">
+                      <span className={`badge badge-${activeVideo.status}`} style={{ fontSize: '13px', padding: '6px 12px' }}>{activeVideo.status}</span>
+                      <span className="text-muted mono">{activeVideo.duration ? `${activeVideo.duration.toFixed(1)}s` : '—'}</span>
+                    </div>
+                  </div>
                 </div>
-              )}
-
-              <div className="flex items-center justify-between">
-                <div>
-                  <span className="text-xs text-muted font-bold">{v.duration ? `${v.duration.toFixed(1)}s` : '—'}</span>
-                  {v.caption_style && (
-                    <span className="text-xs text-muted flex items-center gap-1" style={{ marginLeft: 8, display: 'inline-flex' }}>
-                      <Icon name="sparkles" size={10} /> {v.caption_style}
-                    </span>
-                  )}
+                
+                <div className="metadata-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', background: 'var(--surface-input)', padding: '20px', borderRadius: 'var(--r-sm)' }}>
+                  <div>
+                    <div className="text-muted text-xs uppercase" style={{ letterSpacing: '0.05em', marginBottom: '4px' }}>Caption Style</div>
+                    <div className="font-bold">{activeVideo.caption_style || 'Default'}</div>
+                  </div>
+                  <div>
+                    <div className="text-muted text-xs uppercase" style={{ letterSpacing: '0.05em', marginBottom: '4px' }}>AI Generated</div>
+                    <div className="font-bold">{activeVideo.ai_used ? 'Yes' : 'No'}</div>
+                  </div>
+                  <div>
+                    <div className="text-muted text-xs uppercase" style={{ letterSpacing: '0.05em', marginBottom: '4px' }}>Created</div>
+                    <div className="font-bold">{new Date(activeVideo.created_at).toLocaleString()}</div>
+                  </div>
                 </div>
-                <div className="flex gap-1">
-                  {v.status === 'ready' && (
+
+                {activeVideo.notes && (
+                  <div style={{ background: 'var(--error-muted)', color: 'var(--error)', padding: '16px', borderRadius: 'var(--r-sm)', border: '1px solid rgba(255, 77, 79, 0.2)' }}>
+                    <strong>Error Notes:</strong> {activeVideo.notes}
+                  </div>
+                )}
+
+                {activeScript && (
+                  <div style={{ background: 'var(--surface-2)', padding: '16px', borderRadius: 'var(--r-sm)', border: '1px solid var(--border-1)', maxHeight: '180px', overflowY: 'auto' }}>
+                    <h4 style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-2)', marginBottom: '8px' }}>Script Used</h4>
+                    <p style={{ fontSize: '13px', lineHeight: 1.5, color: 'var(--text-1)' }}>{activeScript.full_text}</p>
+                  </div>
+                )}
+
+                <div className="actions" style={{ display: 'flex', gap: '16px', marginTop: 'auto' }}>
+                  {activeVideo.status === 'ready' && (
                     <>
-                      <button className="btn btn-sm btn-success" onClick={() => action(v.id, 'approve')} aria-label="Approve">
-                        <Icon name="check" size={12} />
+                      <button className="btn btn-success" style={{ flex: 1, padding: '16px', fontSize: '16px', fontWeight: 600 }} onClick={() => action(activeVideo.id, 'approve')}>
+                        <Icon name="check" size={20} /> Approve <span className="mono" style={{ opacity: 0.5, fontSize: '12px', marginLeft: '8px' }}>[A]</span>
                       </button>
-                      <button className="btn btn-sm btn-danger" onClick={() => action(v.id, 'reject')} aria-label="Reject">
-                        <Icon name="x" size={12} />
+                      <button className="btn btn-danger" style={{ flex: 1, padding: '16px', fontSize: '16px', fontWeight: 600 }} onClick={() => action(activeVideo.id, 'reject')}>
+                        <Icon name="x" size={20} /> Reject <span className="mono" style={{ opacity: 0.5, fontSize: '12px', marginLeft: '8px' }}>[R]</span>
                       </button>
                     </>
                   )}
-                  {v.status === 'approved' && (
-                    <button className="btn btn-sm btn-primary" onClick={() => setUploadModal(v)}>
-                      <Icon name="upload" size={12} /> Upload
+                  {activeVideo.status === 'approved' && (
+                    <button className="btn btn-primary" style={{ flex: 1, padding: '16px', fontSize: '16px', fontWeight: 600 }} onClick={() => setUploadModal(activeVideo)}>
+                      <Icon name="upload" size={20} /> Upload to YouTube
                     </button>
                   )}
                 </div>
               </div>
-              {v.notes && <div className="text-xs mt-1" style={{ color: 'var(--error)' }}>{v.notes}</div>}
             </div>
-          ))}
+          )}
+          
+          {/* Filmstrip */}
+          <div>
+            <h3 style={{ fontSize: '14px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-2)', marginBottom: '16px' }}>Bin / Up Next</h3>
+            <div className="filmstrip" style={{ display: 'flex', gap: '16px', overflowX: 'auto', paddingBottom: '16px' }}>
+              {videos.map(v => (
+                <div 
+                  key={v.id} 
+                  className={`filmstrip-item ${v.id === activeVideoId ? 'active' : ''}`}
+                  onClick={() => setActiveVideoId(v.id)}
+                  style={{ 
+                    flex: '0 0 120px', 
+                    cursor: 'pointer',
+                    background: 'var(--surface-input)',
+                    borderRadius: 'var(--r-sm)',
+                    overflow: 'hidden',
+                    border: v.id === activeVideoId ? '2px solid var(--accent)' : '1px solid var(--border-2)',
+                    opacity: v.id === activeVideoId ? 1 : 0.6,
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  <div style={{ aspectRatio: '9/16', background: v.status === 'rendering' ? 'var(--warning-muted)' : '#000', display: 'grid', placeItems: 'center' }}>
+                    {v.status === 'rendering' ? <Icon name="loader" className="badge-rendering" style={{ color: 'var(--warning)' }} /> : 
+                     ['ready', 'approved', 'uploaded'].includes(v.status) ? (
+                        <video src={`/api/videos/${v.id}/preview`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                     ) : <Icon name="video" style={{ color: 'var(--text-3)' }} />}
+                  </div>
+                  <div style={{ padding: '8px', fontSize: '11px', borderTop: '1px solid var(--border-1)', display: 'flex', justifyContent: 'space-between' }}>
+                    <span className="mono">{v.id.substring(0, 4)}</span>
+                    <span className={`badge badge-${v.status}`} style={{ padding: '2px 4px', fontSize: '9px' }}>{v.status.substring(0, 1).toUpperCase()}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 

@@ -101,8 +101,8 @@ def _fmt(s: Script) -> dict:
         "full_text":      s.full_text,
         "visual_prompts": s.visual_prompts,
         "duration_est":   s.duration_est,
-        "quality_score":  s.quality_score or 0.0,
-        "fact_check_ok":  s.fact_check_ok or False,
+        "quality_score":  s.quality_score if s.quality_score is not None else 0.0,
+        "fact_check_ok":  s.fact_check_ok if s.fact_check_ok is not None else False,
         "provider_used":  s.provider_used,
         "created_at":     str(s.created_at),
     }
