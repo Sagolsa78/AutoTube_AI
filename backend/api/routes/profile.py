@@ -39,6 +39,12 @@ class ProfileOut(BaseModel):
     watermark_opacity: float
     watermark_position: str
     watermark_scale: float
+    default_voice_id: str
+    content_tone: str
+    niche_keywords: list[str]
+    title_style_preference: str
+    hashtag_set: list[str]
+    auto_approve: bool
 
 
 class ProfileUpdate(BaseModel):
@@ -51,6 +57,12 @@ class ProfileUpdate(BaseModel):
     watermark_opacity: float | None = None
     watermark_position: str | None = None
     watermark_scale: float | None = None
+    default_voice_id: str | None = None
+    content_tone: str | None = None
+    niche_keywords: list[str] | None = None
+    title_style_preference: str | None = None
+    hashtag_set: list[str] | None = None
+    auto_approve: bool | None = None
 
 
 async def _ensure_profile(db: AsyncSession) -> UserProfile:
@@ -140,4 +152,10 @@ def _fmt(p: UserProfile) -> dict:
         "watermark_opacity": p.watermark_opacity or 0.4,
         "watermark_position": p.watermark_position or "bottom_right",
         "watermark_scale":   p.watermark_scale or 0.12,
+        "default_voice_id":  p.default_voice_id or "en-US-ChristopherNeural",
+        "content_tone":      p.content_tone or "casual",
+        "niche_keywords":    p.niche_keywords or [],
+        "title_style_preference": p.title_style_preference or "curiosity",
+        "hashtag_set":       p.hashtag_set or ["shorts", "viral"],
+        "auto_approve":      p.auto_approve if p.auto_approve is not None else False,
     }

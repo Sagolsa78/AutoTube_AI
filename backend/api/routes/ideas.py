@@ -11,8 +11,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db.database import get_db
-from backend.models.models import Idea, IdeaStatus, Channel
+from backend.models.models import Idea, IdeaStatus, Channel, UserProfile
 from integrations.providers.ai_providers import generate_with_fallback
+from backend.api.routes.profile import _ensure_profile
+from engine.script.trends import fetch_trending_topics
 
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -26,6 +28,7 @@ class IdeaOut(BaseModel):
     angle:      str | None
     status:     str
     score:      float
+    notes:      str | None = None
     created_at: str
 
     class Config:
@@ -81,10 +84,27 @@ async def generate_ideas(body: GenerateIdeasIn, db: AsyncSession = Depends(get_d
     
     avoid_str = f"DO NOT use these recently covered topics: {', '.join(recent_topics)}" if recent_topics else ""
 
+    # Fetch trending topics using user profile niche keywords
+    profile = await _ensure_profile(db)
+    kw_list = profile.niche_keywords or [niche]
+    try:
+        trending = fetch_trending_topics(kw_list)
+    except Exception as e:
+        log.warning("Pytrends failed: %s", e)
+        trending = []
+
+    trends_str = ""
+    trend_notes = None
+    if trending:
+        trends_str = f"Here is what's currently trending in this space: {', '.join(trending)}\nGenerate ideas that ride these trends without copying them directly."
+    else:
+        trend_notes = "Trend data unavailable (fetch failed or empty)."
+
     prompt = f"""You are a brilliant YouTube Shorts content strategist. 
 Generate {body.count} highly trending, viral, and wildly interesting topic ideas for a '{niche}' channel.
 These should be things people are currently fascinated by or bizarre/mind-blowing facts that hook attention immediately.
 
+{trends_str}
 {avoid_str}
 
 Respond ONLY with a JSON list of strings (no markdown, no other text).
@@ -117,6 +137,7 @@ Example:
             topic=topic,
             angle="Viral/Trending hook",
             status=IdeaStatus.pending,
+            notes=trend_notes,
         )
         db.add(idea)
         created.append(idea)
@@ -125,22 +146,14 @@ Example:
     return [_fmt(i) for i in created]
 
 
-@router.patch("/{idea_id}/approve", response_model=IdeaOut)
-async def approve_idea(idea_id: str, db: AsyncSession = Depends(get_db)):
+@router.post("/{idea_id}/discard", response_model=IdeaOut)
+async def discard_idea(idea_id: str, db: AsyncSession = Depends(get_db)):
     idea = await db.get(Idea, idea_id)
     if not idea:
         raise HTTPException(404, "Idea not found")
-    idea.status = IdeaStatus.approved
-    await db.flush()
-    return _fmt(idea)
-
-
-@router.patch("/{idea_id}/reject", response_model=IdeaOut)
-async def reject_idea(idea_id: str, db: AsyncSession = Depends(get_db)):
-    idea = await db.get(Idea, idea_id)
-    if not idea:
-        raise HTTPException(404, "Idea not found")
-    idea.status = IdeaStatus.rejected
+    if idea.status == IdeaStatus.promoted:
+        raise HTTPException(400, "Cannot discard an idea that has already been promoted to a script.")
+    idea.status = IdeaStatus.discarded
     await db.flush()
     return _fmt(idea)
 
@@ -152,7 +165,8 @@ def _fmt(i: Idea) -> dict:
         "title":      i.title,
         "topic":      i.topic,
         "angle":      i.angle,
-        "status":     i.status.value if hasattr(i.status, "value") else i.status,
+        "status":     i.status.value if hasattr(i.status, "value") else (i.status or "pending"),
         "score":      i.score or 0.0,
+        "notes":      i.notes,
         "created_at": str(i.created_at),
     }

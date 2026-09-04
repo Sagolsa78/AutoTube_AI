@@ -446,6 +446,279 @@ tbody td { padding: 14px 16px; vertical-align: middle }
 .gap-4 { gap: 24px }
 
 
+/* ═══════════════════════════════════════════════════════════════════════════════
+   CREATE SHORT — Production Workspace
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* ── Primary nav item ─────────────────────────────────────────────────────── */
+.nav-primary {
+  background: var(--accent-muted) !important;
+  color: var(--accent-strong) !important;
+  border-color: rgba(255,90,54,0.2) !important;
+  font-weight: 700 !important;
+}
+.nav-primary:hover {
+  background: var(--accent) !important;
+  color: #fff !important;
+}
+
+/* ── Stage stepper ────────────────────────────────────────────────────────── */
+.create-stepper {
+  display: flex; align-items: center; gap: 0;
+  padding: 20px 24px; margin-bottom: 28px;
+  background: var(--surface-2); border: 1px solid var(--border-1); border-radius: var(--r-lg);
+}
+.stepper-step {
+  display: flex; align-items: center; gap: 10px; position: relative;
+}
+.stepper-dot {
+  width: 32px; height: 32px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--surface-3); border: 2px solid var(--border-2);
+  font-size: 12px; font-weight: 700; color: var(--text-3);
+  transition: all 0.3s var(--ease); flex-shrink: 0;
+}
+.stepper-step.active .stepper-dot {
+  background: var(--accent-muted); border-color: var(--accent);
+  color: var(--accent-strong);
+}
+.stepper-step.current .stepper-dot {
+  background: var(--accent); border-color: var(--accent);
+  color: #fff; box-shadow: 0 0 20px rgba(255,90,54,0.4);
+}
+.stepper-label {
+  font-size: 12px; font-weight: 600; color: var(--text-3);
+  transition: color 0.2s var(--ease);
+}
+.stepper-step.active .stepper-label { color: var(--text-1) }
+.stepper-step.current .stepper-label { color: var(--text-0); font-weight: 700 }
+.stepper-line {
+  width: 40px; height: 2px; background: var(--border-2);
+  margin: 0 8px; flex-shrink: 0;
+}
+.stepper-step.active .stepper-line { background: var(--accent) }
+
+/* ── Create stage container ───────────────────────────────────────────────── */
+.create-stage {
+  animation: slideUp 0.3s var(--ease);
+}
+.stage-title {
+  font-size: 20px; font-weight: 800; letter-spacing: -0.02em;
+  margin-bottom: 8px;
+}
+.stage-desc {
+  font-size: 13px; color: var(--text-2); margin-bottom: 24px;
+  line-height: 1.5; max-width: 600px;
+}
+
+/* ── Idea picker cards ────────────────────────────────────────────────────── */
+.idea-pick-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+.idea-pick-card {
+  text-align: left;
+  background: var(--surface-2); border: 2px solid var(--border-1); border-radius: var(--r-md);
+  padding: 18px; cursor: pointer;
+  transition: all 0.2s var(--ease);
+}
+.idea-pick-card:hover {
+  border-color: var(--accent); transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(255,90,54,0.15);
+}
+.idea-pick-card.selected {
+  border-color: var(--accent); background: var(--accent-muted);
+}
+.idea-pick-title {
+  font-size: 14px; font-weight: 700; margin-bottom: 4px;
+  line-height: 1.3; color: var(--text-0);
+}
+.idea-pick-topic {
+  font-size: 12px; color: var(--text-2); margin-bottom: 6px;
+  line-height: 1.4;
+}
+.idea-pick-angle {
+  font-size: 11px; color: var(--text-3); margin-bottom: 10px;
+  line-height: 1.4; font-style: italic;
+}
+.idea-pick-meta { display: flex; align-items: center; gap: 8px }
+
+/* ── Selected idea banner ─────────────────────────────────────────────────── */
+.selected-idea-banner {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--accent-muted); border: 1px solid rgba(255,90,54,0.2);
+  padding: 12px 16px; border-radius: var(--r-sm); margin-bottom: 24px;
+  font-size: 13px; color: var(--text-1);
+}
+.selected-idea-banner svg { color: var(--accent-strong); flex-shrink: 0 }
+.selected-idea-banner div { flex: 1 }
+
+/* ── Script generation ────────────────────────────────────────────────────── */
+.script-gen-action {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 20px; padding: 48px 24px; text-align: center;
+  background: var(--surface-2); border: 1px solid var(--border-1);
+  border-radius: var(--r-lg);
+}
+.script-gen-action p {
+  font-size: 13px; color: var(--text-2); max-width: 480px; line-height: 1.6;
+}
+
+/* ── Script preview ───────────────────────────────────────────────────────── */
+.script-preview {
+  background: var(--surface-2); border: 1px solid var(--border-1);
+  border-radius: var(--r-lg); padding: 24px;
+}
+.script-preview-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 16px;
+}
+.script-preview-header h3 {
+  font-size: 15px; font-weight: 700;
+}
+
+/* ── Scene list ───────────────────────────────────────────────────────────── */
+.scene-list-preview {
+  display: flex; flex-direction: column; gap: 12px;
+}
+.scene-preview-card {
+  background: var(--surface-input); border: 1px solid var(--border-1);
+  border-radius: var(--r-sm); padding: 14px;
+  transition: border-color 0.15s var(--ease);
+}
+.scene-preview-card:hover { border-color: var(--border-2) }
+.scene-number {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--accent-strong); margin-bottom: 6px;
+}
+.scene-narration {
+  font-size: 13px; line-height: 1.6; color: var(--text-0); margin-bottom: 8px;
+}
+.scene-visual {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; color: var(--text-2); font-family: var(--font-mono);
+}
+
+/* ── Storyboard ───────────────────────────────────────────────────────────── */
+.storyboard-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px; margin-bottom: 24px;
+}
+.storyboard-card {
+  background: var(--surface-2); border: 1px solid var(--border-1);
+  border-radius: var(--r-md); overflow: hidden;
+  transition: border-color 0.2s var(--ease);
+}
+.storyboard-card:hover { border-color: var(--border-2) }
+.storyboard-card-header {
+  background: var(--surface-3); padding: 10px 16px;
+  border-bottom: 1px solid var(--border-1);
+}
+.storyboard-scene-num {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--accent-strong);
+}
+.storyboard-field { padding: 12px 16px }
+.storyboard-field .label { margin-bottom: 4px }
+.storyboard-full-text {
+  margin-bottom: 24px;
+}
+.script-fulltext-preview {
+  background: var(--surface-input); border: 1px solid var(--border-1);
+  border-radius: var(--r-sm); padding: 14px; font-size: 13px;
+  color: var(--text-1); line-height: 1.7;
+}
+
+/* ── Render config ────────────────────────────────────────────────────────── */
+.render-config {
+  background: var(--surface-2); border: 1px solid var(--border-1);
+  border-radius: var(--r-md); padding: 20px; margin-bottom: 20px;
+}
+.render-config-title {
+  font-size: 13px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--text-2); margin-bottom: 16px;
+}
+.render-config-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+}
+.render-config-grid .field { margin-bottom: 0 }
+
+/* ── Render progress ──────────────────────────────────────────────────────── */
+.render-progress-container {
+  background: var(--surface-2); border: 1px solid var(--border-1);
+  border-radius: var(--r-lg); padding: 32px;
+  display: flex; flex-direction: column; align-items: center; gap: 32px;
+}
+.render-progress-visual { width: 100%; max-width: 500px; text-align: center }
+.render-progress-bar-track {
+  width: 100%; height: 10px; background: var(--surface-3);
+  border-radius: 5px; overflow: hidden; margin-bottom: 12px;
+}
+.render-progress-bar-fill {
+  height: 100%; border-radius: 5px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-strong));
+  transition: width 0.5s var(--ease);
+}
+.render-progress-label {
+  font-size: 14px; font-weight: 700; color: var(--text-0);
+}
+
+/* ── Render stage timeline ────────────────────────────────────────────────── */
+.render-stage-timeline {
+  display: flex; align-items: center; gap: 0;
+}
+.render-stage-step {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  min-width: 80px; position: relative;
+}
+.render-stage-step:not(:last-child)::after {
+  content: ''; position: absolute; top: 14px; left: calc(50% + 16px);
+  width: calc(100% - 32px); height: 2px;
+  background: var(--border-2);
+}
+.render-stage-step.done:not(:last-child)::after {
+  background: var(--success);
+}
+.render-stage-dot {
+  width: 28px; height: 28px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--surface-3); border: 2px solid var(--border-2);
+  z-index: 1; transition: all 0.3s var(--ease);
+}
+.render-stage-step.done .render-stage-dot {
+  background: var(--success-muted); border-color: var(--success); color: var(--success);
+}
+.render-stage-step.active .render-stage-dot {
+  background: var(--accent-muted); border-color: var(--accent);
+  box-shadow: 0 0 16px rgba(255,90,54,0.4);
+}
+.render-stage-step span {
+  font-size: 11px; font-weight: 600; color: var(--text-3);
+}
+.render-stage-step.done span { color: var(--success) }
+.render-stage-step.active span { color: var(--text-0) }
+.spinner-sm { width: 12px; height: 12px; border-width: 1.5px }
+
+/* ── Render success/failure ───────────────────────────────────────────────── */
+.render-success, .render-failure {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 16px; padding: 48px 24px; text-align: center;
+  background: var(--surface-2); border: 1px solid var(--border-1);
+  border-radius: var(--r-lg);
+}
+.render-success h3, .render-failure h3 {
+  font-size: 20px; font-weight: 800;
+}
+.render-failure svg { color: var(--error) }
+
+/* ── Button lg ────────────────────────────────────────────────────────────── */
+.btn-lg {
+  padding: 14px 28px; font-size: 15px; font-weight: 700;
+  border-radius: var(--r-md);
+}
+
+
 /* ── Animations ────────────────────────────────────────────────────────────── */
 @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
 @keyframes slideUp { from { opacity: 0; transform: translateY(12px) } to { opacity: 1; transform: translateY(0) } }

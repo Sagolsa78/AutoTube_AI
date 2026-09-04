@@ -1,6 +1,6 @@
 """
 Script generator — builds a structured script from a topic + niche config.
-Outputs JSON with hook / body / payoff / cta / visual_prompts.
+Outputs JSON with a list of scenes.
 """
 from __future__ import annotations
 import json
@@ -11,9 +11,6 @@ from integrations.providers.ai_providers import generate_with_fallback
 log = logging.getLogger(__name__)
 
 # ── Prompt templates per niche ─────────────────────────────────────────────────
-# IMPORTANT: The example visual_prompts in each template use << >> placeholders
-# so the LLM cannot copy them verbatim. They must be replaced with
-# topic-specific phrases from the actual content being written.
 
 _PROMPTS: dict[str, str] = {
     "kids_facts": """You are a friendly, enthusiastic scriptwriter for a children's YouTube Shorts channel (audience: ages 4-10).
@@ -21,27 +18,25 @@ _PROMPTS: dict[str, str] = {
 Write a SHORT, fun, and educational script about: {topic}
 
 Rules:
-- 30-50 seconds when read aloud at a gentle pace
-- Open with a single CURIOSITY HOOK sentence (a question or surprising statement kids love)
-- 3-4 short, simple body sentences — one idea each, no jargon
-- End with a satisfying WOW PAYOFF (the answer or the coolest part)
-- Finish with a friendly CTA: "Follow us to learn more amazing stuff!"
+- 15-25 seconds when read aloud at a fast pace
+- Open with a single CURIOSITY HOOK scene (a question or surprising statement kids love)
+- 1-2 ultra-short, simple body scenes — get straight to the point
+- End with a satisfying WOW PAYOFF scene (the answer or the coolest part)
+- Finish with a friendly CTA scene: "Follow us to learn more amazing stuff!"
 - Plain, simple words — as if explaining to a 6-year-old
 - NO scary, violent, or adult themes
 - NO unsupported claims
-- visual_prompts: exactly 3 SPECIFIC 3-5 word search phrases for stock footage directly relevant to {topic}.
+- visual_description: A SPECIFIC 3-5 word description for stock footage directly relevant to the narration.
   Each phrase must describe something VISUALLY CONCRETE and UNIQUE to this specific topic.
   BAD (too generic): "nature", "child playing", "colorful background"
-  GOOD (topic-specific): for butterflies → "monarch butterfly close up wings", "caterpillar spinning cocoon", "butterfly emerging from chrysalis"
+  GOOD (topic-specific): for butterflies → "monarch butterfly close up wings"
 
-Respond ONLY with valid JSON (no markdown fences) — replace <<EXAMPLE>> with real values:
+Respond ONLY with valid JSON (no markdown fences). It must match exactly this structure:
 {{
-  "hook": "...",
-  "body": ["...", "...", "..."],
-  "payoff": "...",
-  "cta": "Follow us to learn more amazing stuff!",
-  "visual_prompts": ["<<SPECIFIC_VISUAL_1_FOR_{topic}>>", "<<SPECIFIC_VISUAL_2_FOR_{topic}>>", "<<SPECIFIC_VISUAL_3_FOR_{topic}>>"],
-  "estimated_duration": 40
+  "scenes": [
+    {{"narration": "...", "visual_description": "..."}},
+    {{"narration": "...", "visual_description": "..."}}
+  ]
 }}""",
 
     "science_wow": """You are a scriptwriter for a science YouTube Shorts channel targeting curious adults and teens.
@@ -49,28 +44,24 @@ Respond ONLY with valid JSON (no markdown fences) — replace <<EXAMPLE>> with r
 Write a punchy, mind-blowing script about: {topic}
 
 Rules:
-- 35-55 seconds when read aloud at normal pace
-- First line MUST be a powerful curiosity hook — no preamble
-- 3-4 fact sentences — each must be genuinely surprising and accurate
-- End with a "wait, that means..." payoff that connects to everyday life
-- CTA: "Follow for a new mind-blowing fact every day."
+- 15-25 seconds when read aloud at a very fast pace
+- First scene MUST be a punchy, powerful curiosity hook — zero preamble
+- 1-2 fact scenes — extreme brevity, highly surprising
+- End with a "wait, that means..." payoff scene that connects to everyday life
+- CTA scene: "Follow for a new mind-blowing fact every day."
 - No clickbait or false claims
-- No markdown, no stage directions
-- visual_prompts: exactly 3 SPECIFIC 3-5 word search phrases for stock footage directly relevant to {topic}.
+- visual_description: A SPECIFIC 3-5 word description for stock footage directly relevant to the narration.
   Each phrase must describe something VISUALLY CONCRETE and UNIQUE to this specific topic.
   DO NOT use single abstract keywords. DO NOT copy the example values below.
-  BAD: "glowing blue dna double helix", "scientist looking into microscope", "earth spinning in space" (these are GENERIC PLACEHOLDERS — never use them)
-  GOOD (for tardigrades): "tardigrade under electron microscope", "water bear cryptobiosis closeup", "extreme survival organism space"
-  GOOD (for neutron stars): "neutron star collision animation", "massive star collapsing supernova", "gravitational wave detection screen"
+  BAD: "glowing blue dna double helix", "scientist looking into microscope"
+  GOOD (for tardigrades): "tardigrade under electron microscope", "water bear cryptobiosis closeup"
 
-Respond ONLY with valid JSON (no markdown fences):
+Respond ONLY with valid JSON (no markdown fences). It must match exactly this structure:
 {{
-  "hook": "...",
-  "body": ["...", "...", "..."],
-  "payoff": "...",
-  "cta": "Follow for a new mind-blowing fact every day.",
-  "visual_prompts": ["<<SPECIFIC_VISUAL_1_FOR_{topic}>>", "<<SPECIFIC_VISUAL_2_FOR_{topic}>>", "<<SPECIFIC_VISUAL_3_FOR_{topic}>>"],
-  "estimated_duration": 45
+  "scenes": [
+    {{"narration": "...", "visual_description": "..."}},
+    {{"narration": "...", "visual_description": "..."}}
+  ]
 }}""",
 
     "tech_mysteries": """You are a scriptwriter for a technology mysteries YouTube Shorts channel.
@@ -78,25 +69,22 @@ Respond ONLY with valid JSON (no markdown fences):
 Write a sharp, intelligent script about: {topic}
 
 Rules:
-- 35-50 seconds at normal speaking pace
-- Open with a hook framed as a mystery or something the viewer uses daily without understanding
-- 3-4 body sentences explaining the mechanism clearly but simply
-- Payoff: the "aha" moment of understanding
-- CTA: "Follow for more tech secrets you never knew."
+- 15-25 seconds at a fast speaking pace
+- Open with an ultra-short hook scene framed as a mystery
+- 1-2 body scenes explaining the mechanism simply and quickly
+- Payoff scene: the "aha" moment of understanding
+- CTA scene: "Follow for more tech secrets you never knew."
 - Accurate — no speculation presented as fact
-- visual_prompts: exactly 3 SPECIFIC 3-5 word search phrases for stock footage directly relevant to {topic}.
+- visual_description: A SPECIFIC 3-5 word description for stock footage directly relevant to the narration.
   Each phrase must describe something VISUALLY CONCRETE and UNIQUE to this specific topic.
-  DO NOT copy the example values below — replace with content-specific phrases.
-  GOOD (for WiFi): "wifi router signal animation", "radio waves traveling through air", "router blinking lights closeup"
+  GOOD (for WiFi): "wifi router signal animation", "radio waves traveling through air"
 
-Respond ONLY with valid JSON (no markdown fences):
+Respond ONLY with valid JSON (no markdown fences). It must match exactly this structure:
 {{
-  "hook": "...",
-  "body": ["...", "...", "..."],
-  "payoff": "...",
-  "cta": "Follow for more tech secrets you never knew.",
-  "visual_prompts": ["<<SPECIFIC_VISUAL_1_FOR_{topic}>>", "<<SPECIFIC_VISUAL_2_FOR_{topic}>>", "<<SPECIFIC_VISUAL_3_FOR_{topic}>>"],
-  "estimated_duration": 43
+  "scenes": [
+    {{"narration": "...", "visual_description": "..."}},
+    {{"narration": "...", "visual_description": "..."}}
+  ]
 }}""",
 }
 
@@ -112,7 +100,7 @@ def _extract_json(raw: str) -> dict:
 def generate_script(topic: str, niche: str = "science_wow") -> dict:
     """
     Generate a structured script for the given topic.
-    Returns a dict with hook/body/payoff/cta/visual_prompts/estimated_duration/provider_used.
+    Returns a dict with scenes/estimated_duration/provider_used/full_text.
     """
     template = _PROMPTS.get(niche, _DEFAULT_PROMPT)
     prompt = template.format(topic=topic)
@@ -129,7 +117,6 @@ def generate_script(topic: str, niche: str = "science_wow") -> dict:
         )
         raise RuntimeError(
             f"LLM provider '{provider}' returned invalid JSON for topic '{topic}'. "
-            f"Cannot safely generate visual_prompts — aborting to avoid bad footage selection. "
             f"JSON error: {exc}"
         ) from exc
 
@@ -137,34 +124,20 @@ def generate_script(topic: str, niche: str = "science_wow") -> dict:
     data["topic"] = topic
     data["niche"] = niche
 
-    # Validate visual_prompts — catch cases where the LLM returned the placeholder text
-    prompts = data.get("visual_prompts", [])
-    bad_placeholders = ["glowing blue dna double helix", "scientist looking into microscope",
-                        "earth spinning in space", "glowing computer circuit board",
-                        "person typing fast keyboard", "fiber optic cable flashing"]
-    generic_count = sum(1 for p in prompts if any(bad in p.lower() for bad in bad_placeholders))
-    if generic_count == len(prompts) and len(prompts) > 0:
-        log.warning(
-            "visual_prompts for topic='%s' appear to be template placeholders, not topic-specific. "
-            "Generating fallback prompts from topic keywords.",
-            topic
-        )
-        # Build minimal topic-derived prompts — better than copying template examples
-        words = [w for w in topic.lower().split() if len(w) > 4][:3]
-        data["visual_prompts"] = [
-            f"{' '.join(words[:2])} closeup" if len(words) >= 2 else f"{topic} closeup",
-            f"{topic} scientific animation",
-            f"{topic} natural world",
+    # Validate scenes
+    scenes = data.get("scenes", [])
+    if not scenes:
+        data["scenes"] = [
+            {"narration": f"Did you know about {topic}?", "visual_description": f"{topic} close up"},
+            {"narration": "It is truly fascinating.", "visual_description": f"{topic} in action"},
         ]
-        log.info("Fallback visual_prompts: %s", data["visual_prompts"])
+        
+    for s in data["scenes"]:
+        if "narration" not in s: s["narration"] = ""
+        if "visual_description" not in s: s["visual_description"] = ""
 
-    # Build full_text for TTS
-    body_text = " ".join(data.get("body", []) if isinstance(data.get("body"), list) else [])
-    data["full_text"] = " ".join(filter(None, [
-        data.get("hook", ""),
-        body_text,
-        data.get("payoff", ""),
-        data.get("cta", ""),
-    ]))
+    # Build full_text for TTS and duration estimation
+    data["full_text"] = " ".join([s["narration"] for s in data["scenes"]])
+    data["estimated_duration"] = len(data["full_text"].split()) / 135 * 60
 
     return data

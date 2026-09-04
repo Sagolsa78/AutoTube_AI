@@ -26,9 +26,14 @@ class Base(AsyncAttrs, DeclarativeBase):
 
 class IdeaStatus(str, enum.Enum):
     pending   = "pending"
-    approved  = "approved"
-    rejected  = "rejected"
-    scripted  = "scripted"
+    discarded = "discarded"
+    promoted  = "promoted"
+
+class ScriptStatus(str, enum.Enum):
+    draft          = "draft"
+    discarded      = "discarded"
+    used_in_render = "used_in_render"
+
 
 
 class VideoStatus(str, enum.Enum):
@@ -39,6 +44,7 @@ class VideoStatus(str, enum.Enum):
     rejected   = "rejected"
     uploaded   = "uploaded"
     failed     = "failed"
+    publish_failed = "publish_failed"
 
 
 class PrivacyStatus(str, enum.Enum):
@@ -63,6 +69,15 @@ class UserProfile(Base):
     watermark_opacity = Column(Float, default=0.4)
     watermark_position = Column(String, default="bottom_right")  # bottom_right, bottom_left, top_right, top_left
     watermark_scale  = Column(Float, default=0.12)   # fraction of video width
+    
+    # New Settings
+    default_voice_id = Column(String, default="en-US-ChristopherNeural")
+    content_tone     = Column(String, default="casual")
+    niche_keywords   = Column(JSON, default=list) # e.g. ["science", "space", "facts"]
+    title_style_preference = Column(String, default="curiosity")
+    hashtag_set      = Column(JSON, default=lambda: ["shorts", "viral"])
+    auto_approve     = Column(Boolean, default=False)
+    
     created_at      = Column(DateTime, default=datetime.utcnow)
     updated_at      = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -91,6 +106,7 @@ class Idea(Base):
     angle      = Column(Text)
     status     = Column(SAEnum(IdeaStatus), default=IdeaStatus.pending)
     score      = Column(Float, default=0.0)
+    notes      = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     channel = relationship("Channel", back_populates="ideas")
@@ -102,6 +118,7 @@ class Script(Base):
 
     id               = Column(String, primary_key=True, default=_uuid)
     idea_id          = Column(String, ForeignKey("ideas.id"), nullable=False)
+    status           = Column(SAEnum(ScriptStatus), default=ScriptStatus.draft)
     hook             = Column(Text)
     body             = Column(JSON)          # list of sentences
     payoff           = Column(Text)
@@ -117,22 +134,41 @@ class Script(Base):
     idea   = relationship("Idea", back_populates="scripts")
     assets = relationship("Asset", back_populates="script", cascade="all, delete-orphan")
     videos = relationship("Video", back_populates="script", cascade="all, delete-orphan")
+    scenes = relationship("Scene", back_populates="script", cascade="all, delete-orphan", order_by="Scene.scene_number")
+
+
+class Scene(Base):
+    __tablename__ = "scenes"
+
+    id                 = Column(String, primary_key=True, default=_uuid)
+    script_id          = Column(String, ForeignKey("scripts.id", ondelete="CASCADE"), nullable=False)
+    scene_number       = Column(Integer, nullable=False)
+    narration          = Column(Text)
+    visual_description = Column(Text)
+    asset_id           = Column(String, ForeignKey("assets.id", ondelete="SET NULL"), nullable=True)
+    duration_est       = Column(Float, nullable=True)
+    created_at         = Column(DateTime, default=datetime.utcnow)
+
+    script = relationship("Script", back_populates="scenes")
+    asset  = relationship("Asset")
 
 
 class Asset(Base):
     __tablename__ = "assets"
 
     id                 = Column(String, primary_key=True, default=_uuid)
-    script_id          = Column(String, ForeignKey("scripts.id"), nullable=False)
+    script_id          = Column(String, ForeignKey("scripts.id"), nullable=True) # Nullable for globally cached assets
+    source_asset_id    = Column(String, index=True) # Provider's original ID (e.g., Pexels ID)
     asset_type         = Column(String)    # video_clip | image | audio | music
     source             = Column(String)    # pexels | pixabay | local | generated
     path               = Column(String)
     url                = Column(String)
+    thumbnail_url      = Column(String)    # For UI previews
     license            = Column(String)
     commercial_ok      = Column(Boolean, default=True)
     attribution_req    = Column(Boolean, default=False)
     creator            = Column(String)
-    asset_metadata     = Column(JSON)
+    asset_metadata     = Column(JSON)      # Store full provider JSON here
     created_at         = Column(DateTime, default=datetime.utcnow)
 
     script = relationship("Script", back_populates="assets")
@@ -150,6 +186,18 @@ class Video(Base):
     status         = Column(SAEnum(VideoStatus), default=VideoStatus.pending)
     ai_used        = Column(Boolean, default=True)
     notes          = Column(Text)
+
+    # Render progress tracking
+    render_stage   = Column(String, default="queued")    # queued|tts|visuals|assembly|metadata|done|failed
+    render_progress = Column(Float, default=0.0)         # 0-100 within current stage
+    
+    # Metadata Generation
+    title_candidates = Column(JSON, default=list)
+    selected_title   = Column(String)
+    description      = Column(Text)
+    hashtags         = Column(JSON, default=list)
+    voice_override   = Column(String)
+    
     created_at     = Column(DateTime, default=datetime.utcnow)
 
     script      = relationship("Script", back_populates="videos")

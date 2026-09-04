@@ -27,3 +27,5 @@ openai-whisper>=20231117
 # Utilities
 aiofiles>=23.2.1
 python-multipart>=0.0.9
+asyncpg>=0.29.0
+psycopg2-binary

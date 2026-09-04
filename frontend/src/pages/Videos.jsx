@@ -86,6 +86,8 @@ export default function Videos() {
   const [uploadModal, setUploadModal] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [activeVideoId, setActiveVideoId] = useState(null);
+  
+  const [metaEdit, setMetaEdit] = useState(null);
 
   const load = async () => {
     setLoading(true);
@@ -116,6 +118,22 @@ export default function Videos() {
     const iv = setInterval(load, isRendering ? 3000 : 6000);
     return () => clearInterval(iv);
   }, [videos]);
+
+  useEffect(() => {
+    const activeVideo = videos.find(v => v.id === activeVideoId) || videos[0];
+    if (activeVideo && activeVideo.status === 'ready') {
+      if (!metaEdit || metaEdit.id !== activeVideo.id) {
+        setMetaEdit({
+          id: activeVideo.id,
+          selected_title: activeVideo.selected_title || (activeVideo.title_candidates || [])[0] || '',
+          description: activeVideo.description || '',
+          hashtags: (activeVideo.hashtags || []).join(', ')
+        });
+      }
+    } else {
+      setMetaEdit(null);
+    }
+  }, [activeVideoId, videos]);
   
   // Keyboard shortcuts for review mode
   useEffect(() => {
@@ -143,7 +161,14 @@ export default function Videos() {
 
   const action = async (id, act) => {
     try {
-      if (act === 'approve') await api.approveVideo(id);
+      if (act === 'approve') {
+        const payload = metaEdit && metaEdit.id === id ? {
+          selected_title: metaEdit.selected_title,
+          description: metaEdit.description,
+          hashtags: metaEdit.hashtags.split(',').map(s => s.trim()).filter(Boolean)
+        } : null;
+        await api.approveVideo(id, payload);
+      }
       else await api.rejectVideo(id);
       
       // Move to next video if available
@@ -210,10 +235,37 @@ export default function Videos() {
                 ) : (
                   <div style={{ width: '100%', aspectRatio: '9/16', background: 'var(--surface-input)', display: 'grid', placeItems: 'center', borderRadius: 'var(--r-md)', border: '1px solid var(--border-2)' }}>
                     {activeVideo.status === 'rendering' ? (
-                      <div className="flex-col items-center gap-3">
+                      <div className="flex-col items-center gap-3 w-full" style={{ padding: '0 24px' }}>
                         <span className="spinner spinner-lg badge-rendering" />
                         <span className="text-lg font-bold" style={{ color: 'var(--warning)' }}>Rendering...</span>
-                        <span className="text-sm text-muted text-center" style={{ padding: '0 20px', lineHeight: 1.5 }}>Generating voiceover... Fetching visuals... Assembling...</span>
+                        
+                        <div className="render-stage-timeline mt-3 w-full justify-center">
+                          {['tts', 'visuals', 'assembly', 'metadata'].map((stageName, i) => {
+                            const stages = ['tts', 'visuals', 'assembly', 'metadata'];
+                            const currentIdx = stages.indexOf(activeVideo.render_stage || 'tts');
+                            const isDone = i < currentIdx;
+                            const isActive = i === currentIdx;
+                            
+                            let icon = 'mic';
+                            if (stageName === 'visuals') icon = 'image';
+                            if (stageName === 'assembly') icon = 'film';
+                            if (stageName === 'metadata') icon = 'fileText';
+                            
+                            return (
+                              <div key={stageName} className={`render-stage-step ${isDone ? 'done' : isActive ? 'active' : ''}`}>
+                                <div className="render-stage-dot">
+                                  {isActive ? <span className="spinner spinner-sm" /> : <Icon name={icon} size={12} />}
+                                </div>
+                                <span>{stageName.charAt(0).toUpperCase() + stageName.slice(1)}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        
+                        <div className="render-progress-bar-track mt-2 w-full">
+                          <div className="render-progress-bar-fill" style={{ width: `${activeVideo.render_progress || 0}%` }}></div>
+                        </div>
+                        <div className="text-xs text-muted font-mono mt-1">{Math.round(activeVideo.render_progress || 0)}% Complete</div>
                       </div>
                     ) : <span className="text-muted">—</span>}
                   </div>
@@ -261,6 +313,42 @@ export default function Videos() {
                   <div style={{ background: 'var(--surface-2)', padding: '16px', borderRadius: 'var(--r-sm)', border: '1px solid var(--border-1)', maxHeight: '180px', overflowY: 'auto' }}>
                     <h4 style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-2)', marginBottom: '8px' }}>Script Used</h4>
                     <p style={{ fontSize: '13px', lineHeight: 1.5, color: 'var(--text-1)' }}>{activeScript.full_text}</p>
+                  </div>
+                )}
+                
+                {activeVideo.status === 'ready' && metaEdit && metaEdit.id === activeVideo.id && (
+                  <div style={{ background: 'var(--surface-input)', padding: '16px', borderRadius: 'var(--r-md)', border: '1px solid var(--border-1)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <h4 style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-2)' }}>YouTube Metadata (Editable)</h4>
+                    
+                    <div className="field" style={{ marginBottom: 0 }}>
+                      <label className="label" style={{ fontSize: '12px' }}>Title</label>
+                      <div className="flex gap-2">
+                        <select className="select" style={{ flex: 1 }} value={metaEdit.selected_title} onChange={e => setMetaEdit({...metaEdit, selected_title: e.target.value})}>
+                          {(activeVideo.title_candidates || []).map((t, i) => <option key={i} value={t}>{t}</option>)}
+                          {!activeVideo.title_candidates?.includes(metaEdit.selected_title) && <option value={metaEdit.selected_title}>Custom Title</option>}
+                        </select>
+                        <input className="input" style={{ flex: 1 }} value={metaEdit.selected_title} onChange={e => setMetaEdit({...metaEdit, selected_title: e.target.value})} placeholder="Or type a custom title..." />
+                      </div>
+                    </div>
+                    
+                    <div className="field" style={{ marginBottom: 0 }}>
+                      <label className="label" style={{ fontSize: '12px' }}>Description</label>
+                      <textarea className="textarea" rows="2" style={{ resize: 'vertical' }} value={metaEdit.description} onChange={e => setMetaEdit({...metaEdit, description: e.target.value})} />
+                    </div>
+                    
+                    <div className="field" style={{ marginBottom: 0 }}>
+                      <label className="label" style={{ fontSize: '12px' }}>Hashtags</label>
+                      <input className="input" value={metaEdit.hashtags} onChange={e => setMetaEdit({...metaEdit, hashtags: e.target.value})} />
+                    </div>
+                  </div>
+                )}
+                
+                {['approved', 'uploaded'].includes(activeVideo.status) && (
+                  <div style={{ background: 'var(--surface-input)', padding: '16px', borderRadius: 'var(--r-md)', border: '1px solid var(--border-1)' }}>
+                    <h4 style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-2)', marginBottom: '8px' }}>YouTube Metadata</h4>
+                    <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '4px', color: 'var(--text-0)' }}>{activeVideo.selected_title || 'Untitled'}</div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-1)', marginBottom: '8px', opacity: 0.8 }}>{activeVideo.description}</div>
+                    <div style={{ fontSize: '12px', color: 'var(--accent)' }}>{(activeVideo.hashtags || []).map(t => `#${t}`).join(' ')}</div>
                   </div>
                 )}
 
@@ -337,20 +425,20 @@ export default function Videos() {
             <form onSubmit={doUpload}>
               <div className="field">
                 <label className="label" htmlFor="upload-title">Title</label>
-                <input id="upload-title" name="title" className="input" required defaultValue="Did You Know?" maxLength={100} />
+                <input id="upload-title" name="title" className="input" required defaultValue={uploadModal.selected_title || ''} maxLength={100} />
               </div>
               <div className="field">
                 <label className="label" htmlFor="upload-desc">Description</label>
-                <textarea id="upload-desc" name="description" className="textarea" required defaultValue="#shorts #facts" />
+                <textarea id="upload-desc" name="description" className="textarea" required defaultValue={uploadModal.description || ''} />
               </div>
               <div className="field">
                 <label className="label" htmlFor="upload-tags">Tags (comma separated)</label>
-                <input id="upload-tags" name="tags" className="input" defaultValue="shorts, facts" />
+                <input id="upload-tags" name="tags" className="input" defaultValue={(uploadModal.hashtags || []).join(', ')} />
               </div>
               <div className="row-2">
                 <div className="field">
                   <label className="label" htmlFor="upload-privacy">Privacy</label>
-                  <select id="upload-privacy" name="privacy" className="select">
+                  <select id="upload-privacy" name="privacy" className="select" defaultValue="public">
                     <option value="private">Private</option>
                     <option value="unlisted">Unlisted</option>
                     <option value="public">Public</option>
