@@ -34,26 +34,35 @@ export const api = {
   // ── Ideas ────────────────────────────────────────
   getIdeas:       (channelId) => request(`/ideas/${channelId ? '?channel_id=' + channelId : ''}`),
   generateIdeas:  (channelId, count, niche) => request('/ideas/generate', { method: 'POST', body: JSON.stringify({ channel_id: channelId, count, niche }) }),
-  approveIdea:    (id) => request(`/ideas/${id}/approve`, { method: 'PATCH' }),
-  rejectIdea:     (id) => request(`/ideas/${id}/reject`, { method: 'PATCH' }),
+  discardIdea:    (id) => request(`/ideas/${id}/discard`, { method: 'POST' }),
 
   // ── Scripts ──────────────────────────────────────
   getScripts:     (ideaId) => request(`/scripts/${ideaId ? '?idea_id=' + ideaId : ''}`),
   getScript:      (id) => request(`/scripts/${id}`),
   generateScript: (ideaId) => request(`/scripts/generate/${ideaId}`, { method: 'POST' }),
+  regenerateScript: (id) => request(`/scripts/${id}/regenerate`, { method: 'POST' }),
+  updateScript:   (id, data) => request(`/scripts/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  discardScript:  (id) => request(`/scripts/${id}/discard`, { method: 'POST' }),
 
   // ── Videos ───────────────────────────────────────
   getVideos:      () => request('/videos/'),
   getVideo:       (id) => request(`/videos/${id}`),
-  renderVideo:    (scriptId, style, captionStyle, customCta) => request('/videos/render', {
+  getVideoProgress: (id) => request(`/videos/${id}/progress`),
+  renderVideo:    (scriptId, style, captionStyle, customCta, voiceOverride) => request('/videos/render', {
     method: 'POST',
-    body: JSON.stringify({ script_id: scriptId, style, caption_style: captionStyle, custom_cta: customCta }),
+    body: JSON.stringify({ script_id: scriptId, style, caption_style: captionStyle, custom_cta: customCta, voice_override: voiceOverride }),
   }),
-  approveVideo:   (id) => request(`/videos/${id}/approve`, { method: 'PATCH' }),
+  updateVideo:    (id, data) => request(`/videos/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  approveVideo:   (id, data = null) => {
+    const opts = { method: 'PATCH' };
+    if (data) opts.body = JSON.stringify(data);
+    return request(`/videos/${id}/approve`, opts);
+  },
   rejectVideo:    (id) => request(`/videos/${id}/reject`, { method: 'PATCH' }),
   uploadVideo:    (id, meta) => request(`/videos/${id}/upload`, { method: 'POST', body: JSON.stringify(meta) }),
 
   // ── Analytics ────────────────────────────────────
+  getDashboardAnalytics: () => request('/analytics/'),
   getTopVideos:   (limit = 5) => request(`/analytics/summary/top-videos?limit=${limit}`),
   getAnalytics:   (videoId) => request(`/analytics/${videoId}`),
 };

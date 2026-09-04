@@ -10,13 +10,14 @@ export default function Dashboard() {
     rendering: 0, ready: 0, uploaded: 0,
   });
   const [profile, setProfile] = useState(null);
+  const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
       try {
-        const [ideas, scripts, videos, prof] = await Promise.all([
-          api.getIdeas(), api.getScripts(), api.getVideos(), api.getProfile(),
+        const [ideas, scripts, videos, prof, dashAnalytics] = await Promise.all([
+          api.getIdeas(), api.getScripts(), api.getVideos(), api.getProfile(), api.getDashboardAnalytics(),
         ]);
         const pendingIdeas   = ideas.filter(i => i.status === 'pending').length;
         const approvedScripts = scripts.filter(s => s.status === 'approved' || s.status === 'pending').length;
@@ -29,6 +30,7 @@ export default function Dashboard() {
           rendering, ready, uploaded,
         });
         setProfile(prof);
+        setAnalytics(dashAnalytics);
       } catch (e) { console.error(e); }
       setLoading(false);
     })();
@@ -43,7 +45,7 @@ export default function Dashboard() {
           <h1>{profile ? `Welcome, ${profile.display_name}` : 'Dashboard'}</h1>
           <p>Your content production pipeline at a glance.</p>
         </div>
-        <Link to="/app/ideas" className="btn btn-primary"><Icon name="plus" size={14} /> New Ideas</Link>
+        <Link to="/app/create" className="btn btn-primary"><Icon name="plus" size={14} /> Create Short</Link>
       </div>
 
       {/* ── Production Pipeline ────────────────────────────────────────── */}
@@ -188,19 +190,19 @@ export default function Dashboard() {
             <div>
               <div className="flex justify-between text-sm mb-2">
                 <span className="font-bold">Subscribers</span>
-                <span className="text-muted mono">— / 1,000</span>
+                <span className="text-muted mono">{analytics?.subscribers || 0} / {analytics?.ypp_sub_goal ? analytics.ypp_sub_goal.toLocaleString() : '1,000'}</span>
               </div>
               <div className="progress-bar-track">
-                <div className="progress-bar-fill" style={{ width: '0%' }}></div>
+                <div className="progress-bar-fill" style={{ width: `${Math.min(100, ((analytics?.subscribers || 0) / (analytics?.ypp_sub_goal || 1000)) * 100)}%` }}></div>
               </div>
             </div>
             <div>
               <div className="flex justify-between text-sm mb-2">
                 <span className="font-bold">Shorts Views (90 Days)</span>
-                <span className="text-muted mono">— / 10M</span>
+                <span className="text-muted mono">{analytics?.shorts_views_90d || 0} / {analytics?.ypp_view_goal ? (analytics.ypp_view_goal / 1000000) + 'M' : '10M'}</span>
               </div>
               <div className="progress-bar-track">
-                <div className="progress-bar-fill" style={{ width: '0%' }}></div>
+                <div className="progress-bar-fill" style={{ width: `${Math.min(100, ((analytics?.shorts_views_90d || 0) / (analytics?.ypp_view_goal || 10000000)) * 100)}%` }}></div>
               </div>
             </div>
           </div>

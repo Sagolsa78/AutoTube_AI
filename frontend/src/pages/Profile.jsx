@@ -20,6 +20,14 @@ export default function Profile() {
   const [wmOpacity, setWmOpacity] = useState(0.4);
   const [wmPosition, setWmPosition] = useState('bottom_right');
   const [wmScale, setWmScale] = useState(0.12);
+  
+  // New Settings
+  const [defaultVoiceId, setDefaultVoiceId] = useState('en-US-ChristopherNeural');
+  const [contentTone, setContentTone] = useState('casual');
+  const [nicheKeywords, setNicheKeywords] = useState('');
+  const [titleStylePreference, setTitleStylePreference] = useState('curiosity');
+  const [hashtagSet, setHashtagSet] = useState('');
+  const [autoApprove, setAutoApprove] = useState(false);
 
   const load = async () => {
     try {
@@ -35,6 +43,12 @@ export default function Profile() {
       setWmOpacity(prof.watermark_opacity ?? 0.4);
       setWmPosition(prof.watermark_position || 'bottom_right');
       setWmScale(prof.watermark_scale ?? 0.12);
+      setDefaultVoiceId(prof.default_voice_id || 'en-US-ChristopherNeural');
+      setContentTone(prof.content_tone || 'casual');
+      setNicheKeywords((prof.niche_keywords || []).join(', '));
+      setTitleStylePreference(prof.title_style_preference || 'curiosity');
+      setHashtagSet((prof.hashtag_set || []).join(', '));
+      setAutoApprove(prof.auto_approve ?? false);
     } catch (e) { console.error(e); }
   };
 
@@ -53,6 +67,12 @@ export default function Profile() {
         watermark_opacity: wmOpacity,
         watermark_position: wmPosition,
         watermark_scale: wmScale,
+        default_voice_id: defaultVoiceId,
+        content_tone: contentTone,
+        niche_keywords: nicheKeywords.split(',').map(s => s.trim()).filter(Boolean),
+        title_style_preference: titleStylePreference,
+        hashtag_set: hashtagSet.split(',').map(s => s.trim()).filter(Boolean),
+        auto_approve: autoApprove,
       });
       setProfile(prof);
       toast.success('Settings saved successfully!');
@@ -223,6 +243,69 @@ export default function Profile() {
               </div>
             </div>
           )}
+
+          <hr className="divider" />
+
+          {/* New Settings */}
+          <div className="flex justify-between items-center mb-2">
+            <h3 className="card-title">Generation Settings</h3>
+          </div>
+          
+          <div className="row-2 mb-3">
+            <div className="field">
+              <label className="label" htmlFor="default-voice">Default Voice (Edge TTS)</label>
+              <select id="default-voice" className="select" value={defaultVoiceId} onChange={e => setDefaultVoiceId(e.target.value)}>
+                <option value="en-US-ChristopherNeural">Christopher (US Male - Deep)</option>
+                <option value="en-US-GuyNeural">Guy (US Male - Clear)</option>
+                <option value="en-US-EricNeural">Eric (US Male - Energetic)</option>
+                <option value="en-US-JennyNeural">Jenny (US Female - Clear)</option>
+                <option value="en-US-AriaNeural">Aria (US Female - Expressive)</option>
+                <option value="en-GB-SoniaNeural">Sonia (UK Female)</option>
+                <option value="en-GB-RyanNeural">Ryan (UK Male)</option>
+              </select>
+            </div>
+            <div className="field">
+              <label className="label" htmlFor="content-tone">Script Tone</label>
+              <select id="content-tone" className="select" value={contentTone} onChange={e => setContentTone(e.target.value)}>
+                <option value="casual">Casual & Conversational</option>
+                <option value="dramatic">Dramatic & Intense</option>
+                <option value="educational">Educational & Clear</option>
+                <option value="humorous">Humorous & Witty</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="row-2 mb-3">
+            <div className="field">
+              <label className="label" htmlFor="title-style">Title Style</label>
+              <select id="title-style" className="select" value={titleStylePreference} onChange={e => setTitleStylePreference(e.target.value)}>
+                <option value="curiosity">Curiosity Gap (e.g. "You Won't Believe...")</option>
+                <option value="factual">Factual & Direct</option>
+                <option value="clickbait">Clickbait-ish & High Energy</option>
+                <option value="story">Story-driven</option>
+              </select>
+            </div>
+            <div className="field">
+              <label className="label" htmlFor="auto-approve">Auto-Approve Publish</label>
+              <select id="auto-approve" className="select" value={autoApprove ? 'yes' : 'no'} onChange={e => setAutoApprove(e.target.value === 'yes')}>
+                <option value="no">No (Review Before Publish)</option>
+                <option value="yes">Yes (Publish Automatically)</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="row-2 mb-3">
+            <div className="field">
+              <label className="label" htmlFor="niche-keywords">Niche Keywords (Trending Search)</label>
+              <input id="niche-keywords" className="input" value={nicheKeywords} onChange={e => setNicheKeywords(e.target.value)} placeholder="science, space, facts" />
+              <span className="hint">Comma-separated. Used for finding trending topics.</span>
+            </div>
+            <div className="field">
+              <label className="label" htmlFor="hashtag-set">Default Hashtags</label>
+              <input id="hashtag-set" className="input" value={hashtagSet} onChange={e => setHashtagSet(e.target.value)} placeholder="shorts, viral, science" />
+              <span className="hint">Comma-separated. Always included in video description.</span>
+            </div>
+          </div>
 
           <hr className="divider" />
 

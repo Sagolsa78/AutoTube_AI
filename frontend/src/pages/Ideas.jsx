@@ -7,6 +7,9 @@ export default function Ideas() {
   const [ideas, setIdeas] = useState([]);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [generatingScript, setGeneratingScript] = useState(null);
+  const [activeTab, setActiveTab] = useState('pending');
+  const [showDiscarded, setShowDiscarded] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -33,13 +36,31 @@ export default function Ideas() {
     finally { setGenerating(false); }
   };
 
-  const action = async (id, act) => {
+  const actionDiscard = async (id) => {
     try {
-      if (act === 'approve') await api.approveIdea(id);
-      else await api.rejectIdea(id);
+      await api.discardIdea(id);
       await load();
-    } catch (e) { console.error(e); }
+      toast.success('Idea discarded.');
+    } catch (e) { console.error(e); toast.error(`Discard failed: ${e.message}`); }
   };
+
+  const generateScript = async (ideaId) => {
+    setGeneratingScript(ideaId);
+    try { 
+      await api.generateScript(ideaId); 
+      await load(); 
+      toast.success('Script generated successfully!'); 
+    }
+    catch (e) { toast.error(`Script generation failed: ${e.message}`); }
+    finally { setGeneratingScript(null); }
+  };
+
+  const filteredIdeas = ideas.filter(i => {
+    if (showDiscarded && i.status === 'discarded') return true;
+    if (activeTab === 'pending' && i.status === 'pending') return true;
+    if (activeTab === 'promoted' && i.status === 'promoted') return true;
+    return false;
+  });
 
   return (
     <div>
@@ -54,6 +75,19 @@ export default function Ideas() {
         </button>
       </div>
 
+      <div className="flex gap-2 mb-3" style={{ borderBottom: '1px solid var(--border-1)', paddingBottom: '10px' }}>
+        <button className={`btn btn-sm ${activeTab === 'pending' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setActiveTab('pending')}>
+          Pending ({ideas.filter(i => i.status === 'pending').length})
+        </button>
+        <button className={`btn btn-sm ${activeTab === 'promoted' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setActiveTab('promoted')}>
+          In Production ({ideas.filter(i => i.status === 'promoted').length})
+        </button>
+        <label className="flex items-center gap-1 ml-auto text-sm text-muted cursor-pointer">
+          <input type="checkbox" checked={showDiscarded} onChange={e => setShowDiscarded(e.target.checked)} />
+          Show Discarded ({ideas.filter(i => i.status === 'discarded').length})
+        </label>
+      </div>
+
       <div className="card">
         <div className="table-wrap">
           <table>
@@ -62,24 +96,27 @@ export default function Ideas() {
                 <th>Topic</th>
                 <th>Angle</th>
                 <th>Status</th>
-                <th style={{ width: 170 }}>Actions</th>
+                <th style={{ width: 220 }}>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {loading && !ideas.length ? (
+              {loading && !filteredIdeas.length ? (
                 <tr><td colSpan={4} style={{ textAlign: 'center', padding: 40 }}><span className="spinner spinner-lg" /></td></tr>
-              ) : !ideas.length ? (
-                <tr><td colSpan={4} className="text-muted" style={{ textAlign: 'center', padding: 40 }}>No ideas yet. Click &quot;Generate Ideas&quot; to begin.</td></tr>
-              ) : ideas.map(i => (
-                <tr key={i.id}>
+              ) : !filteredIdeas.length ? (
+                <tr><td colSpan={4} className="text-muted" style={{ textAlign: 'center', padding: 40 }}>No ideas found for this view.</td></tr>
+              ) : filteredIdeas.map(i => (
+                <tr key={i.id} style={{ opacity: i.status === 'discarded' ? 0.6 : 1 }}>
                   <td className="font-bold" style={{ fontSize: '14px', color: 'var(--text-0)' }}>{i.topic}</td>
                   <td className="text-muted text-sm truncate" style={{ maxWidth: 280, fontStyle: 'italic', letterSpacing: '0.02em' }}>{i.angle || '—'}</td>
                   <td><span className={`badge badge-${i.status}`}>{i.status}</span></td>
                   <td>
                     {i.status === 'pending' && (
                       <div className="flex gap-1">
-                        <button className="btn btn-sm btn-success" onClick={() => action(i.id, 'approve')}><Icon name="check" size={12} /> Approve</button>
-                        <button className="btn btn-sm btn-danger" onClick={() => action(i.id, 'reject')}><Icon name="x" size={12} /></button>
+                        <button className="btn btn-sm btn-primary" onClick={() => generateScript(i.id)} disabled={generatingScript === i.id}>
+                          {generatingScript === i.id ? <span className="spinner" /> : <Icon name="sparkles" size={12} />}
+                          {generatingScript === i.id ? 'Working…' : 'Generate Script'}
+                        </button>
+                        <button className="btn btn-sm btn-danger" onClick={() => actionDiscard(i.id)}><Icon name="trash" size={12} /></button>
                       </div>
                     )}
                   </td>

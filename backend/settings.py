@@ -22,6 +22,17 @@ for d in (AUDIO_DIR, VISUAL_DIR, RENDER_DIR, PROJECT_DIR):
 
 # ── Database ──────────────────────────────────────────────────────────────────
 DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite+aiosqlite:///{STORAGE}/autoshorts.db")
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+asyncpg://", 1)
+elif DATABASE_URL.startswith("postgresql://") and not DATABASE_URL.startswith("postgresql+asyncpg://"):
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+if "sslmode=" in DATABASE_URL:
+    DATABASE_URL = DATABASE_URL.replace("sslmode=", "ssl=")
+
+import re
+DATABASE_URL = re.sub(r"&?channel_binding=[^&]+", "", DATABASE_URL)
+DATABASE_URL = re.sub(r"\?$", "", DATABASE_URL)
 
 # ── AI Providers ──────────────────────────────────────────────────────────────
 GEMINI_API_KEY       = os.getenv("GEMINI_API_KEY", "")
