@@ -130,6 +130,59 @@ export default function CreateShort() {
     }
   };
 
+  // Modal state for asset selection
+  const [modalScene, setModalScene] = useState(null);
+  const [searchResults, setSearchResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const openAssetModal = async (sc) => {
+    setModalScene(sc);
+    const initialQuery = sc.visual_description || selectedIdea?.topic || 'nature';
+    setSearchQuery(initialQuery);
+    performAssetSearch(initialQuery);
+  };
+
+  const performAssetSearch = async (q) => {
+    if (!q) return;
+    setSearching(true);
+    try {
+      const res = await api.searchAssets(q);
+      setSearchResults(res.results || []);
+    } catch (e) {
+      toast.error(`Asset search failed: ${e.message}`);
+    }
+    setSearching(false);
+  };
+
+  const selectAssetForScene = async (assetData) => {
+    if (!modalScene) return;
+    try {
+      const res = await api.assignAssetToScene(modalScene.id, assetData);
+      
+      // Update scene in state with assigned asset info
+      setEditingScenes(prev => prev.map(s => {
+        if (s.id === modalScene.id) {
+          return {
+            ...s,
+            asset_id: res.asset_id,
+            asset: {
+              thumbnail_url: assetData.thumbnail_url,
+              source: assetData.source,
+              photographer: assetData.photographer
+            }
+          };
+        }
+        return s;
+      }));
+
+      toast.success(`Assigned clip to Scene ${modalScene.scene_number}`);
+      setModalScene(null);
+    } catch (e) {
+      toast.error(`Assignment failed: ${e.message}`);
+    }
+  };
+
   // ── Stepper ──────────────────────────────────────────────────────────────
 
   const currentIdx = STAGES.indexOf(stage);
@@ -256,96 +309,180 @@ export default function CreateShort() {
 
       {/* ── Stage: Storyboard ─────────────────────────────────────────── */}
       {stage === 'storyboard' && script && (
-        <div className="create-stage">
-          <h2 className="stage-title">Storyboard</h2>
-          <p className="stage-desc">Edit each scene's narration and visual description before rendering.</p>
+    <div className="create-stage">
+      <h2 className="stage-title">Storyboard</h2>
+      <p className="stage-desc">Review visual clips, edit narration, or swap stock assets before rendering.</p>
 
-          <div className="storyboard-grid">
-            {editingScenes.map((sc, i) => (
-              <div key={sc.id} className="storyboard-card">
-                <div className="storyboard-card-header">
-                  <span className="storyboard-scene-num">Scene {sc.scene_number}</span>
+      <div className="storyboard-grid">
+        {editingScenes.map((sc, i) => (
+          <div key={sc.id} className="storyboard-card">
+            <div className="storyboard-asset-header">
+              {sc.asset?.thumbnail_url ? (
+                <img src={sc.asset.thumbnail_url} alt={`Scene ${sc.scene_number}`} className="storyboard-asset-thumb" />
+              ) : (
+                <div className="storyboard-asset-placeholder">
+                  <Icon name="image" size={24} />
+                  <span>No visual selected</span>
                 </div>
-                <div className="storyboard-field">
-                  <label className="label text-xs">Narration</label>
-                  <textarea
-                    className="textarea"
-                    rows={3}
-                    value={sc.narration}
-                    onChange={e => updateScene(i, 'narration', e.target.value)}
-                  />
-                </div>
-                <div className="storyboard-field">
-                  <label className="label text-xs">
-                    <Icon name="image" size={12} /> Visual Search Query
-                  </label>
-                  <input
-                    className="input"
-                    value={sc.visual_description}
-                    onChange={e => updateScene(i, 'visual_description', e.target.value)}
-                    placeholder="e.g. tardigrade electron microscope"
-                  />
-                </div>
+              )}
+              <div className="storyboard-asset-overlay">
+                <button className="btn btn-sm btn-primary" onClick={() => openAssetModal(sc)}>
+                  <Icon name="search" size={12} /> Swap Clip
+                </button>
               </div>
-            ))}
-          </div>
+            </div>
 
-          <div className="storyboard-full-text">
-            <label className="label text-xs">Full Script (auto-generated from scenes)</label>
-            <div className="script-fulltext-preview">
-              {editingScenes.map(s => s.narration).join(' ')}
+            <div className="storyboard-card-header flex justify-between items-center">
+              <span className="storyboard-scene-num">Scene {sc.scene_number}</span>
+              {sc.asset?.source && (
+                <span className="badge text-xs" style={{ background: 'var(--surface-input)' }}>
+                  {sc.asset.source}
+                </span>
+              )}
+            </div>
+
+            <div className="storyboard-field">
+              <label className="label text-xs">Narration</label>
+              <textarea
+                className="textarea"
+                rows={3}
+                value={sc.narration}
+                onChange={e => updateScene(i, 'narration', e.target.value)}
+              />
+            </div>
+            <div className="storyboard-field">
+              <label className="label text-xs">
+                <Icon name="image" size={12} /> Visual Search Prompt
+              </label>
+              <div className="flex gap-2">
+                <input
+                  className="input"
+                  value={sc.visual_description}
+                  onChange={e => updateScene(i, 'visual_description', e.target.value)}
+                  placeholder="e.g. tardigrade electron microscope"
+                />
+                <button className="btn btn-sm btn-secondary" onClick={() => openAssetModal(sc)} title="Search stock video clips">
+                  <Icon name="search" size={14} />
+                </button>
+              </div>
             </div>
           </div>
+        ))}
+      </div>
 
-          {/* ── Render config ──────────────────────────────────────────── */}
-          <div className="render-config">
-            <h3 className="render-config-title">Render Settings</h3>
-            <div className="render-config-grid">
-              <div className="field">
-                <label className="label text-xs">Video Style</label>
-                <select className="select" value={selectedStyle} onChange={e => setSelectedStyle(e.target.value)}>
-                  <option value="fast_facts">Fast Facts</option>
-                  <option value="documentary">Documentary</option>
-                  <option value="cinematic">Cinematic</option>
-                  <option value="minimal">Minimal</option>
-                </select>
-              </div>
-              <div className="field">
-                <label className="label text-xs">Voice</label>
-                <select className="select" value={selectedVoice} onChange={e => setSelectedVoice(e.target.value)}>
-                  <option value="en-US-ChristopherNeural">Christopher (US Male)</option>
-                  <option value="en-US-GuyNeural">Guy (US Male)</option>
-                  <option value="en-US-EricNeural">Eric (US Male)</option>
-                  <option value="en-US-JennyNeural">Jenny (US Female)</option>
-                  <option value="en-US-AriaNeural">Aria (US Female)</option>
-                  <option value="en-GB-SoniaNeural">Sonia (UK Female)</option>
-                  <option value="en-GB-RyanNeural">Ryan (UK Male)</option>
-                </select>
-              </div>
-              <div className="field">
-                <label className="label text-xs">Caption Style</label>
-                <select className="select" value={selectedCaption} onChange={e => setSelectedCaption(e.target.value)}>
-                  {captionStyles.map(cs => (
-                    <option key={cs.key} value={cs.key}>{cs.name}</option>
+      {/* Asset Search Modal */}
+      {modalScene && (
+        <div className="modal-overlay" onClick={() => setModalScene(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Select Clip for Scene {modalScene.scene_number}</h3>
+              <button className="btn btn-sm btn-secondary" onClick={() => setModalScene(null)}>
+                <Icon name="x" size={14} />
+              </button>
+            </div>
+            <div className="modal-body">
+              <form
+                className="asset-search-form"
+                onSubmit={e => { e.preventDefault(); performAssetSearch(searchQuery); }}
+              >
+                <input
+                  className="input"
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  placeholder="Search Pexels & Pixabay..."
+                />
+                <button className="btn btn-primary" type="submit" disabled={searching}>
+                  {searching ? <span className="spinner" /> : 'Search'}
+                </button>
+              </form>
+
+              {searching ? (
+                <div className="empty-state" style={{ padding: '40px' }}>
+                  <span className="spinner spinner-lg" />
+                  <p>Searching stock video provider APIs...</p>
+                </div>
+              ) : searchResults.length === 0 ? (
+                <div className="empty-state" style={{ padding: '40px' }}>
+                  <p>No video clips found. Try a broader search term.</p>
+                </div>
+              ) : (
+                <div className="asset-grid">
+                  {searchResults.map((ast, idx) => (
+                    <div
+                      key={ast.source_asset_id || idx}
+                      className="asset-card"
+                      onClick={() => selectAssetForScene(ast)}
+                    >
+                      <img src={ast.thumbnail_url} alt={ast.photographer} />
+                      <span className="asset-badge">{ast.source}</span>
+                      {ast.photographer && (
+                        <div className="asset-author">by {ast.photographer}</div>
+                      )}
+                    </div>
                   ))}
-                </select>
-              </div>
+                </div>
+              )}
             </div>
-          </div>
-
-          <div className="flex gap-2 mt-3">
-            <button className="btn btn-secondary" onClick={saveSceneEdits}>
-              <Icon name="save" size={14} /> Save Edits
-            </button>
-            <button className="btn btn-primary btn-lg" onClick={startRender} disabled={rendering}>
-              <Icon name="play" size={16} /> Render Video
-            </button>
-            <button className="btn btn-secondary" onClick={() => setStage('script')}>
-              Back to Script
-            </button>
           </div>
         </div>
       )}
+
+      <div className="storyboard-full-text">
+        <label className="label text-xs">Full Script (auto-generated from scenes)</label>
+        <div className="script-fulltext-preview">
+          {editingScenes.map(s => s.narration).join(' ')}
+        </div>
+      </div>
+
+      {/* ── Render config ──────────────────────────────────────────── */}
+      <div className="render-config">
+        <h3 className="render-config-title">Render Settings</h3>
+        <div className="render-config-grid">
+          <div className="field">
+            <label className="label text-xs">Video Style</label>
+            <select className="select" value={selectedStyle} onChange={e => setSelectedStyle(e.target.value)}>
+              <option value="fast_facts">Fast Facts</option>
+              <option value="documentary">Documentary</option>
+              <option value="cinematic">Cinematic</option>
+              <option value="minimal">Minimal</option>
+            </select>
+          </div>
+          <div className="field">
+            <label className="label text-xs">Voice</label>
+            <select className="select" value={selectedVoice} onChange={e => setSelectedVoice(e.target.value)}>
+              <option value="en-US-ChristopherNeural">Christopher (US Male)</option>
+              <option value="en-US-GuyNeural">Guy (US Male)</option>
+              <option value="en-US-EricNeural">Eric (US Male)</option>
+              <option value="en-US-JennyNeural">Jenny (US Female)</option>
+              <option value="en-US-AriaNeural">Aria (US Female)</option>
+              <option value="en-GB-SoniaNeural">Sonia (UK Female)</option>
+              <option value="en-GB-RyanNeural">Ryan (UK Male)</option>
+            </select>
+          </div>
+          <div className="field">
+            <label className="label text-xs">Caption Style</label>
+            <select className="select" value={selectedCaption} onChange={e => setSelectedCaption(e.target.value)}>
+              {captionStyles.map(cs => (
+                <option key={cs.key} value={cs.key}>{cs.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex gap-2 mt-3">
+        <button className="btn btn-secondary" onClick={saveSceneEdits}>
+          <Icon name="save" size={14} /> Save Edits
+        </button>
+        <button className="btn btn-primary btn-lg" onClick={startRender} disabled={rendering}>
+          <Icon name="play" size={16} /> Render Video
+        </button>
+        <button className="btn btn-secondary" onClick={() => setStage('script')}>
+          Back to Script
+        </button>
+      </div>
+    </div>
+  )}
 
       {/* ── Stage: Render Progress ────────────────────────────────────── */}
       {stage === 'render' && (

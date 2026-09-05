@@ -8,6 +8,7 @@ import Videos from './pages/Videos';
 import Profile from './pages/Profile';
 import Channels from './pages/Channels';
 import Publications from './pages/Publications';
+import Analytics from './pages/Analytics';
 import Logs from './pages/Logs';
 import Health from './pages/Health';
 import Icon from './components/Icon';
@@ -19,6 +20,7 @@ const nav = [
   { to: '/app/create',      label: 'Create Short',  icon: 'plus', primary: true },
   { to: '/app/videos',       label: 'Videos',       icon: 'video' },
   { to: '/app/publications', label: 'Publications', icon: 'youtube' },
+  { to: '/app/analytics',    label: 'Analytics',    icon: 'activity' },
 ];
 
 const libraryNav = [
@@ -52,6 +54,7 @@ function StudioLayout() {
     '/app/scripts': 'Scripts', 
     '/app/videos': 'Videos', 
     '/app/publications': 'Publications',
+    '/app/analytics': 'Analytics & Telemetry',
     '/app/channels': 'Channels',
     '/app/logs': 'Activity & Logs',
     '/app/health': 'System Health',
@@ -113,6 +116,7 @@ export default function App() {
           <Route path="scripts" element={<Scripts />} />
           <Route path="videos" element={<Videos />} />
           <Route path="publications" element={<Publications />} />
+          <Route path="analytics" element={<Analytics />} />
           <Route path="channels" element={<Channels />} />
           <Route path="logs" element={<Logs />} />
           <Route path="health" element={<Health />} />

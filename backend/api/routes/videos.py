@@ -169,48 +169,112 @@ async def _run_render(video_id: str, job: RenderJob):
             job.voice = tts["voice"]
             job.word_boundaries = tts.get("word_boundaries", [])
 
-            # ── Stage 2: Visuals (scene-aware) ────────────────────────────
+            # ── Stage 2: Visuals (scene-aware with asset caching) ─────────
             video.render_stage = "visuals"
             video.render_progress = 30
             await db.commit()
             
-            from engine.visuals.fetcher import async_fetch_clips
-            visual_dir = f"storage/visuals/{video.id}"
+            from engine.visuals.fetcher import async_search_clips, async_download_clip
+            from backend.models.models import Asset
             
-            # Load script with scenes for scene-aware clip fetching
+            visual_dir = f"storage/visuals/{video.id}"
+            os.makedirs(visual_dir, exist_ok=True)
+            
+            # Load script with scenes
             q = select(Script).where(Script.id == video.script_id).options(selectinload(Script.scenes))
             res = await db.execute(q)
             script = res.scalars().first()
             idea = await db.get(Idea, script.idea_id) if script else None
             
-            # Use scene visual_descriptions as clip queries (scene-aware)
+            valid_clip_paths = []
+            
             if script and script.scenes:
-                queries = [sc.visual_description for sc in sorted(script.scenes, key=lambda x: x.scene_number) if sc.visual_description]
+                scenes = sorted(script.scenes, key=lambda x: x.scene_number)
+                for i, scene in enumerate(scenes):
+                    # Update progress per scene
+                    video.render_progress = 30 + (30 * (i / len(scenes)))
+                    await db.commit()
+                    
+                    asset_path = None
+                    
+                    # 1. Check if scene already has an assigned asset (e.g., user selected)
+                    if scene.asset_id:
+                        asset = await db.get(Asset, scene.asset_id)
+                        if asset and asset.path and os.path.exists(asset.path):
+                            asset_path = asset.path
+                        elif asset and asset.asset_metadata.get("download_url"):
+                            # Path missing but we have download URL, re-download
+                            log.info(f"Re-downloading missing asset {asset.id}")
+                            try:
+                                asset_path = await async_download_clip(asset.asset_metadata["download_url"], visual_dir, asset.source)
+                                asset.path = asset_path
+                                await db.commit()
+                            except Exception as e:
+                                log.warning(f"Failed to re-download asset {asset.id}: {e}")
+                    
+                    # 2. If no asset_path yet, search and fetch based on scene description
+                    if not asset_path:
+                        query = scene.visual_description or idea.topic or "nature"
+                        search_results = await async_search_clips(query, count=1)
+                        
+                        if search_results:
+                            clip_meta = search_results[0]
+                            source_id = clip_meta["source_asset_id"]
+                            
+                            # Check if asset already exists in global cache
+                            existing_q = select(Asset).where(Asset.source == clip_meta["source"], Asset.source_asset_id == source_id)
+                            existing_res = await db.execute(existing_q)
+                            existing_asset = existing_res.scalars().first()
+                            
+                            if existing_asset and existing_asset.path and os.path.exists(existing_asset.path):
+                                asset_path = existing_asset.path
+                                scene.asset_id = existing_asset.id
+                                await db.commit()
+                            else:
+                                # Not cached or missing file, download it
+                                try:
+                                    local_path = await async_download_clip(clip_meta["download_url"], visual_dir, clip_meta["source"])
+                                    
+                                    # Create or update Asset
+                                    if existing_asset:
+                                        existing_asset.path = local_path
+                                        scene.asset_id = existing_asset.id
+                                    else:
+                                        new_asset = Asset(
+                                            script_id=None, # Global cache
+                                            source_asset_id=source_id,
+                                            asset_type="video_clip",
+                                            source=clip_meta["source"],
+                                            path=local_path,
+                                            url=clip_meta["url"],
+                                            thumbnail_url=clip_meta["thumbnail_url"],
+                                            license=clip_meta["license"],
+                                            asset_metadata=clip_meta["asset_metadata"]
+                                        )
+                                        db.add(new_asset)
+                                        await db.flush() # get ID
+                                        scene.asset_id = new_asset.id
+                                        
+                                    await db.commit()
+                                    asset_path = local_path
+                                except Exception as e:
+                                    log.warning(f"Failed to download and cache clip for scene {scene.scene_number}: {e}")
+                    
+                    if asset_path and os.path.getsize(asset_path) > 10_000:
+                        valid_clip_paths.append(asset_path)
+                    else:
+                        log.warning(f"Failed to resolve valid asset for scene {scene.scene_number}")
             else:
-                # Fallback to old visual_prompts or topic
+                # Legacy fallback for scripts without scenes
+                from engine.visuals.fetcher import async_fetch_clips
                 queries = script.visual_prompts or [idea.topic if idea else "nature"] if script else ["nature"]
-            
-            if not queries:
-                queries = [idea.topic if idea else "nature"]
-            
-            # Fetch one clip per scene query for better scene-to-clip alignment
-            clips = await async_fetch_clips(queries, clips_per_query=1, out_dir=visual_dir)
-            if not clips:
-                raise RuntimeError("No stock clips found — check Pexels/Pixabay API keys")
-            
-            # Filter out zero-byte clips
-            valid_clips = [c for c in clips if os.path.getsize(c["path"]) > 10_000]
-            if not valid_clips:
-                raise RuntimeError(
-                    f"All {len(clips)} downloaded clip(s) are empty or corrupt. "
-                    "Check Pexels API key and network connectivity."
-                )
-            if len(valid_clips) < len(clips):
-                log.warning(
-                    "Discarded %d zero-byte/corrupt clip(s), proceeding with %d valid clip(s).",
-                    len(clips) - len(valid_clips), len(valid_clips)
-                )
-            job.clip_paths = [c["path"] for c in valid_clips]
+                clips = await async_fetch_clips(queries, clips_per_query=1, out_dir=visual_dir)
+                valid_clip_paths = [c["path"] for c in clips if os.path.getsize(c["path"]) > 10_000]
+
+            if not valid_clip_paths:
+                raise RuntimeError("No stock clips found or successfully downloaded — check API keys and network")
+
+            job.clip_paths = valid_clip_paths
 
             # ── Stage 3: Assembly ─────────────────────────────────────────
             video.render_stage = "assembly"
@@ -389,10 +453,10 @@ async def render_video(body: RenderIn, bg: BackgroundTasks, db: AsyncSession = D
             job.watermark_position = profile.watermark_position or "bottom_right"
             job.watermark_scale = profile.watermark_scale or 0.12
 
-    import asyncio
-    asyncio.create_task(_run_render(video.id, job))
+    # Phase 3: Route to durable task queue instead of asyncio.create_task
+    from backend.worker import queue_render_task
+    queue_render_task(video.id, video.tenant_id, job=job)
     return _fmt(video)
-
 
 @router.get("/{video_id}", response_model=VideoOut)
 async def get_video(video_id: str, db: AsyncSession = Depends(get_db)):
