@@ -65,4 +65,10 @@ export const api = {
   getDashboardAnalytics: () => request('/analytics/'),
   getTopVideos:   (limit = 5) => request(`/analytics/summary/top-videos?limit=${limit}`),
   getAnalytics:   (videoId) => request(`/analytics/${videoId}`),
+  analyticsCleanup: () => request('/analytics/cleanup', { method: 'POST' }),
+  getSystemLogs:   (lines = 100) => request(`/analytics/logs?lines=${lines}`),
+
+  // ── Assets ───────────────────────────────────────
+  searchAssets:   (query, count = 8) => request(`/assets/search?query=${encodeURIComponent(query)}&count=${count}`),
+  assignAssetToScene: (sceneId, assetData) => request(`/assets/scenes/${sceneId}/assign`, { method: 'POST', body: JSON.stringify(assetData) }),
 };

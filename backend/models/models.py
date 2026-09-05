@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncAttrs
 def _uuid() -> str:
     return str(uuid.uuid4())
 
+DEFAULT_PROFILE_ID = "default-user"
 
 class Base(AsyncAttrs, DeclarativeBase):
     pass
@@ -92,6 +93,7 @@ class Channel(Base):
     niche      = Column(String, nullable=False)
     language   = Column(String, default="en")
     created_at = Column(DateTime, default=datetime.utcnow)
+    tenant_id  = Column(String, index=True, default=DEFAULT_PROFILE_ID)
 
     ideas = relationship("Idea", back_populates="channel", cascade="all, delete-orphan")
 
@@ -108,6 +110,7 @@ class Idea(Base):
     score      = Column(Float, default=0.0)
     notes      = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
+    tenant_id  = Column(String, index=True, default=DEFAULT_PROFILE_ID)
 
     channel = relationship("Channel", back_populates="ideas")
     scripts = relationship("Script", back_populates="idea", cascade="all, delete-orphan")
@@ -130,6 +133,7 @@ class Script(Base):
     fact_check_ok    = Column(Boolean, default=False)
     provider_used    = Column(String)        # which AI provider generated it
     created_at       = Column(DateTime, default=datetime.utcnow)
+    tenant_id        = Column(String, index=True, default=DEFAULT_PROFILE_ID)
 
     idea   = relationship("Idea", back_populates="scripts")
     assets = relationship("Asset", back_populates="script", cascade="all, delete-orphan")
@@ -148,6 +152,7 @@ class Scene(Base):
     asset_id           = Column(String, ForeignKey("assets.id", ondelete="SET NULL"), nullable=True)
     duration_est       = Column(Float, nullable=True)
     created_at         = Column(DateTime, default=datetime.utcnow)
+    tenant_id          = Column(String, index=True, default=DEFAULT_PROFILE_ID)
 
     script = relationship("Script", back_populates="scenes")
     asset  = relationship("Asset")
@@ -170,6 +175,7 @@ class Asset(Base):
     creator            = Column(String)
     asset_metadata     = Column(JSON)      # Store full provider JSON here
     created_at         = Column(DateTime, default=datetime.utcnow)
+    tenant_id          = Column(String, index=True, default=DEFAULT_PROFILE_ID)
 
     script = relationship("Script", back_populates="assets")
 
@@ -199,6 +205,7 @@ class Video(Base):
     voice_override   = Column(String)
     
     created_at     = Column(DateTime, default=datetime.utcnow)
+    tenant_id      = Column(String, index=True, default=DEFAULT_PROFILE_ID) # Multi-tenant isolation
 
     script      = relationship("Script", back_populates="videos")
     publication = relationship("Publication", back_populates="video", uselist=False)
@@ -218,6 +225,7 @@ class Publication(Base):
     privacy_status = Column(SAEnum(PrivacyStatus), default=PrivacyStatus.private)
     published_at   = Column(DateTime)
     status         = Column(String, default="pending")   # pending|live|removed
+    tenant_id      = Column(String, index=True, default=DEFAULT_PROFILE_ID)
 
     video = relationship("Video", back_populates="publication")
 
@@ -234,5 +242,20 @@ class Analytics(Base):
     subscribers = Column(Integer, default=0)
     retention   = Column(Float)        # average percentage viewed
     recorded_at = Column(DateTime, default=datetime.utcnow)
+    tenant_id   = Column(String, index=True, default=DEFAULT_PROFILE_ID)
 
     video = relationship("Video", back_populates="analytics")
+
+class AnalyticsSnapshot(Base):
+    """Stores historical time-series analytics for drawing graphs."""
+    __tablename__ = "analytics_snapshots"
+
+    id          = Column(String, primary_key=True, default=_uuid)
+    video_id    = Column(String, ForeignKey("videos.id"), nullable=False)
+    date        = Column(DateTime, default=datetime.utcnow)
+    views       = Column(Integer, default=0)
+    likes       = Column(Integer, default=0)
+    subscribers = Column(Integer, default=0)
+    tenant_id   = Column(String, index=True, default=DEFAULT_PROFILE_ID)
+
+    video = relationship("Video")

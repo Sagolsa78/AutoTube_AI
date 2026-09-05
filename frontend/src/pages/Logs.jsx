@@ -1,22 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Icon from '../components/Icon';
-
-/*
- * Mock data — will be replaced by a real /api/logs or WebSocket feed
- * once the backend emits structured log events.
- */
-const MOCK_LOGS = [
-  { id: 1, severity: 'error',   source: 'SRT Generator',   message: 'SRT file had 0 cues — render aborted. Check audio alignment.',                           ts: '2 min ago' },
-  { id: 2, severity: 'warning', source: 'LLM Fallback',    message: 'Gemini returned 429 (rate limited). Falling back to Groq.',                                ts: '8 min ago' },
-  { id: 3, severity: 'error',   source: 'Clip Download',   message: 'Pexels clip timed out after 30s. Retrying (2/3)…',                                          ts: '12 min ago' },
-  { id: 4, severity: 'success', source: 'Render Engine',   message: 'Video "AI in 1950s" rendered successfully — 00:58 duration, captions OK.',                   ts: '25 min ago' },
-  { id: 5, severity: 'warning', source: 'Storage',         message: '/storage/audio contains 847MB of temp files. Consider cleanup.',                              ts: '1 hour ago' },
-  { id: 6, severity: 'info',    source: 'YouTube Upload',  message: 'Video "Quantum Computing Basics" published. ID: dQw4w9WgXcQ',                               ts: '2 hours ago' },
-  { id: 7, severity: 'success', source: 'Script Gen',      message: 'Script generated for "History of the Internet" using Ollama (llama3.2).',                   ts: '3 hours ago' },
-  { id: 8, severity: 'info',    source: 'Edge-TTS',        message: 'Audio generated: 42.3s, voice en-US-ChristopherNeural.',                                     ts: '3 hours ago' },
-  { id: 9, severity: 'error',   source: 'LLM Fallback',   message: 'Ollama unreachable at localhost:11434 — skipping to Gemini.',                                ts: '5 hours ago' },
-  { id:10, severity: 'warning', source: 'Render Engine',   message: 'FFmpeg encode slower than expected: 0.4x realtime. Check CPU load.',                        ts: '6 hours ago' },
-];
+import { api } from '../services/api';
 
 const SEVERITY_ICON = {
   error:   { name: 'x',        className: 'c-accent' },
@@ -29,16 +13,41 @@ const FILTERS = [
   { key: 'all',     label: 'All' },
   { key: 'error',   label: 'Errors' },
   { key: 'warning', label: 'Warnings' },
-  { key: 'success', label: 'Success' },
-  { key: 'info',    label: 'Info' },
 ];
 
 export default function Logs() {
   const [filter, setFilter] = useState('all');
-  const filtered = filter === 'all' ? MOCK_LOGS : MOCK_LOGS.filter(l => l.severity === filter);
+  const [logs, setLogs] = useState([]);
+  
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await api.getSystemLogs(100);
+        // Map raw text lines to a semi-structured format
+        const structuredLogs = res.logs.reverse().map((line, i) => {
+          let severity = 'info';
+          if (line.includes('ERROR') || line.includes('Failed')) severity = 'error';
+          if (line.includes('WARN')) severity = 'warning';
+          
+          return {
+            id: i,
+            severity,
+            source: 'System',
+            message: line,
+            ts: 'now'
+          };
+        });
+        setLogs(structuredLogs);
+      } catch (e) {
+        console.error("Failed to fetch logs", e);
+      }
+    })();
+  }, []);
 
-  const errorCount   = MOCK_LOGS.filter(l => l.severity === 'error').length;
-  const warningCount = MOCK_LOGS.filter(l => l.severity === 'warning').length;
+  const filtered = filter === 'all' ? logs : logs.filter(l => l.severity === filter);
+
+  const errorCount   = logs.filter(l => l.severity === 'error').length;
+  const warningCount = logs.filter(l => l.severity === 'warning').length;
 
   return (
     <div>
@@ -100,7 +109,7 @@ export default function Logs() {
       </div>
 
       <p className="text-xs text-muted mt-3" style={{ textAlign: 'center' }}>
-        Events are currently simulated. Wire a <code className="mono" style={{ color: 'var(--accent-strong)' }}>/api/logs</code> endpoint to surface real pipeline output.
+        Live system logs. Showing the last 100 events from the backend.
       </p>
     </div>
   );

@@ -17,8 +17,11 @@ from backend.settings import YOUTUBE_CLIENT_SECRETS, YOUTUBE_TOKEN_FILE
 
 log = logging.getLogger(__name__)
 
-SCOPES = ["https://www.googleapis.com/auth/youtube.upload",
-          "https://www.googleapis.com/auth/youtube.readonly"]
+SCOPES = [
+    "https://www.googleapis.com/auth/youtube.upload",
+    "https://www.googleapis.com/auth/youtube", # Required to update video metadata/status
+    "https://www.googleapis.com/auth/youtube.readonly"
+]
 
 
 def auth_setup() -> None:

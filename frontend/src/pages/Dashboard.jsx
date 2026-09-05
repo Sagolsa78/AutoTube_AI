@@ -167,16 +167,27 @@ export default function Dashboard() {
           {/* Storage / Disk Widget */}
           <div className="card" style={{ padding: '16px 20px' }}>
             <div className="card-header mb-3">
-              <h3 className="card-title flex items-center gap-2"><Icon name="hardDrive" size={16} className="c-amber" /> Storage Usage</h3>
+              <h3 className="card-title flex items-center gap-2"><Icon name="hardDrive" size={16} className="c-warning" /> Storage Usage</h3>
+              <Link to="/app/analytics" className="btn btn-sm btn-secondary" style={{ fontSize: '11px', padding: '3px 10px' }}>View Telemetry</Link>
             </div>
             <div className="flex justify-between items-center mb-2">
-              <span style={{ fontSize: '13px', color: 'var(--text-1)' }}>/audio & /visuals temp</span>
-              <span style={{ fontSize: '14px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--warning)' }}>—</span>
+              <span style={{ fontSize: '13px', color: 'var(--text-1)' }}>Temp & Renders</span>
+              <span style={{ fontSize: '14px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--warning)' }}>
+                {analytics?.storage?.total_mb || 0} MB
+              </span>
             </div>
             <div className="progress-bar-track">
-              <div className="progress-bar-fill" style={{ width: '0%' }}></div>
+              <div
+                className="progress-bar-fill"
+                style={{
+                  background: 'var(--warning)',
+                  width: `${Math.min(100, ((analytics?.storage?.total_mb || 0) / (analytics?.storage?.limit_mb || 50000)) * 100)}%`
+                }}
+              />
             </div>
-            <p className="text-xs text-muted mt-2">Storage monitoring requires a backend endpoint. Coming soon.</p>
+            <p className="text-xs text-muted mt-2">
+              Output: {analytics?.storage?.output_mb || 0} MB | Temp: {analytics?.storage?.temp_mb || 0} MB
+            </p>
           </div>
         </div>
 
