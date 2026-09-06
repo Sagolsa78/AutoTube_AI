@@ -1,100 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { api } from '../services/api';
 import Icon from '../components/Icon';
-
-/*
- * Provider configuration — mirrors backend/settings.py
- * Will be replaced by a /api/system/health endpoint that reports live status.
- */
-const PROVIDERS = [
-  {
-    name: 'Ollama',
-    type: 'LLM',
-    status: 'online',
-    model: 'llama3.2',
-    endpoint: 'localhost:11434',
-    tier: 'Local',
-    quota: 'Unlimited',
-    note: 'Primary script generation. Runs locally — no rate limits.',
-    priority: 1,
-  },
-  {
-    name: 'Google Gemini',
-    type: 'LLM',
-    status: 'online',
-    model: 'gemini-2.0-flash',
-    endpoint: 'generativelanguage.googleapis.com',
-    tier: 'Free',
-    quota: '15 RPM / 1M TPD',
-    note: 'Fallback #1. Rate-limited on free tier.',
-    priority: 2,
-  },
-  {
-    name: 'Groq',
-    type: 'LLM',
-    status: 'online',
-    model: 'llama-3.3-70b-versatile',
-    endpoint: 'api.groq.com',
-    tier: 'Free',
-    quota: '30 RPM / 14.4K RPD',
-    note: 'Fallback #2. Very fast inference but strict daily caps.',
-    priority: 3,
-  },
-  {
-    name: 'OpenRouter',
-    type: 'LLM',
-    status: 'limited',
-    model: 'Various',
-    endpoint: 'openrouter.ai',
-    tier: 'Free',
-    quota: 'Model-dependent',
-    note: 'Fallback #3 (last resort). Pay-per-use above free credits.',
-    priority: 4,
-  },
-  {
-    name: 'Edge-TTS',
-    type: 'TTS',
-    status: 'online',
-    model: 'en-US-ChristopherNeural',
-    endpoint: 'Microsoft Edge (local)',
-    tier: 'Free',
-    quota: 'Unlimited',
-    note: 'Text-to-speech. No API key required.',
-    priority: 1,
-  },
-  {
-    name: 'Pexels',
-    type: 'Stock Footage',
-    status: 'online',
-    model: '—',
-    endpoint: 'api.pexels.com',
-    tier: 'Free',
-    quota: '200 req/hr',
-    note: 'Primary stock footage source for visual clips.',
-    priority: 1,
-  },
-  {
-    name: 'Pixabay',
-    type: 'Stock Footage',
-    status: 'offline',
-    model: '—',
-    endpoint: 'pixabay.com/api',
-    tier: 'Free',
-    quota: '5000/day',
-    note: 'Backup footage source. API key not configured.',
-    priority: 2,
-  },
-  {
-    name: 'YouTube Data API',
-    type: 'Upload',
-    status: 'online',
-    model: '—',
-    endpoint: 'youtube.googleapis.com',
-    tier: 'OAuth',
-    quota: '10K units/day',
-    note: 'Video upload + metadata. 1600 units per upload.',
-    priority: 1,
-  },
-];
+import Badge from '../components/Badge';
 
 const STATUS_CLASS = {
   online:  'status-online',
@@ -105,7 +12,21 @@ const STATUS_CLASS = {
 const TYPE_GROUPS = ['LLM', 'TTS', 'Stock Footage', 'Upload'];
 
 export default function Health() {
+  const [providers, setProviders] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await api.getSystemHealth();
+        setProviders(data);
+      } catch (e) {
+        console.error(e);
+      }
+      setLoading(false);
+    })();
+  }, []);
 
   return (
     <div>
@@ -116,8 +37,10 @@ export default function Health() {
         </div>
       </div>
 
-      {TYPE_GROUPS.map(group => {
-        const groupProviders = PROVIDERS.filter(p => p.type === group).sort((a, b) => a.priority - b.priority);
+      {loading ? (
+        <div className="empty-state"><span className="spinner spinner-lg" /></div>
+      ) : TYPE_GROUPS.map(group => {
+        const groupProviders = providers.filter(p => p.type === group).sort((a, b) => a.priority - b.priority);
         if (groupProviders.length === 0) return null;
 
         return (
@@ -145,7 +68,7 @@ export default function Health() {
                       <div className="provider-name">{provider.name}</div>
                       <div className="provider-type">Priority #{provider.priority} · {provider.tier}</div>
                     </div>
-                    <span className={`status-badge ${STATUS_CLASS[provider.status]}`}>
+                    <Badge variant="default" className={`status-badge ${STATUS_CLASS[provider.status]}`}>
                       <span className="dot" style={{
                         width: '6px', height: '6px', display: 'inline-block',
                         borderRadius: '50%', boxShadow: 'none', animation: 'none',
@@ -153,7 +76,7 @@ export default function Health() {
                                     provider.status === 'offline' ? 'var(--error)' : 'var(--warning)'
                       }}></span>
                       {provider.status}
-                    </span>
+                    </Badge>
                   </div>
 
                   <div className="provider-stat">
@@ -182,7 +105,7 @@ export default function Health() {
       })}
 
       <p className="text-xs text-muted mt-4" style={{ textAlign: 'center' }}>
-        Provider status is currently static. Wire a <code className="mono" style={{ color: 'var(--accent-strong)' }}>/api/system/health</code> endpoint to report live connectivity and quota usage.
+        Provider status fetched live from <code className="mono" style={{ color: 'var(--accent-strong)' }}>/api/system/health</code>.
       </p>
     </div>
   );

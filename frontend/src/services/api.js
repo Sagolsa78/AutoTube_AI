@@ -71,4 +71,7 @@ export const api = {
   // ── Assets ───────────────────────────────────────
   searchAssets:   (query, count = 8) => request(`/assets/search?query=${encodeURIComponent(query)}&count=${count}`),
   assignAssetToScene: (sceneId, assetData) => request(`/assets/scenes/${sceneId}/assign`, { method: 'POST', body: JSON.stringify(assetData) }),
+
+  // ── System ───────────────────────────────────────
+  getSystemHealth: () => request('/system/health'),
 };

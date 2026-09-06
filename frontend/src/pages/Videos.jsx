@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { api } from '../services/api';
 import Icon from '../components/Icon';
+import Button from '../components/Button';
+import Badge from '../components/Badge';
 import { toast } from 'sonner';
 
 const CustomPlayer = ({ src }) => {
@@ -282,7 +284,7 @@ export default function Videos() {
                       Script ID: {activeVideo.script_id.substring(0, 8)}
                     </p>
                     <div className="flex gap-2 items-center">
-                      <span className={`badge badge-${activeVideo.status}`} style={{ fontSize: '13px', padding: '6px 12px' }}>{activeVideo.status}</span>
+                      <Badge variant={activeVideo.status} style={{ fontSize: '13px', padding: '6px 12px' }}>{activeVideo.status}</Badge>
                       <span className="text-muted mono">{activeVideo.duration ? `${activeVideo.duration.toFixed(1)}s` : '—'}</span>
                     </div>
                   </div>
@@ -355,18 +357,18 @@ export default function Videos() {
                 <div className="actions" style={{ display: 'flex', gap: '16px', marginTop: 'auto' }}>
                   {activeVideo.status === 'ready' && (
                     <>
-                      <button className="btn btn-success" style={{ flex: 1, padding: '16px', fontSize: '16px', fontWeight: 600 }} onClick={() => action(activeVideo.id, 'approve')}>
+                      <Button variant="primary" style={{ flex: 1, padding: '16px', fontSize: '16px', fontWeight: 600, background: 'var(--success)', border: 'none' }} onClick={() => action(activeVideo.id, 'approve')}>
                         <Icon name="check" size={20} /> Approve <span className="mono" style={{ opacity: 0.5, fontSize: '12px', marginLeft: '8px' }}>[A]</span>
-                      </button>
-                      <button className="btn btn-danger" style={{ flex: 1, padding: '16px', fontSize: '16px', fontWeight: 600 }} onClick={() => action(activeVideo.id, 'reject')}>
+                      </Button>
+                      <Button variant="primary" style={{ flex: 1, padding: '16px', fontSize: '16px', fontWeight: 600, background: 'var(--danger)', border: 'none' }} onClick={() => action(activeVideo.id, 'reject')}>
                         <Icon name="x" size={20} /> Reject <span className="mono" style={{ opacity: 0.5, fontSize: '12px', marginLeft: '8px' }}>[R]</span>
-                      </button>
+                      </Button>
                     </>
                   )}
                   {activeVideo.status === 'approved' && (
-                    <button className="btn btn-primary" style={{ flex: 1, padding: '16px', fontSize: '16px', fontWeight: 600 }} onClick={() => setUploadModal(activeVideo)}>
+                    <Button variant="primary" style={{ flex: 1, padding: '16px', fontSize: '16px', fontWeight: 600 }} onClick={() => setUploadModal(activeVideo)}>
                       <Icon name="upload" size={20} /> Upload to YouTube
-                    </button>
+                    </Button>
                   )}
                 </div>
               </div>
@@ -401,7 +403,7 @@ export default function Videos() {
                   </div>
                   <div style={{ padding: '8px', fontSize: '11px', borderTop: '1px solid var(--border-1)', display: 'flex', justifyContent: 'space-between' }}>
                     <span className="mono">{v.id.substring(0, 4)}</span>
-                    <span className={`badge badge-${v.status}`} style={{ padding: '2px 4px', fontSize: '9px' }}>{v.status.substring(0, 1).toUpperCase()}</span>
+                    <Badge variant={v.status} style={{ padding: '2px 4px', fontSize: '9px' }}>{v.status.substring(0, 1).toUpperCase()}</Badge>
                   </div>
                 </div>
               ))}
