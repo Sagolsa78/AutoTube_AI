@@ -1,13 +1,15 @@
 from dataclasses import dataclass, field
+from engine.story.schemas import StorySpec
 
 @dataclass
 class RenderJob:
     """All data needed to assemble a final video, collected across pipeline stages."""
     video_id: str
-    script_full_text: str
+    story_spec: StorySpec
     niche: str
     caption_style: str = "bold_centered"
     style: str = "fast_facts"
+    language: str = "en"
 
     # Populated by TTS stage
     audio_path: str = ""

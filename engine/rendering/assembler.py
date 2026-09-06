@@ -72,33 +72,37 @@ def _validate_subtitle_content(sub_path: str) -> None:
 
 
 def _build_filtergraph(
-    n_clips: int,
-    audio_dur: float,
-    sub_path: str,
+    timeline: "RenderTimeline" = None,
+    n_clips: int = 0, # legacy
+    audio_dur: float = 0.0,
+    sub_path: str = "",
     watermark_path: str | None = None,
     watermark_opacity: float = 0.4,
     watermark_position: str = "bottom_right",
     watermark_scale: float = 0.12,
 ) -> str:
     """
-    Construct FFmpeg filtergraph that:
-    1. Scale+crops each clip to 1080×1920 portrait
-    2. Color normalizes each clip (brightness/contrast)
-    3. Trims and Crossfades all clips (xfade)
-    4. Burns ASS subtitles (style is embedded in the .ass file itself)
-    5. Optionally overlays a watermark logo
+    Construct FFmpeg filtergraph using precise timeline durations.
     """
     fade_dur = 0.3
-    if n_clips > 1:
-        # Extend the segment duration to account for overlap loss
-        seg = (audio_dur + (n_clips - 1) * fade_dur) / n_clips
-    else:
-        seg = audio_dur
-
     parts: list[str] = []
+    
+    has_timeline = timeline and timeline.scenes
+    clips_count = len(timeline.scenes) if has_timeline else n_clips
+    
+    if not has_timeline:
+        # Legacy fallback
+        if clips_count > 1:
+            seg = (audio_dur + (clips_count - 1) * fade_dur) / clips_count
+        else:
+            seg = audio_dur
+        durations = [seg] * clips_count
+    else:
+        durations = [scene.duration + fade_dur if i < clips_count - 1 else scene.duration for i, scene in enumerate(timeline.scenes)]
 
     # -- Per-clip processing --------------------------------------------------
-    for i in range(n_clips):
+    for i in range(clips_count):
+        seg = durations[i]
         parts.append(
             f"[{i}:v]"
             f"fps=30,"
@@ -113,15 +117,20 @@ def _build_filtergraph(
 
     # -- Concatenation with xfade ---------------------------------------------
     after_concat = "[base]"
-    if n_clips == 1:
+    if clips_count <= 1:
         parts.append(f"[v0]copy{after_concat};")
     else:
         last_out = "[v0]"
-        for i in range(1, n_clips):
-            offset = i * seg - i * fade_dur
-            out_name = f"[v_fade_{i}]" if i < n_clips - 1 else after_concat
+        current_offset = 0.0
+        for i in range(1, clips_count):
+            if has_timeline:
+                current_offset += timeline.scenes[i-1].duration
+            else:
+                current_offset = i * durations[0] - i * fade_dur
+                
+            out_name = f"[v_fade_{i}]" if i < clips_count - 1 else after_concat
             parts.append(
-                f"{last_out}[v{i}]xfade=transition=fade:duration={fade_dur}:offset={offset:.3f}{out_name};"
+                f"{last_out}[v{i}]xfade=transition=fade:duration={fade_dur}:offset={current_offset:.3f}{out_name};"
             )
             last_out = out_name
 
@@ -135,7 +144,7 @@ def _build_filtergraph(
 
     # -- Watermark overlay (optional) -----------------------------------------
     if watermark_path and Path(watermark_path).exists():
-        wm_input_idx = n_clips + 1   # audio is n_clips, watermark is n_clips+1
+        wm_input_idx = clips_count + 1   # audio is n_clips, watermark is n_clips+1
         wm_w = int(TARGET_W * watermark_scale)
 
         # Position mapping
@@ -149,7 +158,7 @@ def _build_filtergraph(
 
         parts.append(
             f"[{wm_input_idx}:v]"
-            f"scale={wm_w}:-1,"
+            f"scale={wm_w}::-1,"
             f"format=rgba,"
             f"colorchannelmixer=aa={watermark_opacity:.2f}"
             f"[wm];"
@@ -165,9 +174,10 @@ def _build_filtergraph(
 
 
 def assemble_video(
-    clip_paths: list[str],
-    audio_path: str,
-    srt_path: str,
+    timeline: "RenderTimeline" = None,
+    clip_paths: list[str] = None, # legacy
+    audio_path: str = "",
+    srt_path: str = "",
     out_path: str | None = None,
     style: str = "fast_facts",
     caption_style: str = "bold_centered",
@@ -222,7 +232,8 @@ def assemble_video(
 
     # Build filtergraph
     fg = _build_filtergraph(
-        n_clips=len(clip_paths),
+        timeline=timeline,
+        n_clips=len(clip_paths) if clip_paths else 0,
         audio_dur=audio_dur,
         sub_path=sub_path,
         watermark_path=watermark_path,
@@ -276,8 +287,25 @@ async def async_assemble_video(**kwargs) -> str:
 
 def assemble_job(job: RenderJob) -> str:
     """Assemble a video using a RenderJob object."""
+    from engine.story.timeline import align_scenes_to_audio
+    
     job.output_path = job.output_path or str(RENDER_DIR / f"short_{uuid.uuid4().hex[:8]}.mp4")
+    
+    # 1. Build the timeline
+    timeline = align_scenes_to_audio(
+        job.story_spec,
+        job.word_boundaries,
+        job.audio_path,
+        job.sub_path
+    )
+    
+    # If the timeline has fewer scenes than clips, just fall back to passing the raw clips
+    # to avoid index out-of-bounds in ffmpeg.
+    if len(timeline.scenes) != len(job.clip_paths):
+        timeline = None
+        
     out_path = assemble_video(
+        timeline=timeline,
         clip_paths=job.clip_paths,
         audio_path=job.audio_path,
         srt_path=job.sub_path,

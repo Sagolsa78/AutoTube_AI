@@ -79,18 +79,31 @@ async def generate_voiceover(
     audio_path: str = "storage/audio/voice.mp3",
     sub_path:   str = "storage/audio/subs.ass",
     voice: str | None = None,
+    language: str = "en"
 ) -> dict:
     """
     Generate voiceover and capture word-boundary timing data.
-    The ASS subtitle file is generated later by the assembler (which knows
-    the chosen caption style).  This function returns the raw word_boundaries
-    so the assembler can build a correctly-styled ASS.
-
-    Returns dict with audio_path, sub_path, duration, voice, word_boundaries.
-    Raises RuntimeError if word-boundary capture fails.
     """
+    # Simple language fallback map for Edge-TTS
+    LANG_VOICES = {
+        "es": "es-ES-AlvaroNeural",
+        "fr": "fr-FR-HenriNeural",
+        "de": "de-DE-KillianNeural",
+        "it": "it-IT-DiegoNeural",
+        "pt": "pt-BR-AntonioNeural",
+        "hi": "hi-IN-MadhurNeural",
+        "ja": "ja-JP-KeitaNeural",
+        "ko": "ko-KR-InJoonNeural",
+        "zh": "zh-CN-YunxiNeural",
+    }
+    
+    # If the user explicitly provided a voice that already matches the language, use it.
+    # Otherwise, if it's an English default voice but language is non-English, override.
     selected_voice = voice or NICHE_VOICES.get(niche, DEFAULT_VOICE)
-    log.info("Generating TTS with voice=%s", selected_voice)
+    if language != "en" and selected_voice.startswith("en-"):
+        selected_voice = LANG_VOICES.get(language[:2], selected_voice)
+
+    log.info("Generating TTS with voice=%s for language=%s", selected_voice, language)
 
     duration, word_boundaries = await _generate_tts(
         text, selected_voice, audio_path,

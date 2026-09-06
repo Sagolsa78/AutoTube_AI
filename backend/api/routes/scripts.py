@@ -65,37 +65,50 @@ async def generate_script_for_idea(idea_id: str, db: AsyncSession = Depends(get_
     if idea.status not in (IdeaStatus.promoted, IdeaStatus.pending):
         raise HTTPException(400, f"Idea status is '{idea.status}' — promote it first")
 
-    # Get niche from channel
+    # Get niche and language from channel
     channel = await db.get(Channel, idea.channel_id)
     niche = channel.niche if channel else "science_wow"
+    language = channel.language if channel else "en"
 
     # Run generation pipeline
     from engine.script.generator import generate_script
     from engine.quality.checker import check_script
+    from engine.research.verifier import FactVerifier
     try:
-        data    = generate_script(idea.topic, niche)
+        story_spec, provider_used = generate_script(idea.topic, niche, language)
+        full_text = " ".join([s.narration for s in story_spec.scenes if s.narration])
+        duration_est = len(full_text.split()) / 135 * 60
+        
+        data = story_spec.model_dump()
+        data["full_text"] = full_text
         report  = check_script(data, niche)
+        
+        # True fact checking
+        verifier = FactVerifier()
+        fact_check_ok = verifier.verify_story(story_spec, language)
+            
     except Exception as exc:
         raise HTTPException(500, f"Script generation failed: {exc}")
 
     script = Script(
         idea_id        = idea_id,
-        full_text      = data.get("full_text"),
-        duration_est   = data.get("estimated_duration"),
+        full_text      = full_text,
+        duration_est   = duration_est,
         quality_score  = report.score,
-        fact_check_ok  = report.passed,
-        provider_used  = data.get("provider_used"),
+        fact_check_ok  = fact_check_ok,
+        provider_used  = provider_used,
+        body           = story_spec.model_dump()
     )
     db.add(script)
     await db.flush()
 
     # Create Scene rows from LLM output
-    for idx, sc in enumerate(data.get("scenes", [])):
+    for s_spec in story_spec.scenes:
         scene_obj = Scene(
             script_id=script.id,
-            scene_number=idx + 1,
-            narration=sc.get("narration", ""),
-            visual_description=sc.get("visual_description", ""),
+            scene_number=s_spec.scene_number,
+            narration=s_spec.narration,
+            visual_description=s_spec.stock_query or s_spec.visual_intent,
         )
         db.add(scene_obj)
 

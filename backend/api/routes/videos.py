@@ -158,10 +158,11 @@ async def _run_render(video_id: str, job: RenderJob):
             voice_id = video.voice_override or (profile.default_voice_id if profile else "en-US-ChristopherNeural")
             
             tts = await generate_voiceover(
-                job.script_full_text, niche=job.niche,
+                job.story_spec.get_full_text(), niche=job.niche,
                 voice=voice_id,
                 audio_path=f"{audio_dir}/voice.mp3",
                 sub_path=f"{audio_dir}/subs.ass",
+                language=job.language,
             )
             job.audio_path = tts["audio_path"]
             job.sub_path = tts["sub_path"]
@@ -187,6 +188,7 @@ async def _run_render(video_id: str, job: RenderJob):
             idea = await db.get(Idea, script.idea_id) if script else None
             
             valid_clip_paths = []
+            used_source_ids = set()
             
             if script and script.scenes:
                 scenes = sorted(script.scenes, key=lambda x: x.scene_number)
@@ -212,56 +214,23 @@ async def _run_render(video_id: str, job: RenderJob):
                             except Exception as e:
                                 log.warning(f"Failed to re-download asset {asset.id}: {e}")
                     
-                    # 2. If no asset_path yet, search and fetch based on scene description
+                    # 2. If no asset_path yet, route to VisualRouter
                     if not asset_path:
-                        query = scene.visual_description or idea.topic or "nature"
-                        search_results = await async_search_clips(query, count=1)
+                        from engine.visuals.router import VisualRouter
+                        router = VisualRouter(visual_dir)
+                        scene_spec = job.story_spec.scenes[i]
+                        scene_dict = scene_spec.model_dump()
                         
-                        if search_results:
-                            clip_meta = search_results[0]
-                            source_id = clip_meta["source_asset_id"]
-                            
-                            # Check if asset already exists in global cache
-                            existing_q = select(Asset).where(Asset.source == clip_meta["source"], Asset.source_asset_id == source_id)
-                            existing_res = await db.execute(existing_q)
-                            existing_asset = existing_res.scalars().first()
-                            
-                            if existing_asset and existing_asset.path and os.path.exists(existing_asset.path):
-                                asset_path = existing_asset.path
-                                scene.asset_id = existing_asset.id
-                                await db.commit()
-                            else:
-                                # Not cached or missing file, download it
-                                try:
-                                    local_path = await async_download_clip(clip_meta["download_url"], visual_dir, clip_meta["source"])
-                                    
-                                    # Create or update Asset
-                                    if existing_asset:
-                                        existing_asset.path = local_path
-                                        scene.asset_id = existing_asset.id
-                                    else:
-                                        new_asset = Asset(
-                                            script_id=None, # Global cache
-                                            source_asset_id=source_id,
-                                            asset_type="video_clip",
-                                            source=clip_meta["source"],
-                                            path=local_path,
-                                            url=clip_meta["url"],
-                                            thumbnail_url=clip_meta["thumbnail_url"],
-                                            license=clip_meta["license"],
-                                            asset_metadata=clip_meta["asset_metadata"]
-                                        )
-                                        db.add(new_asset)
-                                        await db.flush() # get ID
-                                        scene.asset_id = new_asset.id
-                                        
-                                    await db.commit()
-                                    asset_path = local_path
-                                except Exception as e:
-                                    log.warning(f"Failed to download and cache clip for scene {scene.scene_number}: {e}")
+                        asset_path = await router.resolve_asset(scene_dict, idea.topic if idea else "", used_source_ids)
+                        
+                        if "asset_id" in scene_dict:
+                            scene.asset_id = scene_dict["asset_id"]
+                            scene_spec.asset_id = scene_dict["asset_id"]
+                            await db.commit()
                     
                     if asset_path and os.path.getsize(asset_path) > 10_000:
                         valid_clip_paths.append(asset_path)
+                        job.story_spec.scenes[i].asset_path = asset_path
                     else:
                         log.warning(f"Failed to resolve valid asset for scene {scene.scene_number}")
             else:
@@ -306,7 +275,7 @@ async def _run_render(video_id: str, job: RenderJob):
 Based on the following video script, generate metadata for the YouTube upload.
 Title Style: {title_style}
 Topics: {idea.topic if idea else ''}
-Script: {job.script_full_text}
+Script: {job.story_spec.get_full_text()}
 
 Respond ONLY with a JSON object in this exact format (no markdown):
 {{
@@ -417,10 +386,11 @@ async def render_video(body: RenderIn, bg: BackgroundTasks, db: AsyncSession = D
     profile = await db.get(UserProfile, DEFAULT_PROFILE_ID)
     caption_style = body.caption_style or (profile.caption_style if profile else "bold_centered")
 
-    # Get niche
+    # Get niche and language
     idea    = await db.get(Idea, script.idea_id)
     channel = await db.get(Channel, idea.channel_id) if idea else None
     niche   = channel.niche if channel else "science_wow"
+    language = channel.language if channel else "en"
     
     script.status = ScriptStatus.used_in_render
 
@@ -437,12 +407,36 @@ async def render_video(body: RenderIn, bg: BackgroundTasks, db: AsyncSession = D
     await db.commit()
     await db.refresh(video)
 
+    spec_data = script.body or {}
+    
+    from engine.story.schemas import StorySpec, SceneSpec
+    story_spec = StorySpec(**spec_data) if spec_data else StorySpec(topic=idea.topic if idea else "")
+    
+    if not story_spec.scenes:
+        # Build scenes from script.scenes if missing
+        for s in script.scenes:
+            story_spec.scenes.append(SceneSpec(
+                scene_number=s.scene_number,
+                narration=s.narration or "",
+                visual_intent=s.visual_description or "",
+            ))
+            
+    # Apply latest API edits to story_spec scenes
+    scene_map = {s.scene_number: s for s in script.scenes}
+    for spec_scene in story_spec.scenes:
+        if spec_scene.scene_number in scene_map:
+            db_scene = scene_map[spec_scene.scene_number]
+            spec_scene.narration = db_scene.narration or ""
+            spec_scene.visual_intent = db_scene.visual_description or ""
+            spec_scene.scene_id = db_scene.id
+
     job = RenderJob(
         video_id=video.id,
-        script_full_text=script.full_text,
+        story_spec=story_spec,
         niche=niche,
         caption_style=caption_style,
         style=body.style,
+        language=language,
     )
     
     if profile and profile.watermark_enabled and profile.logo_path:
