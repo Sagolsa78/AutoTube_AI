@@ -1,7 +1,7 @@
 import { Routes, Route, Link, useLocation, Navigate, Outlet } from 'react-router-dom';
 import Landing from './pages/Landing';
 import Dashboard from './pages/Dashboard';
-import CreateShort from './pages/CreateShort';
+import StudioShell from './pages/Studio/StudioShell';
 import Ideas from './pages/Ideas';
 import Scripts from './pages/Scripts';
 import Videos from './pages/Videos';
@@ -111,7 +111,7 @@ export default function App() {
         <Route path="/" element={<Landing />} />
         <Route path="/app" element={<StudioLayout />}>
           <Route index element={<Dashboard />} />
-          <Route path="create" element={<CreateShort />} />
+          <Route path="create" element={<StudioShell />} />
           <Route path="ideas" element={<Ideas />} />
           <Route path="scripts" element={<Scripts />} />
           <Route path="videos" element={<Videos />} />

@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { api } from '../services/api';
 import Icon from '../components/Icon';
+import Button from '../components/Button';
+import { Card, CardHeader, CardTitle } from '../components/Card';
 import { toast } from 'sonner';
 
 export default function Profile() {
@@ -112,10 +114,9 @@ export default function Profile() {
           <h1>Settings</h1>
           <p>Your profile, default CTA, caption style, and watermark preferences.</p>
         </div>
-        <button className="btn btn-primary" onClick={save} disabled={saving}>
-          {saving ? <span className="spinner" /> : <Icon name="check" size={14} />}
-          {saving ? 'Saving…' : 'Save Settings'}
-        </button>
+        <Button variant="primary" icon="check" onClick={save} loading={saving}>
+          Save Settings
+        </Button>
       </div>
 
       <div className="profile-layout">
@@ -168,14 +169,11 @@ export default function Profile() {
           <input ref={fileRef} type="file" accept="image/*" hidden onChange={uploadLogo} aria-hidden="true" />
           
           <div className="flex gap-1 mt-1">
-            <button className="btn btn-sm btn-secondary" onClick={() => fileRef.current?.click()} disabled={uploading}>
-              {uploading ? <span className="spinner" /> : <Icon name="upload" size={12} />}
-              {uploading ? 'Uploading…' : 'Upload'}
-            </button>
+            <Button variant="secondary" size="sm" icon="upload" onClick={() => fileRef.current?.click()} loading={uploading}>
+              Upload
+            </Button>
             {profile.logo_path && (
-              <button className="btn btn-sm btn-danger" onClick={removeLogo} aria-label="Remove logo">
-                <Icon name="x" size={12} />
-              </button>
+              <Button variant="danger" size="sm" icon="x" onClick={removeLogo} aria-label="Remove logo" />
             )}
           </div>
           
@@ -185,8 +183,8 @@ export default function Profile() {
         </div>
 
         {/* Right: Settings form */}
-        <div className="card">
-          <h3 className="card-title mb-3">Profile Details</h3>
+        <Card>
+          <CardTitle className="mb-3">Profile Details</CardTitle>
 
           <div className="row-2">
             <div className="field">
@@ -247,8 +245,8 @@ export default function Profile() {
           <hr className="divider" />
 
           {/* New Settings */}
-          <div className="flex justify-between items-center mb-2">
-            <h3 className="card-title">Generation Settings</h3>
+          <div className="flex justify-between items-center mb-2 mt-4">
+            <CardTitle>Generation Settings</CardTitle>
           </div>
           
           <div className="row-2 mb-3">
@@ -310,8 +308,8 @@ export default function Profile() {
           <hr className="divider" />
 
           {/* Caption Style Picker */}
-          <div className="flex justify-between items-center mb-2">
-            <h3 className="card-title">Default Caption Style</h3>
+          <div className="flex justify-between items-center mb-2 mt-4">
+            <CardTitle>Default Caption Style</CardTitle>
           </div>
           <p className="hint mb-3">Choose how subtitles appear in your videos. You can override this per-render.</p>
           
@@ -331,7 +329,7 @@ export default function Profile() {
               </div>
             ))}
           </div>
-        </div>
+        </Card>
       </div>
     </div>
   );

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import Icon from '../components/Icon';
 import { toast } from 'sonner';
@@ -7,8 +8,8 @@ export default function Ideas() {
   const [ideas, setIdeas] = useState([]);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
-  const [generatingScript, setGeneratingScript] = useState(null);
   const [activeTab, setActiveTab] = useState('pending');
+  const navigate = useNavigate();
   const [showDiscarded, setShowDiscarded] = useState(false);
 
   const load = async () => {
@@ -44,15 +45,8 @@ export default function Ideas() {
     } catch (e) { console.error(e); toast.error(`Discard failed: ${e.message}`); }
   };
 
-  const generateScript = async (ideaId) => {
-    setGeneratingScript(ideaId);
-    try { 
-      await api.generateScript(ideaId); 
-      await load(); 
-      toast.success('Script generated successfully!'); 
-    }
-    catch (e) { toast.error(`Script generation failed: ${e.message}`); }
-    finally { setGeneratingScript(null); }
+  const developInStudio = (ideaId) => {
+    navigate(`/app/create?idea=${ideaId}`);
   };
 
   const filteredIdeas = ideas.filter(i => {
@@ -112,9 +106,8 @@ export default function Ideas() {
                   <td>
                     {i.status === 'pending' && (
                       <div className="flex gap-1">
-                        <button className="btn btn-sm btn-primary" onClick={() => generateScript(i.id)} disabled={generatingScript === i.id}>
-                          {generatingScript === i.id ? <span className="spinner" /> : <Icon name="sparkles" size={12} />}
-                          {generatingScript === i.id ? 'Working…' : 'Generate Script'}
+                        <button className="btn btn-sm btn-primary" onClick={() => developInStudio(i.id)}>
+                          <Icon name="sparkles" size={12} /> Develop in Studio
                         </button>
                         <button className="btn btn-sm btn-danger" onClick={() => actionDiscard(i.id)}><Icon name="trash" size={12} /></button>
                       </div>

@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from backend.db.database import init_db
-from backend.api.routes import ideas, scripts, videos, channels, analytics, profile, assets
+from backend.api.routes import ideas, scripts, videos, channels, analytics, profile, assets, health
 
 logging.basicConfig(
     level=logging.INFO,
@@ -63,6 +63,7 @@ app.include_router(scripts.router,   prefix="/api/scripts",   tags=["scripts"])
 app.include_router(videos.router,    prefix="/api/videos",    tags=["videos"])
 app.include_router(assets.router)
 app.include_router(analytics.router, prefix="/api/analytics", tags=["analytics"])
+app.include_router(health.router, prefix="/api/system/health", tags=["health"])
 
 
 @app.get("/", tags=["health"])
