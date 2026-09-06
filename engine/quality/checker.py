@@ -62,7 +62,10 @@ def check_script(script: dict, niche: str = "science_wow", threshold: float = 70
             suggestions.append("Expand the hook to be more engaging")
 
         # 3. Each scene should have a visual description
-        scenes_without_visuals = [i+1 for i, s in enumerate(scenes) if not s.get("visual_description")]
+        scenes_without_visuals = [
+            i+1 for i, s in enumerate(scenes) 
+            if not s.get("visual_description") and not s.get("visual_intent") and not s.get("stock_query")
+        ]
         if scenes_without_visuals:
             issues.append(f"Scene(s) {scenes_without_visuals} missing visual descriptions")
             score -= 5 * len(scenes_without_visuals)

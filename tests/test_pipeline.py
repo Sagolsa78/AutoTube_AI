@@ -33,20 +33,37 @@ class MockDB:
                 class MockScalars:
                     def all(self):
                         return []
+                    def first(self):
+                        from backend.models.models import Script
+                        return Script(id="script1")
                 return MockScalars()
         return MockResult()
 
     async def refresh(self, obj):
         pass
 
+from engine.story.schemas import StorySpec, SceneSpec
+
 class MockRenderJob:
-    output_path = "/tmp/test.mp4"
-    duration = 15.0
-    script_full_text = "test script"
-    niche = "science_wow"
-    caption_style = "bold_centered"
-    style = "realistic"
-    watermark_path = None
+    niche: str = "science_wow"
+    story_spec: StorySpec = StorySpec(
+        topic="test topic",
+        scenes=[SceneSpec(scene_number=1, narration="test script", visual_intent="test")]
+    )
+    audio_path: str = "audio.mp3"
+    sub_path: str = "subs.ass"
+    clip_paths: list = []
+    output_path: str = "/tmp/test.mp4"
+    duration: float = 15.0
+    voice: str = "v1"
+    style: str = "realistic"
+    caption_style: str = "bold_centered"
+    word_boundaries: list = []
+    watermark_path: str = None
+    watermark_opacity: float = 0.4
+    watermark_position: str = "bottom_right"
+    watermark_scale: float = 0.12
+    language: str = "en"
 
 @pytest.mark.asyncio
 @patch("os.path.getsize", return_value=20000)
