@@ -28,6 +28,8 @@ export default function StoryboardStage({ script, editingScenes, setEditingScene
         id: s.id,
         narration: s.narration,
         visual_description: s.visual_description,
+        preferred_visual_mode: s.preferred_visual_mode,
+        generation_prompt: s.generation_prompt,
       }));
       await api.updateScript(script.id, { scenes: patches });
       toast.success('Storyboard edits saved');
@@ -125,20 +127,61 @@ export default function StoryboardStage({ script, editingScenes, setEditingScene
                 onChange={e => updateScene(i, 'narration', e.target.value)}
               />
             </div>
+
             <div className="storyboard-field">
-              <label className="label text-xs">
-                <Icon name="image" size={12} /> Visual Search Prompt
-              </label>
-              <div className="flex gap-2">
-                <input
-                  className="input"
-                  value={sc.visual_description}
-                  onChange={e => updateScene(i, 'visual_description', e.target.value)}
-                  placeholder="e.g. tardigrade electron microscope"
-                />
-                <Button variant="secondary" size="sm" icon="search" onClick={() => openAssetModal(sc)} />
-              </div>
+              <label className="label text-xs">Visual Mode</label>
+              <select 
+                className="select" 
+                value={sc.preferred_visual_mode || 'STOCK'} 
+                onChange={e => updateScene(i, 'preferred_visual_mode', e.target.value)}
+              >
+                <option value="AUTO">Auto (Let Engine Decide)</option>
+                <option value="STOCK">Stock Footage</option>
+                <option value="GENERATED_VIDEO">AI Video</option>
+                <option value="GENERATED_IMAGE">AI Image</option>
+                <option value="MOTION_GRAPHIC">Motion Graphic</option>
+                <option value="SOURCE_FOOTAGE">Source Footage</option>
+              </select>
             </div>
+
+            {sc.visual_intent && (
+              <div className="storyboard-field">
+                <label className="label text-xs">AI Visual Intent</label>
+                <div className="text-xs text-muted" style={{ padding: '8px', background: 'var(--surface-input)', borderRadius: 'var(--r-xs)' }}>
+                  {sc.visual_intent}
+                </div>
+              </div>
+            )}
+
+            {(sc.preferred_visual_mode === 'GENERATED_VIDEO' || sc.preferred_visual_mode === 'GENERATED_IMAGE') ? (
+              <div className="storyboard-field">
+                <label className="label text-xs">
+                  <Icon name="sparkles" size={12} className="c-accent" /> AI Generation Prompt
+                </label>
+                <textarea
+                  className="textarea"
+                  rows={2}
+                  value={sc.generation_prompt || ''}
+                  onChange={e => updateScene(i, 'generation_prompt', e.target.value)}
+                  placeholder="e.g. A cinematic close-up of a tardigrade..."
+                />
+              </div>
+            ) : (sc.preferred_visual_mode === 'STOCK' || !sc.preferred_visual_mode) ? (
+              <div className="storyboard-field">
+                <label className="label text-xs">
+                  <Icon name="image" size={12} /> Stock Search Prompt
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    className="input"
+                    value={sc.visual_description}
+                    onChange={e => updateScene(i, 'visual_description', e.target.value)}
+                    placeholder="e.g. tardigrade electron microscope"
+                  />
+                  <Button variant="secondary" size="sm" icon="search" onClick={() => openAssetModal(sc)} />
+                </div>
+              </div>
+            ) : null}
           </div>
         ))}
       </div>
