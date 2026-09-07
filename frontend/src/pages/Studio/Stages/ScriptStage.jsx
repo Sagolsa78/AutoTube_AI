@@ -7,12 +7,14 @@ import { toast } from 'sonner';
 
 export default function ScriptStage({ idea, script, setScript, onBack, onNext }) {
   const [generating, setGenerating] = useState(false);
+  const [language, setLanguage] = useState('en');
+  const [locale, setLocale] = useState('US');
 
   const generateScript = async () => {
     if (!idea) return;
     setGenerating(true);
     try {
-      const result = await api.generateScript(idea.id);
+      const result = await api.generateScript(idea.id, language, locale);
       setScript(result);
       toast.success('Script generated successfully!');
     } catch (e) {
@@ -36,8 +38,34 @@ export default function ScriptStage({ idea, script, setScript, onBack, onNext })
       )}
 
       {!script ? (
-        <div className="script-gen-action">
+        <div className="script-gen-action" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <p>The AI will generate a scene-by-scene script with narration and visual descriptions for each beat.</p>
+          
+          <div className="card" style={{ padding: '16px', background: 'var(--surface-input)' }}>
+            <h4 className="card-title mb-3" style={{ fontSize: '13px' }}>Script Generation Settings</h4>
+            <div className="grid-2 gap-3">
+              <div className="field">
+                <label className="label text-xs">Language</label>
+                <select className="select" value={language} onChange={e => setLanguage(e.target.value)}>
+                  <option value="en">English</option>
+                  <option value="es">Spanish</option>
+                  <option value="hi">Hindi</option>
+                  <option value="fr">French</option>
+                </select>
+              </div>
+              <div className="field">
+                <label className="label text-xs">Locale / Dialect</label>
+                <select className="select" value={locale} onChange={e => setLocale(e.target.value)}>
+                  <option value="US">US</option>
+                  <option value="UK">UK</option>
+                  <option value="IN">India</option>
+                  <option value="ES">Spain</option>
+                  <option value="MX">Mexico</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
           <Button variant="primary" icon="sparkles" onClick={generateScript} loading={generating}>
             Generate Script
           </Button>
@@ -56,7 +84,10 @@ export default function ScriptStage({ idea, script, setScript, onBack, onNext })
               >
                 QA: {script.quality_score || 'N/A'}
               </Badge>
-              <span className="text-muted text-sm">~{script.duration_est?.toFixed(0) || 0}s</span>
+              <Badge style={{ background: 'var(--surface-3)', color: 'var(--text-1)' }}>
+                {script.language || 'en'}-{script.locale || 'US'}
+              </Badge>
+              <span className="text-muted text-sm flex items-center">~{script.duration_est?.toFixed(0) || 0}s</span>
             </div>
           </div>
           

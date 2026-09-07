@@ -23,6 +23,10 @@ class SceneOut(BaseModel):
     narration: str
     visual_description: str
     asset_id: str | None = None
+    preferred_visual_mode: str | None = None
+    generation_prompt: str | None = None
+    visual_intent: str | None = None
+    stock_query: str | None = None
 
 class ScriptOut(BaseModel):
     id:             str
@@ -35,11 +39,14 @@ class ScriptOut(BaseModel):
     provider_used:  str | None
     status:         str
     created_at:     str
+    language:       str | None = None
+    locale:         str | None = None
+    claims:         list | None = None
 
 class ScriptUpdateIn(BaseModel):
     """Allows editing full_text or individual scene narration/visual_description."""
     full_text: str | None = None
-    scenes: list[dict] | None = None   # [{id, narration?, visual_description?}]
+    scenes: list[dict] | None = None   # [{id, narration?, visual_description?, preferred_visual_mode?, generation_prompt?}]
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -54,7 +61,12 @@ async def list_scripts(idea_id: str | None = None, db: AsyncSession = Depends(ge
 
 
 @router.post("/generate/{idea_id}", response_model=ScriptOut, status_code=201)
-async def generate_script_for_idea(idea_id: str, db: AsyncSession = Depends(get_db)):
+async def generate_script_for_idea(
+    idea_id: str, 
+    language: str | None = None, 
+    locale: str | None = None, 
+    db: AsyncSession = Depends(get_db)
+):
     """
     Generate a script for an approved idea.
     Runs LLM + quality check synchronously (fine for manual test phase).
@@ -68,14 +80,17 @@ async def generate_script_for_idea(idea_id: str, db: AsyncSession = Depends(get_
     # Get niche and language from channel
     channel = await db.get(Channel, idea.channel_id)
     niche = channel.niche if channel else "science_wow"
-    language = channel.language if channel else "en"
+    final_language = language or (channel.language if channel else "en")
+    final_locale = locale or "US"
 
     # Run generation pipeline
     from engine.script.generator import generate_script
     from engine.quality.checker import check_script
     from engine.research.verifier import FactVerifier
     try:
-        story_spec, provider_used = generate_script(idea.topic, niche, language)
+        story_spec, provider_used = generate_script(idea.topic, niche, final_language)
+        story_spec.language = final_language
+        story_spec.locale = final_locale
         full_text = " ".join([s.narration for s in story_spec.scenes if s.narration])
         duration_est = len(full_text.split()) / 135 * 60
         
@@ -85,7 +100,7 @@ async def generate_script_for_idea(idea_id: str, db: AsyncSession = Depends(get_
         
         # True fact checking
         verifier = FactVerifier()
-        fact_check_ok = verifier.verify_story(story_spec, language)
+        fact_check_ok = verifier.verify_story(story_spec, final_language)
             
     except Exception as exc:
         raise HTTPException(500, f"Script generation failed: {exc}")
@@ -149,14 +164,42 @@ async def update_script(script_id: str, body: ScriptUpdateIn, db: AsyncSession =
 
     if body.scenes:
         scene_map = {sc.id: sc for sc in s.scenes}
+        s_body = s.body or {}
+        
+        if isinstance(s_body, list):
+            spec_scenes = s_body
+            is_list_body = True
+        else:
+            spec_scenes = s_body.get("scenes", [])
+            is_list_body = False
+        
         for patch in body.scenes:
-            scene = scene_map.get(patch.get("id"))
+            scene_id = patch.get("id")
+            scene = scene_map.get(scene_id)
             if not scene:
                 continue
             if "narration" in patch:
                 scene.narration = patch["narration"]
             if "visual_description" in patch:
                 scene.visual_description = patch["visual_description"]
+            
+            # Update the JSON body as well for advanced fields
+            for i, spec_scene in enumerate(spec_scenes):
+                if spec_scene.get("scene_number") == scene.scene_number:
+                    if "preferred_visual_mode" in patch:
+                        spec_scenes[i]["preferred_visual_mode"] = patch["preferred_visual_mode"]
+                    if "generation_prompt" in patch:
+                        spec_scenes[i]["generation_prompt"] = patch["generation_prompt"]
+                    if "narration" in patch:
+                        spec_scenes[i]["narration"] = patch["narration"]
+                    break
+                        
+        if is_list_body:
+            s.body = spec_scenes
+        else:
+            s_body["scenes"] = spec_scenes
+            s.body = s_body
+        
         # Rebuild full_text from scenes
         s.full_text = " ".join(sc.narration for sc in sorted(s.scenes, key=lambda x: x.scene_number) if sc.narration)
 
@@ -195,15 +238,38 @@ async def discard_script(script_id: str, db: AsyncSession = Depends(get_db)):
 
 def _fmt(s: Script) -> dict:
     scenes = []
+    
+    spec_scenes = {}
+    language = "en"
+    locale = "US"
+    claims = []
+    if s.body:
+        if isinstance(s.body, dict):
+            language = s.body.get("language", "en")
+            locale = s.body.get("locale", "US")
+            claims = s.body.get("claims", [])
+            for sc in s.body.get("scenes", []):
+                spec_scenes[sc.get("scene_number")] = sc
+        elif isinstance(s.body, list):
+            for sc in s.body:
+                if isinstance(sc, dict):
+                    spec_scenes[sc.get("scene_number")] = sc
+            
     if hasattr(s, "scenes") and s.scenes:
         for sc in sorted(s.scenes, key=lambda x: x.scene_number):
+            spec_sc = spec_scenes.get(sc.scene_number, {})
             scenes.append({
                 "id": sc.id,
                 "scene_number": sc.scene_number,
                 "narration": sc.narration or "",
                 "visual_description": sc.visual_description or "",
                 "asset_id": sc.asset_id,
+                "preferred_visual_mode": spec_sc.get("preferred_visual_mode", "STOCK"),
+                "generation_prompt": spec_sc.get("generation_prompt", ""),
+                "visual_intent": spec_sc.get("visual_intent", ""),
+                "stock_query": spec_sc.get("stock_query", "")
             })
+            
     return {
         "id":             s.id,
         "idea_id":        s.idea_id,
@@ -215,4 +281,7 @@ def _fmt(s: Script) -> dict:
         "provider_used":  s.provider_used,
         "status":         s.status.value if hasattr(s.status, "value") else (s.status or "draft"),
         "created_at":     str(s.created_at),
+        "language":       language,
+        "locale":         locale,
+        "claims":         claims
     }

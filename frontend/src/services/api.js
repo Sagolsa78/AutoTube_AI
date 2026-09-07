@@ -39,7 +39,7 @@ export const api = {
   // ── Scripts ──────────────────────────────────────
   getScripts:     (ideaId) => request(`/scripts/${ideaId ? '?idea_id=' + ideaId : ''}`),
   getScript:      (id) => request(`/scripts/${id}`),
-  generateScript: (ideaId) => request(`/scripts/generate/${ideaId}`, { method: 'POST' }),
+  generateScript: (ideaId, language = 'en', locale = 'US') => request(`/scripts/generate/${ideaId}?language=${language}&locale=${locale}`, { method: 'POST' }),
   regenerateScript: (id) => request(`/scripts/${id}/regenerate`, { method: 'POST' }),
   updateScript:   (id, data) => request(`/scripts/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   discardScript:  (id) => request(`/scripts/${id}/discard`, { method: 'POST' }),
