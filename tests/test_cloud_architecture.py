@@ -228,3 +228,24 @@ def test_cloud_storage_public_url_resolution():
     with patch.dict(os.environ, {"R2_PUBLIC_DOMAIN": "https://media.autotube.ai"}):
         r2_storage = CloudStorage(provider="r2")
         assert r2_storage.get_public_url("videos/test.mp4") == "https://media.autotube.ai/videos/test.mp4"
+
+
+# ── 7. Zero-Laptop Cloud Native Worker Mode ───────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_router_zero_laptop_cloud_native_mode():
+    """In zero-laptop mode, router routes directly to cloud_worker without waiting for local PC."""
+    from backend.worker_router import router_registry
+    # Force local worker offline
+    router_registry.workers["local_pc"]["last_heartbeat"] = 0.0
+
+    with patch.dict(os.environ, {"COMPUTE_STRATEGY": "cloud-native", "ZERO_LAPTOP_MODE": "true"}):
+        job_data = await dispatch_job(
+            job_id="job-zero-laptop-1",
+            capability=WorkerCapability.RENDER,
+            payload={"topic": "Black Holes"}
+        )
+
+        assert job_data["worker_id"] == "cloud_worker"
+        assert job_data["worker_type"] == "cloud_container"
+        assert job_data["status"] == JobStatus.dispatched.value
