@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: autotube-backend
+    runtime: docker
+    plan: free
+    region: oregon
+    healthCheckPath: /api/system/health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: COMPUTE_STRATEGY
+        value: cloud-native
+      - key: ZERO_LAPTOP_MODE
+        value: "true"
+      - key: DATABASE_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: PEXELS_API_KEY
+        sync: false
+      - key: STORAGE_PROVIDER
+        value: r2
+      - key: S3_BUCKET_NAME
+        sync: false
+      - key: S3_ENDPOINT_URL
+        sync: false
+      - key: S3_ACCESS_KEY_ID
+        sync: false
+      - key: S3_SECRET_ACCESS_KEY
+        sync: false

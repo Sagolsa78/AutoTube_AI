@@ -259,6 +259,18 @@ async def _run_render(video_id: str, job: RenderJob):
             video.ai_used = True
             video.notes = None
 
+            # Upload to Cloudflare R2 / S3 if cloud storage is configured
+            from backend.cloud_storage import storage
+            if storage.provider in ["s3", "r2"]:
+                try:
+                    r2_key = f"videos/{video.id}.mp4"
+                    await storage.upload_file(job.output_path, r2_key)
+                    pub_url = storage.get_public_url(r2_key)
+                    video.path = pub_url or r2_key
+                    log.info(f"Video {video.id} uploaded to cloud storage ({storage.provider}): {video.path}")
+                except Exception as st_err:
+                    log.warning(f"Failed to upload video to cloud storage: {st_err}")
+
             # ── Stage 4: Metadata ─────────────────────────────────────────
             video.render_stage = "metadata"
             video.render_progress = 80

@@ -48,6 +48,19 @@ class WorkerRegistry:
     """
     def __init__(self):
         self.workers: Dict[str, Dict[str, Any]] = {
+            "cloud_worker": {
+                "name": "Cloud Container Engine (Zero-Laptop)",
+                "capabilities": [
+                    WorkerCapability.LLM.value,
+                    WorkerCapability.TTS.value,
+                    WorkerCapability.IMAGE.value,
+                    WorkerCapability.VIDEO.value,
+                    WorkerCapability.RENDER.value,
+                    WorkerCapability.ALIGNMENT.value,
+                ],
+                "status": WorkerStatus.AVAILABLE.value,
+                "last_heartbeat": time.time(),
+            },
             "local_pc": {
                 "name": "Local RTX 3050",
                 "capabilities": [
@@ -74,6 +87,7 @@ class WorkerRegistry:
         }
         # In-memory job queue for workers that poll
         self.job_queues: Dict[str, List[Dict[str, Any]]] = {
+            "cloud_worker": [],
             "local_pc": [],
             "runpod_serverless": []
         }
@@ -95,6 +109,8 @@ class WorkerRegistry:
         log.debug(f"[WorkerRegistry] Heartbeat from {worker_id} (status={status.value})")
 
     def is_worker_online(self, worker_id: str) -> bool:
+        if worker_id == "cloud_worker":
+            return True
         worker = self.workers.get(worker_id)
         if not worker:
             return False
@@ -173,13 +189,19 @@ async def dispatch_job(
                                     -> Over budget  -> Hold in queue for local worker
     """
     cap_str = capability.value if isinstance(capability, WorkerCapability) else capability
+    strategy = os.getenv("COMPUTE_STRATEGY", "local-first")
+    zero_laptop = os.getenv("ZERO_LAPTOP_MODE", "false").lower() in ("true", "1")
     local_online = router_registry.is_worker_online("local_pc")
 
     chosen_worker = None
     worker_type = "local"
     status = JobStatus.dispatched.value
 
-    if local_online:
+    if strategy == "cloud-native" or zero_laptop:
+        chosen_worker = "cloud_worker"
+        worker_type = "cloud_container"
+        log.info(f"[WorkerRouter] Zero-laptop mode active. Routing job {job_id} ({cap_str}) to Cloud Container Engine ($0).")
+    elif local_online:
         chosen_worker = "local_pc"
         worker_type = "local"
         log.info(f"[WorkerRouter] Routing job {job_id} ({cap_str}) to Local RTX 3050 ($0).")
@@ -235,6 +257,11 @@ async def get_compute_telemetry(db: Optional[AsyncSession] = None) -> Dict[str, 
     local_meta = router_registry.workers.get("local_pc", {})
     last_hb = local_meta.get("last_heartbeat", 0.0)
 
+    cloud_online = router_registry.is_worker_online("cloud_worker")
+    cloud_meta = router_registry.workers.get("cloud_worker", {})
+
+    strategy = os.getenv("COMPUTE_STRATEGY", "local-first")
+
     today_spent = 0.0
     budget_cap = DAILY_GPU_BUDGET_CAP
     jobs_count = 0
@@ -258,7 +285,13 @@ async def get_compute_telemetry(db: Optional[AsyncSession] = None) -> Dict[str, 
             "last_heartbeat": datetime.utcfromtimestamp(last_hb).isoformat() if last_hb > 0 else None,
             "capabilities": local_meta.get("capabilities", []),
         },
-        "strategy": "local-first",
+        "cloud_worker": {
+            "id": "cloud_worker",
+            "name": "Cloud Container Engine (Zero-Laptop)",
+            "status": "online" if cloud_online else "offline",
+            "capabilities": cloud_meta.get("capabilities", []),
+        },
+        "strategy": strategy,
         "cloud_burst": {
             "provider": "RunPod Serverless",
             "status": "ready" if runpod_configured else "unconfigured",
