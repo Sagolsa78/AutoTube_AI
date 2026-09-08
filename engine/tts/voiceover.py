@@ -85,23 +85,49 @@ async def generate_voiceover(
     Generate voiceover and capture word-boundary timing data.
     """
     # Simple language fallback map for Edge-TTS
+    # Expanded language mapping, prioritizing specific locales
     LANG_VOICES = {
+        "en-US": "en-US-GuyNeural",
+        "en-IN": "en-IN-PrabhatNeural",
+        "en-GB": "en-GB-RyanNeural",
+        "es-ES": "es-ES-AlvaroNeural",
         "es": "es-ES-AlvaroNeural",
+        "fr-FR": "fr-FR-HenriNeural",
         "fr": "fr-FR-HenriNeural",
         "de": "de-DE-KillianNeural",
         "it": "it-IT-DiegoNeural",
         "pt": "pt-BR-AntonioNeural",
+        "hi-IN": "hi-IN-MadhurNeural",
         "hi": "hi-IN-MadhurNeural",
         "ja": "ja-JP-KeitaNeural",
         "ko": "ko-KR-InJoonNeural",
         "zh": "zh-CN-YunxiNeural",
     }
     
-    # If the user explicitly provided a voice that already matches the language, use it.
-    # Otherwise, if it's an English default voice but language is non-English, override.
+    # User selected voice or niche default
     selected_voice = voice or NICHE_VOICES.get(niche, DEFAULT_VOICE)
-    if language != "en" and selected_voice.startswith("en-"):
-        selected_voice = LANG_VOICES.get(language[:2], selected_voice)
+    
+    # Extract lang base (e.g., "en" from "en-US")
+    requested_lang_base = language.split("-")[0]
+    voice_lang_base = selected_voice.split("-")[0]
+    
+    # If the voice's language doesn't match the requested language, override it
+    # Edge-TTS cannot synthesize non-compatible language scripts (e.g., Hindi with an English voice)
+    is_default = (voice is None) or (voice == NICHE_VOICES.get(niche)) or (voice == DEFAULT_VOICE)
+    
+    if requested_lang_base != voice_lang_base:
+        fallback_voice = LANG_VOICES.get(language, LANG_VOICES.get(requested_lang_base))
+        if fallback_voice:
+            if not is_default:
+                log.warning(
+                    "Selected voice '%s' (%s) does not support requested language '%s'. "
+                    "Switching to compatible voice '%s' to avoid TTS failure.",
+                    selected_voice, voice_lang_base, language, fallback_voice
+                )
+            selected_voice = fallback_voice
+    elif language == "en-IN" and is_default:
+        # Specific override for Indian English if default is en-US
+        selected_voice = LANG_VOICES["en-IN"]
 
     log.info("Generating TTS with voice=%s for language=%s", selected_voice, language)
 

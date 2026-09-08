@@ -46,7 +46,7 @@ class ScriptOut(BaseModel):
 class ScriptUpdateIn(BaseModel):
     """Allows editing full_text or individual scene narration/visual_description."""
     full_text: str | None = None
-    scenes: list[dict] | None = None   # [{id, narration?, visual_description?, preferred_visual_mode?, generation_prompt?}]
+    scenes: list[dict] | None = None   # [{id, narration?, visual_description?, preferred_visual_mode?, generation_prompt?, visual_intent?, stock_query?}]
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -190,6 +190,10 @@ async def update_script(script_id: str, body: ScriptUpdateIn, db: AsyncSession =
                         spec_scenes[i]["preferred_visual_mode"] = patch["preferred_visual_mode"]
                     if "generation_prompt" in patch:
                         spec_scenes[i]["generation_prompt"] = patch["generation_prompt"]
+                    if "visual_intent" in patch:
+                        spec_scenes[i]["visual_intent"] = patch["visual_intent"]
+                    if "stock_query" in patch:
+                        spec_scenes[i]["stock_query"] = patch["stock_query"]
                     if "narration" in patch:
                         spec_scenes[i]["narration"] = patch["narration"]
                     break

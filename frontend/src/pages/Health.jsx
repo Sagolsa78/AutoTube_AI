@@ -1,112 +1,145 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import Icon from '../components/Icon';
-import Badge from '../components/Badge';
-
-const STATUS_CLASS = {
-  online:  'status-online',
-  offline: 'status-offline',
-  limited: 'status-limited',
-};
+import GridContainer from '../components/layout/GridContainer';
+import PageHeader from '../components/layout/PageHeader';
+import { Card, CardHeader, CardTitle, CardContent } from '../components/Card';
+import StatusBadge from '../components/StatusBadge';
+import Skeleton from '../components/Skeleton';
 
 const TYPE_GROUPS = ['LLM', 'TTS', 'Stock Footage', 'Upload'];
 
 export default function Health() {
   const [providers, setProviders] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [expanded, setExpanded] = useState(null);
 
   useEffect(() => {
+    let isMounted = true;
     (async () => {
       try {
         const data = await api.getSystemHealth();
-        setProviders(data);
+        if (isMounted) setProviders(data || []);
       } catch (e) {
         console.error(e);
+      } finally {
+        if (isMounted) setLoading(false);
       }
-      setLoading(false);
     })();
+    return () => { isMounted = false; };
   }, []);
 
-  return (
-    <div>
-      <div className="page-header">
-        <div>
-          <h1>System & Provider Health</h1>
-          <p>Monitor your AI providers, stock footage APIs, and upload services. Fallback order follows your <code className="mono" style={{ color: 'var(--accent-strong)', fontSize: '12px' }}>SCRIPT_PROVIDER_ORDER</code> env variable.</p>
-        </div>
-      </div>
-
-      {loading ? (
-        <div className="empty-state"><span className="spinner spinner-lg" /></div>
-      ) : TYPE_GROUPS.map(group => {
-        const groupProviders = providers.filter(p => p.type === group).sort((a, b) => a.priority - b.priority);
-        if (groupProviders.length === 0) return null;
-
-        return (
-          <div key={group} className="mb-4">
-            <h3 className="card-title mb-3 flex items-center gap-2">
-              {group === 'LLM' && <Icon name="sparkles" size={16} className="c-accent" />}
-              {group === 'TTS' && <Icon name="activity" size={16} className="c-blue" />}
-              {group === 'Stock Footage' && <Icon name="video" size={16} className="c-green" />}
-              {group === 'Upload' && <Icon name="upload" size={16} className="c-amber" />}
-              {group}
-              <span className="text-xs text-muted" style={{ fontWeight: 400 }}>
-                — {groupProviders.filter(p => p.status === 'online').length}/{groupProviders.length} online
-              </span>
-            </h3>
-            <div className="provider-grid">
-              {groupProviders.map(provider => (
-                <div
-                  key={provider.name}
-                  className="provider-card"
-                  style={{ cursor: 'pointer' }}
-                  onClick={() => setExpanded(expanded === provider.name ? null : provider.name)}
-                >
-                  <div className="provider-card-header">
-                    <div>
-                      <div className="provider-name">{provider.name}</div>
-                      <div className="provider-type">Priority #{provider.priority} · {provider.tier}</div>
-                    </div>
-                    <Badge variant="default" className={`status-badge ${STATUS_CLASS[provider.status]}`}>
-                      <span className="dot" style={{
-                        width: '6px', height: '6px', display: 'inline-block',
-                        borderRadius: '50%', boxShadow: 'none', animation: 'none',
-                        background: provider.status === 'online' ? 'var(--success)' :
-                                    provider.status === 'offline' ? 'var(--error)' : 'var(--warning)'
-                      }}></span>
-                      {provider.status}
-                    </Badge>
-                  </div>
-
-                  <div className="provider-stat">
-                    <span>Model</span>
-                    <span className="provider-stat-value">{provider.model}</span>
-                  </div>
-                  <div className="provider-stat">
-                    <span>Quota</span>
-                    <span className="provider-stat-value">{provider.quota}</span>
-                  </div>
-                  <div className="provider-stat">
-                    <span>Endpoint</span>
-                    <span className="provider-stat-value" style={{ fontSize: '11px' }}>{provider.endpoint}</span>
-                  </div>
-
-                  {expanded === provider.name && (
-                    <div style={{ marginTop: '12px', padding: '10px 12px', background: 'var(--surface-3)', borderRadius: 'var(--r-sm)', fontSize: '12px', color: 'var(--text-2)', lineHeight: '1.6' }}>
-                      {provider.note}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
+  if (loading) {
+    return (
+      <GridContainer>
+        <div className="space-y-6">
+          <Skeleton height="60px" rounded="rounded-xl" />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <Skeleton height="160px" rounded="rounded-xl" />
+            <Skeleton height="160px" rounded="rounded-xl" />
+            <Skeleton height="160px" rounded="rounded-xl" />
           </div>
-        );
-      })}
+        </div>
+      </GridContainer>
+    );
+  }
 
-      <p className="text-xs text-muted mt-4" style={{ textAlign: 'center' }}>
-        Provider status fetched live from <code className="mono" style={{ color: 'var(--accent-strong)' }}>/api/system/health</code>.
-      </p>
-    </div>
+  const onlineCount = providers.filter(p => p.status === 'online').length;
+
+  return (
+    <GridContainer>
+      <div className="space-y-8">
+        <PageHeader
+          title="System Health"
+          description="Real-time operational status, quotas, and cluster priorities of AI models and media pipelines."
+          badge={
+            <span className="text-xs font-mono font-semibold text-success bg-success/10 border border-success/30 px-2.5 py-1 rounded">
+              {onlineCount}/{providers.length} Clusters Online
+            </span>
+          }
+        />
+
+        {TYPE_GROUPS.map(group => {
+          const groupProviders = providers
+            .filter(p => p.type === group)
+            .sort((a, b) => a.priority - b.priority);
+
+          if (groupProviders.length === 0) return null;
+          
+          const groupIcons = {
+            'LLM': { icon: 'sparkles', color: 'text-brand-red' },
+            'TTS': { icon: 'mic', color: 'text-info' },
+            'Stock Footage': { icon: 'video', color: 'text-success' },
+            'Upload': { icon: 'upload', color: 'text-warning' }
+          };
+          const gIcon = groupIcons[group] || { icon: 'activity', color: 'text-brand-red' };
+
+          return (
+            <div key={group} className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 className="flex items-center gap-2 text-sm font-bold text-text-primary uppercase tracking-wider">
+                  <span className={gIcon.color}><Icon name={gIcon.icon} size={16} /></span>
+                  <span>{group} Cluster</span>
+                </h2>
+                <span className="text-xs font-mono text-text-muted">
+                  {groupProviders.filter(p => p.status === 'online').length}/{groupProviders.length} active
+                </span>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {groupProviders.map(provider => (
+                  <Card 
+                    key={provider.name} 
+                    variant="surface" 
+                    className="flex flex-col justify-between overflow-hidden relative"
+                  >
+                    {provider.status === 'offline' && (
+                      <div className="absolute top-0 left-0 bottom-0 w-1 bg-danger" />
+                    )}
+                    {provider.status === 'limited' && (
+                      <div className="absolute top-0 left-0 bottom-0 w-1 bg-warning" />
+                    )}
+
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-start gap-2">
+                        <div>
+                          <h3 className="font-bold text-sm text-text-primary tracking-tight">
+                            {provider.name}
+                          </h3>
+                          <span className="text-[10px] font-mono text-text-muted uppercase tracking-wider">
+                            Priority {provider.priority} • {provider.tier} Tier
+                          </span>
+                        </div>
+                        <StatusBadge status={provider.status} size="sm" />
+                      </div>
+
+                      <div className="space-y-1.5 pt-2 border-t border-border/70 text-xs">
+                        <div className="flex justify-between items-center">
+                          <span className="text-text-muted">Model ID</span>
+                          <span className="font-mono font-semibold text-text-primary bg-elevated px-2 py-0.5 rounded text-[11px] border border-border">
+                            {provider.model}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-text-muted">Quota Quorum</span>
+                          <span className="font-semibold text-text-secondary">
+                            {provider.quota}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {provider.note && (
+                      <div className="mt-3 pt-2.5 border-t border-border/50 text-[11px] text-text-secondary leading-relaxed font-sans">
+                        {provider.note}
+                      </div>
+                    )}
+                  </Card>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </GridContainer>
   );
 }

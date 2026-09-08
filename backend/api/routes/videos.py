@@ -436,7 +436,7 @@ async def render_video(body: RenderIn, bg: BackgroundTasks, db: AsyncSession = D
         niche=niche,
         caption_style=caption_style,
         style=body.style,
-        language=language,
+        language=story_spec.language or language,
     )
     
     if profile and profile.watermark_enabled and profile.logo_path:
@@ -479,8 +479,27 @@ async def update_video(video_id: str, body: VideoUpdateIn, db: AsyncSession = De
 @router.get("/{video_id}/preview")
 async def preview_video(video_id: str, db: AsyncSession = Depends(get_db)):
     v = await db.get(Video, video_id)
-    if not v or not v.path or not os.path.exists(v.path):
+    if not v or not v.path:
         raise HTTPException(404, "Video file not found")
+    
+    # 1. If path is an HTTP(S) remote URL (e.g. R2 public CDN)
+    if v.path.startswith("http://") or v.path.startswith("https://"):
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url=v.path, status_code=307)
+        
+    # 2. If storage provider is S3/R2 and file is a remote object key
+    if not os.path.exists(v.path):
+        from backend.cloud_storage import storage
+        if storage.provider in ["s3", "r2"]:
+            try:
+                signed_url = await storage.get_signed_url(v.path)
+                from fastapi.responses import RedirectResponse
+                return RedirectResponse(url=signed_url, status_code=307)
+            except Exception as e:
+                log.error(f"Failed to generate presigned URL for {v.path}: {e}")
+        raise HTTPException(404, f"Video file not found: {v.path}")
+        
+    # 3. Local filesystem fallback
     return FileResponse(v.path, media_type="video/mp4")
 
 

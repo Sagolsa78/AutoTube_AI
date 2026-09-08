@@ -259,3 +259,53 @@ class AnalyticsSnapshot(Base):
     tenant_id   = Column(String, index=True, default=DEFAULT_PROFILE_ID)
 
     video = relationship("Video")
+
+
+# ── Compute Plane / Job Models ────────────────────────────────────────────────
+
+class JobStatus(str, enum.Enum):
+    queued                   = "queued"
+    dispatched               = "dispatched"
+    running                  = "running"
+    completed                = "completed"
+    failed                   = "failed"
+    cancelled                = "cancelled"
+    waiting_for_local_worker = "waiting_for_local_worker"
+
+
+class Job(Base):
+    """
+    Asynchronous compute job dispatched to local RTX 3050 or Cloud RunPod GPU.
+    PostgreSQL is the single source of truth for job lifecycle.
+    """
+    __tablename__ = "jobs"
+
+    id            = Column(String, primary_key=True, default=_uuid)
+    capability    = Column(String, nullable=False, index=True) # LLM, TTS, IMAGE, VIDEO, RENDER, ALIGNMENT
+    status        = Column(String, default="queued", index=True)
+    payload       = Column(JSON, default=dict)
+    result        = Column(JSON, default=dict)
+    worker_id     = Column(String, nullable=True) # e.g. "local_pc", "runpod_serverless"
+    worker_type   = Column(String, default="local") # local | cloud_gpu | cpu
+    cost_usd      = Column(Float, default=0.0)
+    error_message = Column(Text, nullable=True)
+    created_at    = Column(DateTime, default=datetime.utcnow)
+    started_at    = Column(DateTime, nullable=True)
+    completed_at  = Column(DateTime, nullable=True)
+    tenant_id     = Column(String, index=True, default=DEFAULT_PROFILE_ID)
+
+
+class DailyComputeSpend(Base):
+    """
+    Tracks daily cloud GPU burst spend against the daily budget cap.
+    Guarantees $0-by-default operation without runaway cloud costs.
+    """
+    __tablename__ = "daily_compute_spend"
+
+    id               = Column(String, primary_key=True, default=_uuid)
+    date             = Column(String, index=True, unique=True) # YYYY-MM-DD
+    amount_spent_usd = Column(Float, default=0.0)
+    budget_cap_usd   = Column(Float, default=2.0)
+    jobs_count       = Column(Integer, default=0)
+    created_at       = Column(DateTime, default=datetime.utcnow)
+    updated_at       = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
