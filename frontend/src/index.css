@@ -23,8 +23,10 @@
   --color-danger: #E5484D;
   --color-info: #5C8FE8;
 
-  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-mono: 'Geist Mono', 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
+  --font-sans: 'Manrope', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-ui: 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Geist Mono', ui-monospace, 'SF Mono', monospace;
 
   --shadow-brand-glow: 0 0 24px rgba(230, 57, 47, 0.25);
   --shadow-card-subtle: 0 2px 12px rgba(0, 0, 0, 0.4);
@@ -72,8 +74,10 @@
   --text-muted:     #737984;
 
   /* Typography Fonts */
-  --font-sans:      'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-mono:      'Geist Mono', 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
+  --font-sans:      'Manrope', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-display:   'Fraunces', Georgia, serif;
+  --font-ui:        'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono:      'JetBrains Mono', 'Geist Mono', ui-monospace, 'SF Mono', monospace;
 
   /* Layout Dimensions */
   --sidebar-w:      240px;
