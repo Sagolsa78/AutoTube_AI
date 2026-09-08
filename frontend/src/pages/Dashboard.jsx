@@ -1,7 +1,15 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api';
 import Icon from '../components/Icon';
+import GridContainer from '../components/layout/GridContainer';
+import PageHeader from '../components/layout/PageHeader';
+import { Card, CardHeader, CardTitle, CardContent } from '../components/Card';
+import StatusBadge from '../components/StatusBadge';
+import Button from '../components/Button';
+import Metric from '../components/Metric';
+import EmptyState from '../components/EmptyState';
+import Skeleton from '../components/Skeleton';
 
 export default function Dashboard() {
   const [stats, setStats] = useState({
@@ -9,218 +17,482 @@ export default function Dashboard() {
     scripts: 0, approvedScripts: 0,
     rendering: 0, ready: 0, uploaded: 0,
   });
+  const [recentVideos, setRecentVideos] = useState([]);
   const [profile, setProfile] = useState(null);
   const [analytics, setAnalytics] = useState(null);
+  const [computeTelemetry, setComputeTelemetry] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let isMounted = true;
     (async () => {
       try {
-        const [ideas, scripts, videos, prof, dashAnalytics] = await Promise.all([
+        const [ideas, scripts, videos, prof, dashAnalytics, compute] = await Promise.all([
           api.getIdeas(), api.getScripts(), api.getVideos(), api.getProfile(), api.getDashboardAnalytics(),
+          api.getComputeTelemetry().catch(() => null),
         ]);
-        const pendingIdeas   = ideas.filter(i => i.status === 'pending').length;
-        const approvedScripts = scripts.filter(s => s.status === 'approved' || s.status === 'pending').length;
-        const rendering = videos.filter(v => v.status === 'rendering').length;
-        const ready     = videos.filter(v => ['ready', 'approved'].includes(v.status)).length;
-        const uploaded  = videos.filter(v => v.status === 'uploaded').length;
+        if (!isMounted) return;
+
+        const pendingIdeas = (ideas || []).filter(i => i.status === 'pending').length;
+        const approvedScripts = (scripts || []).filter(s => s.status === 'approved' || s.status === 'draft').length;
+        const rendering = (videos || []).filter(v => v.status === 'rendering').length;
+        const ready = (videos || []).filter(v => ['ready', 'approved'].includes(v.status)).length;
+        const uploaded = (videos || []).filter(v => v.status === 'uploaded').length;
+
         setStats({
-          ideas: ideas.length, pendingIdeas,
-          scripts: scripts.length, approvedScripts,
+          ideas: (ideas || []).length, pendingIdeas,
+          scripts: (scripts || []).length, approvedScripts,
           rendering, ready, uploaded,
         });
+        setRecentVideos((videos || []).slice(0, 4));
         setProfile(prof);
         setAnalytics(dashAnalytics);
-      } catch (e) { console.error(e); }
-      setLoading(false);
+        setComputeTelemetry(compute);
+      } catch (e) {
+        console.error('Failed to load dashboard data', e);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
     })();
+    return () => { isMounted = false; };
   }, []);
 
   const totalReview = stats.pendingIdeas + stats.approvedScripts + stats.ready;
+  const readyVideos = recentVideos.filter(v => ['ready', 'approved'].includes(v.status));
+  const renderingVideos = recentVideos.filter(v => v.status === 'rendering');
+
+  if (loading) {
+    return (
+      <GridContainer>
+        <div className="space-y-6 animate-pulse">
+          <div className="h-16 bg-surface border border-border rounded-xl w-full" />
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <div className="lg:col-span-8 space-y-6">
+              <Skeleton height="180px" rounded="rounded-xl" />
+              <Skeleton height="240px" rounded="rounded-xl" />
+            </div>
+            <div className="lg:col-span-4 space-y-6">
+              <Skeleton height="140px" rounded="rounded-xl" />
+              <Skeleton height="140px" rounded="rounded-xl" />
+              <Skeleton height="140px" rounded="rounded-xl" />
+            </div>
+          </div>
+        </div>
+      </GridContainer>
+    );
+  }
+
+  const creatorName = profile?.display_name || profile?.channel_name || 'Creator';
 
   return (
-    <div className="dashboard-page">
-      <div className="page-header">
-        <div>
-          <h1>{profile ? `Welcome, ${profile.display_name}` : 'Dashboard'}</h1>
-          <p>Your content production pipeline at a glance.</p>
-        </div>
-        <Link to="/app/create" className="btn btn-primary"><Icon name="plus" size={14} /> Create Short</Link>
-      </div>
-
-      {/* ── Production Pipeline ────────────────────────────────────────── */}
-      <div className="pipeline-container">
-        <h3 className="card-title mb-4">Production Pipeline</h3>
-        <div className="pipeline-rail">
-
-          <div className="pipeline-step">
-            <div className="pipeline-node bg-surface-3">
-              <span className="pipeline-count mono c-text-1">{stats.ideas}</span>
-            </div>
-            <div className="pipeline-label">Ideas</div>
-          </div>
-
-          <div className="pipeline-line"></div>
-
-          <div className="pipeline-step">
-            <div className="pipeline-node bg-surface-3">
-              <span className="pipeline-count mono c-info">{stats.scripts}</span>
-            </div>
-            <div className="pipeline-label">Scripts</div>
-          </div>
-
-          <div className="pipeline-line"></div>
-
-          <div className="pipeline-step">
-            <div className={`pipeline-node ${stats.rendering > 0 ? 'node-rendering' : 'bg-surface-3'}`}>
-              <span className="pipeline-count mono c-warning">{stats.rendering}</span>
-            </div>
-            <div className="pipeline-label">Rendering</div>
-          </div>
-
-          <div className="pipeline-line"></div>
-
-          <div className="pipeline-step">
-            <div className="pipeline-node bg-surface-3">
-              <span className="pipeline-count mono c-success">{stats.ready}</span>
-            </div>
-            <div className="pipeline-label">Ready</div>
-          </div>
-
-          <div className="pipeline-line"></div>
-
-          <div className="pipeline-step">
-            <div className="pipeline-node bg-surface-3">
-              <span className="pipeline-count mono c-text-1">{stats.uploaded}</span>
-            </div>
-            <div className="pipeline-label">Uploaded</div>
-          </div>
-
-        </div>
-      </div>
-
-      {/* ── Dashboard Widgets Grid ─────────────────────────────────────── */}
-      <div className="grid-2 mt-4">
-
-        {/* ── Unified Action Queue ──────────────────────────────────────── */}
-        <div className="card" style={{ padding: '20px' }}>
-          <div className="card-header mb-3">
-            <h3 className="card-title flex items-center gap-2">
-              <Icon name="clock" size={16} className="c-accent" /> Needs Your Review
-            </h3>
-            {totalReview > 0 && (
-              <span className="badge badge-pending">{totalReview} items</span>
-            )}
-          </div>
-          <div className="flex-col gap-2">
-            <Link to="/app/ideas" className="nav-item" style={{ background: 'var(--surface-3)', border: '1px solid var(--border-1)', padding: '12px 16px', borderRadius: 'var(--r-sm)' }}>
-              <div className="flex justify-between items-center w-full">
-                <span className="flex items-center gap-2"><Icon name="layers" size={16} className="text-muted" /> Ideas Pending Approval</span>
-                <span className={`badge ${stats.pendingIdeas > 0 ? 'badge-pending' : 'badge-approved'}`}>
-                  {stats.pendingIdeas} {stats.pendingIdeas === 1 ? 'Idea' : 'Ideas'}
-                </span>
-              </div>
-            </Link>
-            <Link to="/app/scripts" className="nav-item" style={{ background: 'var(--surface-3)', border: '1px solid var(--border-1)', padding: '12px 16px', borderRadius: 'var(--r-sm)' }}>
-              <div className="flex justify-between items-center w-full">
-                <span className="flex items-center gap-2"><Icon name="fileText" size={16} className="text-muted" /> Scripts Ready to Generate</span>
-                <span className={`badge ${stats.approvedScripts > 0 ? 'badge-scripted' : 'badge-approved'}`}>
-                  {stats.approvedScripts} {stats.approvedScripts === 1 ? 'Script' : 'Scripts'}
-                </span>
-              </div>
-            </Link>
-            <Link to="/app/videos" className="nav-item" style={{ background: 'var(--surface-3)', border: '1px solid var(--border-1)', padding: '12px 16px', borderRadius: 'var(--r-sm)' }}>
-              <div className="flex justify-between items-center w-full">
-                <span className="flex items-center gap-2"><Icon name="video" size={16} className="text-muted" /> Videos Ready for Upload</span>
-                <span className={`badge ${stats.ready > 0 ? 'badge-ready' : 'badge-approved'}`}>
-                  {stats.ready} {stats.ready === 1 ? 'Video' : 'Videos'}
-                </span>
-              </div>
-            </Link>
-          </div>
-        </div>
-
-        {/* ── System & Providers Column ─────────────────────────────────── */}
-        <div className="flex-col gap-3">
-          {/* Provider Status Strip */}
-          <div className="card" style={{ padding: '16px 20px' }}>
-            <div className="card-header mb-3">
-              <h3 className="card-title flex items-center gap-2"><Icon name="server" size={16} className="c-blue" /> Active Providers</h3>
-              <Link to="/app/health" className="btn btn-sm btn-secondary" style={{ fontSize: '11px', padding: '3px 10px' }}>Details</Link>
-            </div>
-            <div className="flex-col gap-2">
-              <div className="flex justify-between items-center" style={{ fontSize: '13px', background: 'var(--surface-3)', padding: '10px 14px', borderRadius: 'var(--r-sm)', border: '1px solid var(--border-1)' }}>
-                <div className="flex items-center gap-2"><span className="dot"></span> Ollama (LLM Primary)</div>
-                <span className="text-xs text-muted">Local — Unlimited</span>
-              </div>
-              <div className="flex justify-between items-center" style={{ fontSize: '13px', background: 'var(--surface-3)', padding: '10px 14px', borderRadius: 'var(--r-sm)', border: '1px solid var(--border-1)' }}>
-                <div className="flex items-center gap-2"><span className="dot"></span> Edge-TTS</div>
-                <span className="text-xs text-muted">Unlimited</span>
-              </div>
-              <div className="flex justify-between items-center" style={{ fontSize: '13px', background: 'var(--surface-3)', padding: '10px 14px', borderRadius: 'var(--r-sm)', border: '1px solid var(--border-1)' }}>
-                <div className="flex items-center gap-2"><span className="dot"></span> Pexels (Footage)</div>
-                <span className="text-xs text-muted">Free Tier</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Storage / Disk Widget */}
-          <div className="card" style={{ padding: '16px 20px' }}>
-            <div className="card-header mb-3">
-              <h3 className="card-title flex items-center gap-2"><Icon name="hardDrive" size={16} className="c-warning" /> Storage Usage</h3>
-              <Link to="/app/analytics" className="btn btn-sm btn-secondary" style={{ fontSize: '11px', padding: '3px 10px' }}>View Telemetry</Link>
-            </div>
-            <div className="flex justify-between items-center mb-2">
-              <span style={{ fontSize: '13px', color: 'var(--text-1)' }}>Temp & Renders</span>
-              <span style={{ fontSize: '14px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--warning)' }}>
-                {analytics?.storage?.total_mb || 0} MB
+    <GridContainer>
+      <div className="space-y-6">
+        {/* Page Header: Secondary CTA 'Review Best' per Section 3.4 & 10 */}
+        <PageHeader
+          title="Command Center"
+          description={`Welcome back, ${creatorName}. Here's your production pipeline status and telemetry.`}
+          badge={
+            totalReview > 0 ? (
+              <span className="badge badge-pending">
+                {totalReview} action{totalReview > 1 ? 's' : ''} required
               </span>
-            </div>
-            <div className="progress-bar-track">
-              <div
-                className="progress-bar-fill"
-                style={{
-                  background: 'var(--warning)',
-                  width: `${Math.min(100, ((analytics?.storage?.total_mb || 0) / (analytics?.storage?.limit_mb || 50000)) * 100)}%`
-                }}
+            ) : (
+              <span className="badge badge-ready">
+                All caught up
+              </span>
+            )
+          }
+          actions={
+            <Link to="/app/best">
+              <Button variant="secondary" icon="star" size="sm">
+                Review Best
+              </Button>
+            </Link>
+          }
+        />
+
+        {/* Responsive Two-Column Fluid Grid (65% / 35%) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          
+          {/* PRIMARY COLUMN: Action Queue & Active Jobs (~65%) */}
+          <div className="lg:col-span-8 space-y-6 w-full">
+            
+            {/* Action Required Section */}
+            {totalReview > 0 ? (
+              <Card variant="surface" className="border-border">
+                <CardHeader
+                  title={
+                    <CardTitle icon={<Icon name="alert-triangle" className="text-warning" size={18} />}>
+                      Action Required
+                    </CardTitle>
+                  }
+                  action={
+                    <span className="text-xs font-mono font-semibold text-text-secondary bg-elevated px-2 py-0.5 rounded border border-border">
+                      {totalReview} Queue Item{totalReview > 1 ? 's' : ''}
+                    </span>
+                  }
+                />
+
+                <CardContent className="space-y-3">
+                  {/* Ready for Publish / Review */}
+                  {readyVideos.length > 0 && (
+                    <div className="bg-elevated/70 border border-border rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-border-strong transition-colors">
+                      <div className="flex items-start sm:items-center gap-3 min-w-0">
+                        <div className="w-10 h-14 bg-canvas rounded-lg border border-border flex items-center justify-center shrink-0 text-brand-red">
+                          <Icon name="video" size={20} />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <StatusBadge status="ready" size="sm" />
+                            <span className="text-xs text-text-muted font-mono truncate">
+                              ID: {readyVideos[0].id?.substring(0, 8)}
+                            </span>
+                          </div>
+                          <h4 className="text-sm font-bold text-text-primary truncate">
+                            {readyVideos[0].selected_title || readyVideos[0].title || 'Rendered Short Ready'}
+                          </h4>
+                          <p className="text-xs text-text-secondary">
+                            Final video rendered and awaiting publication approval.
+                          </p>
+                        </div>
+                      </div>
+                      <Link to="/app/videos" className="shrink-0">
+                        <Button variant="primary" size="sm" icon="play">
+                          Review Video
+                        </Button>
+                      </Link>
+                    </div>
+                  )}
+
+                  {/* Pending Ideas */}
+                  {stats.pendingIdeas > 0 && (
+                    <div className="bg-elevated/70 border border-border rounded-xl p-4 flex items-center justify-between gap-4 hover:border-border-strong transition-colors">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-10 h-10 bg-canvas rounded-lg border border-border flex items-center justify-center shrink-0 text-warning">
+                          <Icon name="lightbulb" size={18} />
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className="text-sm font-bold text-text-primary">
+                            {stats.pendingIdeas} Idea{stats.pendingIdeas > 1 ? 's' : ''} Pending Curation
+                          </h4>
+                          <p className="text-xs text-text-secondary truncate">
+                            Review generated concepts and promote promising angles to script.
+                          </p>
+                        </div>
+                      </div>
+                      <Link to="/app/ideas" className="shrink-0">
+                        <Button variant="secondary" size="sm" icon="arrow-right" iconPosition="right">
+                          View Ideas
+                        </Button>
+                      </Link>
+                    </div>
+                  )}
+
+                  {/* Scripts Ready for Storyboard / Studio */}
+                  {stats.approvedScripts > 0 && (
+                    <div className="bg-elevated/70 border border-border rounded-xl p-4 flex items-center justify-between gap-4 hover:border-border-strong transition-colors">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-10 h-10 bg-canvas rounded-lg border border-border flex items-center justify-center shrink-0 text-info">
+                          <Icon name="fileText" size={18} />
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className="text-sm font-bold text-text-primary">
+                            {stats.approvedScripts} Script{stats.approvedScripts > 1 ? 's' : ''} Ready to Storyboard
+                          </h4>
+                          <p className="text-xs text-text-secondary truncate">
+                            Scripts with scene directions waiting for visual curation and rendering.
+                          </p>
+                        </div>
+                      </div>
+                      <Link to="/app/scripts" className="shrink-0">
+                        <Button variant="secondary" size="sm" icon="arrow-right" iconPosition="right">
+                          Open Scripts
+                        </Button>
+                      </Link>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            ) : (
+              /* Content-sized Empty State (Section 3.3) */
+              <EmptyState
+                icon="check"
+                title="Pipeline Queue Clear"
+                description="All pending videos, scripts, and concepts have been processed. Start a new idea to populate the review queue."
+                action={
+                  <Link to="/app/ideas">
+                    <Button variant="secondary" size="sm" icon="lightbulb">
+                      Explore Ideas
+                    </Button>
+                  </Link>
+                }
+                secondary={
+                  <div className="flex items-center justify-between text-xs font-mono">
+                    <span className="text-text-muted">Active Pipeline:</span>
+                    <span className="text-success font-semibold">0 Waiting / Optimal</span>
+                  </div>
+                }
               />
-            </div>
-            <p className="text-xs text-muted mt-2">
-              Output: {analytics?.storage?.output_mb || 0} MB | Temp: {analytics?.storage?.temp_mb || 0} MB
-            </p>
-          </div>
-        </div>
+            )}
 
-        {/* ── Path to Monetization (YPP) ────────────────────────────────── */}
-        <div className="card" style={{ padding: '20px', gridColumn: '1 / -1' }}>
-          <div className="card-header mb-4">
-            <h3 className="card-title flex items-center gap-2"><Icon name="youtube" size={16} className="c-accent" /> Path to Monetization (YPP)</h3>
-            <span className="text-xs text-muted">Goal: Feb 2027</span>
-          </div>
-          <div className="grid-2 gap-4">
-            <div>
-              <div className="flex justify-between text-sm mb-2">
-                <span className="font-bold">Subscribers</span>
-                <span className="text-muted mono">{analytics?.subscribers || 0} / {analytics?.ypp_sub_goal ? analytics.ypp_sub_goal.toLocaleString() : '1,000'}</span>
-              </div>
-              <div className="progress-bar-track">
-                <div className="progress-bar-fill" style={{ width: `${Math.min(100, ((analytics?.subscribers || 0) / (analytics?.ypp_sub_goal || 1000)) * 100)}%` }}></div>
-              </div>
-            </div>
-            <div>
-              <div className="flex justify-between text-sm mb-2">
-                <span className="font-bold">Shorts Views (90 Days)</span>
-                <span className="text-muted mono">{analytics?.shorts_views_90d || 0} / {analytics?.ypp_view_goal ? (analytics.ypp_view_goal / 1000000) + 'M' : '10M'}</span>
-              </div>
-              <div className="progress-bar-track">
-                <div className="progress-bar-fill" style={{ width: `${Math.min(100, ((analytics?.shorts_views_90d || 0) / (analytics?.ypp_view_goal || 10000000)) * 100)}%` }}></div>
-              </div>
-            </div>
-          </div>
-          <p className="text-xs text-muted mt-3">YPP progress will auto-populate once YouTube Analytics data flows in.</p>
-        </div>
+            {/* Active Rendering Jobs */}
+            {renderingVideos.length > 0 && (
+              <Card variant="surface" className="border-warning/30">
+                <CardHeader
+                  title={
+                    <CardTitle icon={<Icon name="loader" className="animate-spin text-warning" size={18} />}>
+                      Rendering in Progress
+                    </CardTitle>
+                  }
+                  action={
+                    <span className="badge badge-rendering">
+                      {renderingVideos.length} Rendering
+                    </span>
+                  }
+                />
+                <CardContent className="space-y-3">
+                  {renderingVideos.map(v => (
+                    <div key={v.id} className="bg-elevated p-4 rounded-xl border border-border space-y-3">
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="font-bold text-text-primary truncate pr-4">
+                          {v.title || `Rendering Job #${v.id.substring(0, 8)}`}
+                        </span>
+                        <span className="font-mono text-warning font-semibold">
+                          {Math.round(v.render_progress || 0)}%
+                        </span>
+                      </div>
+                      <div className="w-full bg-canvas rounded-full h-1.5 overflow-hidden">
+                        <div 
+                          className="bg-warning h-full rounded-full transition-all duration-300"
+                          style={{ width: `${Math.max(5, Math.min(100, v.render_progress || 25))}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
 
+            {/* Quick Production Pipeline Summary */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="bg-surface border border-border rounded-xl p-3.5 flex flex-col">
+                <span className="text-[11px] font-semibold text-text-muted uppercase tracking-wider">Concepts</span>
+                <span className="text-xl font-bold font-mono text-text-primary mt-1">{stats.ideas}</span>
+                <span className="text-[10px] text-text-secondary mt-0.5">{stats.pendingIdeas} pending</span>
+              </div>
+              <div className="bg-surface border border-border rounded-xl p-3.5 flex flex-col">
+                <span className="text-[11px] font-semibold text-text-muted uppercase tracking-wider">Scripts</span>
+                <span className="text-xl font-bold font-mono text-text-primary mt-1">{stats.scripts}</span>
+                <span className="text-[10px] text-text-secondary mt-0.5">{stats.approvedScripts} ready</span>
+              </div>
+              <div className="bg-surface border border-border rounded-xl p-3.5 flex flex-col">
+                <span className="text-[11px] font-semibold text-text-muted uppercase tracking-wider">Videos</span>
+                <span className="text-xl font-bold font-mono text-text-primary mt-1">{stats.ready}</span>
+                <span className="text-[10px] text-text-secondary mt-0.5">{stats.rendering} rendering</span>
+              </div>
+              <div className="bg-surface border border-border rounded-xl p-3.5 flex flex-col">
+                <span className="text-[11px] font-semibold text-text-muted uppercase tracking-wider">Published</span>
+                <span className="text-xl font-bold font-mono text-success mt-1">{stats.uploaded}</span>
+                <span className="text-[10px] text-text-secondary mt-0.5">Live on YouTube</span>
+              </div>
+            </div>
+
+          </div>
+
+          {/* SECONDARY COLUMN: Telemetry Widgets (~35%) - Stretch 100% per §3.5 */}
+          <div className="lg:col-span-4 space-y-6 w-full">
+            
+            {/* Compute Plane / Worker Router Widget (§5) */}
+            <Card variant="surface" className="w-full">
+              <CardHeader
+                title={
+                  <CardTitle icon={<Icon name="cpu" size={16} className="text-brand-red" />}>
+                    Compute Plane
+                  </CardTitle>
+                }
+                action={
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-brand-red bg-brand-red/10 border border-brand-red/20 px-2 py-0.5 rounded">
+                    {computeTelemetry?.strategy || 'Local-First ($0)'}
+                  </span>
+                }
+              />
+              <CardContent className="space-y-3">
+                <div className="flex items-center justify-between p-2.5 rounded-lg bg-elevated border border-border/80 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className={`w-2 h-2 rounded-full ${computeTelemetry?.local_worker?.status === 'online' ? 'bg-success shadow-[0_0_6px_#32C48D]' : 'bg-text-muted'}`} />
+                    <span className="font-medium text-text-primary">
+                      {computeTelemetry?.local_worker?.name || 'Local RTX 3050'}
+                    </span>
+                  </div>
+                  <span className={`text-[11px] font-mono font-semibold uppercase ${computeTelemetry?.local_worker?.status === 'online' ? 'text-success' : 'text-text-muted'}`}>
+                    {computeTelemetry?.local_worker?.status === 'online' ? 'Online' : 'Offline'}
+                  </span>
+                </div>
+
+                {/* Cloud Burst Spend Tracker */}
+                <div className="space-y-1.5 pt-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-text-secondary">Today's Cloud Burst Spend</span>
+                    <span className="font-mono font-bold text-text-primary">
+                      ${computeTelemetry?.cloud_burst?.today_spent_usd !== undefined ? computeTelemetry.cloud_burst.today_spent_usd.toFixed(2) : '0.00'}
+                      <span className="text-text-muted font-normal"> / ${computeTelemetry?.cloud_burst?.daily_budget_usd !== undefined ? computeTelemetry.cloud_burst.daily_budget_usd.toFixed(2) : '2.00'} cap</span>
+                    </span>
+                  </div>
+                  <div className="w-full bg-elevated rounded-full h-1.5 overflow-hidden border border-border/60">
+                    <div 
+                      className="bg-brand-red h-full rounded-full transition-all duration-500"
+                      style={{ 
+                        width: `${Math.min(100, (((computeTelemetry?.cloud_burst?.today_spent_usd || 0) / (computeTelemetry?.cloud_burst?.daily_budget_usd || 2.0)) * 100))}%` 
+                      }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-[10px] text-text-muted pt-0.5">
+                    <span>Burst Target: {computeTelemetry?.cloud_burst?.provider || 'RunPod Serverless'}</span>
+                    <span>${computeTelemetry?.cloud_burst?.budget_remaining_usd !== undefined ? computeTelemetry.cloud_burst.budget_remaining_usd.toFixed(2) : '2.00'} left</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Performance Widget */}
+            <Card variant="surface" className="w-full">
+              <CardHeader
+                title={
+                  <CardTitle icon={<Icon name="barChart" size={16} className="text-brand-red" />}>
+                    Performance
+                  </CardTitle>
+                }
+                action={
+                  <Link to="/app/analytics" className="text-xs text-brand-red hover:text-brand-red-hover font-semibold transition-colors">
+                    View All →
+                  </Link>
+                }
+              />
+              <CardContent className="space-y-4">
+                <div>
+                  <div className="flex justify-between items-center text-xs mb-1.5">
+                    <span className="text-text-secondary">Subscribers</span>
+                    <span className="font-mono font-bold text-text-primary">
+                      {analytics?.subscribers || analytics?.performance?.total_subs || 0}
+                    </span>
+                  </div>
+                  <div className="w-full bg-elevated rounded-full h-2 overflow-hidden">
+                    <div 
+                      className="bg-success h-full rounded-full transition-all duration-500"
+                      style={{ 
+                        width: `${Math.min(100, (((analytics?.subscribers || analytics?.performance?.total_subs || 0) / 1000) * 100))}%` 
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex justify-between items-center text-xs mb-1.5">
+                    <span className="text-text-secondary">Shorts Views (90D)</span>
+                    <span className="font-mono font-bold text-text-primary">
+                      {analytics?.shorts_views_90d || analytics?.performance?.total_views || 0}
+                    </span>
+                  </div>
+                  <div className="w-full bg-elevated rounded-full h-2 overflow-hidden">
+                    <div 
+                      className="bg-info h-full rounded-full transition-all duration-500"
+                      style={{ 
+                        width: `${Math.min(100, (((analytics?.shorts_views_90d || analytics?.performance?.total_views || 0) / 10000000) * 100))}%` 
+                      }}
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Storage Telemetry Widget */}
+            <Card variant="surface" className="w-full">
+              <CardHeader
+                title={
+                  <CardTitle icon={<Icon name="hardDrive" size={16} className="text-warning" />}>
+                    Engine Storage
+                  </CardTitle>
+                }
+                action={
+                  <span className="text-xs font-mono text-text-muted">
+                    {analytics?.storage?.limit_mb ? `${Math.round(analytics.storage.limit_mb / 1000)}GB Limit` : '50GB'}
+                  </span>
+                }
+              />
+              <CardContent className="space-y-3">
+                <div className="flex items-baseline justify-between">
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-2xl font-bold font-mono text-text-primary tracking-tight">
+                      {analytics?.storage?.total_mb || 0}
+                    </span>
+                    <span className="text-xs text-text-muted font-sans font-medium">MB used</span>
+                  </div>
+                  <span className="text-xs font-mono text-text-secondary">
+                    {Math.round(((analytics?.storage?.total_mb || 0) / (analytics?.storage?.limit_mb || 50000)) * 100)}%
+                  </span>
+                </div>
+
+                <div className="w-full bg-elevated rounded-full h-2 overflow-hidden">
+                  <div 
+                    className="bg-brand-red h-full rounded-full transition-all duration-500"
+                    style={{ 
+                      width: `${Math.min(100, (((analytics?.storage?.total_mb || 0) / (analytics?.storage?.limit_mb || 50000)) * 100))}%` 
+                    }}
+                  />
+                </div>
+
+                <div className="flex justify-between items-center text-[11px] text-text-muted pt-2 border-t border-border/60">
+                  <span>Output: <strong className="font-mono text-text-secondary">{analytics?.storage?.output_mb || 0} MB</strong></span>
+                  <span>Temp: <strong className="font-mono text-text-secondary">{analytics?.storage?.temp_mb || 0} MB</strong></span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* AI Providers Status Widget */}
+            <Card variant="surface" className="w-full">
+              <CardHeader
+                title={
+                  <CardTitle icon={<Icon name="activity" size={16} className="text-success" />}>
+                    AI Providers
+                  </CardTitle>
+                }
+                action={
+                  <Link to="/app/health" className="text-xs text-text-muted hover:text-text-primary transition-colors">
+                    Health →
+                  </Link>
+                }
+              />
+              <CardContent className="space-y-2">
+                <div className="flex items-center justify-between p-2.5 rounded-lg bg-elevated border border-border/80 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-success shadow-[0_0_6px_#32C48D]" />
+                    <span className="font-medium text-text-primary">Ollama (LLM)</span>
+                  </div>
+                  <span className="text-[11px] font-mono text-text-muted uppercase">Local Cluster</span>
+                </div>
+
+                <div className="flex items-center justify-between p-2.5 rounded-lg bg-elevated border border-border/80 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-success shadow-[0_0_6px_#32C48D]" />
+                    <span className="font-medium text-text-primary">Edge-TTS (Voice)</span>
+                  </div>
+                  <span className="text-[11px] font-mono text-text-muted uppercase">High Speed</span>
+                </div>
+
+                <div className="flex items-center justify-between p-2.5 rounded-lg bg-elevated border border-border/80 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-success shadow-[0_0_6px_#32C48D]" />
+                    <span className="font-medium text-text-primary">Stock Media</span>
+                  </div>
+                  <span className="text-[11px] font-mono text-text-muted uppercase">Pexels/Pixabay</span>
+                </div>
+              </CardContent>
+            </Card>
+
+          </div>
+
+        </div>
       </div>
-    </div>
+    </GridContainer>
   );
 }

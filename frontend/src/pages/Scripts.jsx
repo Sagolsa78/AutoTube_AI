@@ -1,24 +1,33 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import Icon from '../components/Icon';
+import GridContainer from '../components/layout/GridContainer';
+import PageHeader from '../components/layout/PageHeader';
+import FilterBar from '../components/FilterBar';
+import { Card, CardHeader, CardTitle, CardContent } from '../components/Card';
+import Button from '../components/Button';
+import ScoreBadge from '../components/ScoreBadge';
+import EmptyState from '../components/EmptyState';
+import Skeleton from '../components/Skeleton';
 import { toast } from 'sonner';
 
 export default function Scripts() {
   const [scripts, setScripts] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('draft');
-  const [showDiscarded, setShowDiscarded] = useState(false);
   const [regenerating, setRegenerating] = useState(null);
   const navigate = useNavigate();
 
   const loadData = async () => {
-    setLoading(true);
     try {
       const allScripts = await api.getScripts();
-      setScripts(allScripts.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
+      setScripts((allScripts || []).sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
+    } catch (e) { 
+      console.error(e); 
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   useEffect(() => { loadData(); }, []);
@@ -28,8 +37,10 @@ export default function Scripts() {
     try {
       await api.discardScript(id);
       await loadData();
-      toast.success('Script discarded.');
-    } catch (e) { toast.error(`Discard failed: ${e.message}`); }
+      toast.success('Script discarded');
+    } catch (e) { 
+      toast.error(`Discard failed: ${e.message}`); 
+    }
   };
 
   const regenerateScript = async (e, id) => {
@@ -39,106 +50,208 @@ export default function Scripts() {
       await api.regenerateScript(id);
       await loadData();
       toast.success('Script regenerated successfully!');
-    } catch (e) { toast.error(`Regeneration failed: ${e.message}`); }
-    finally { setRegenerating(null); }
+    } catch (e) { 
+      toast.error(`Regeneration failed: ${e.message}`); 
+    } finally { 
+      setRegenerating(null); 
+    }
   };
-
-  const filteredScripts = scripts.filter(s => {
-    if (showDiscarded && s.status === 'discarded') return true;
-    if (activeTab === 'draft' && s.status === 'draft') return true;
-    if (activeTab === 'used' && s.status === 'used_in_render') return true;
-    return false;
-  });
 
   const openInStudio = (scriptId) => {
     navigate(`/app/create?script=${scriptId}`);
   };
 
+  const filteredScripts = scripts.filter(s => s.status === activeTab);
+  const draftCount = scripts.filter(s => s.status === 'draft').length;
+  const usedCount = scripts.filter(s => s.status === 'used_in_render').length;
+  const discardedCount = scripts.filter(s => s.status === 'discarded').length;
+
+  const tabs = [
+    { id: 'draft', label: 'Drafts', count: draftCount, icon: 'fileText' },
+    { id: 'used_in_render', label: 'Used in Render', count: usedCount, icon: 'film' },
+    { id: 'discarded', label: 'Discarded', count: discardedCount, icon: 'trash' }
+  ];
+
+  if (loading) {
+    return (
+      <GridContainer>
+        <div className="space-y-6">
+          <Skeleton height="60px" rounded="rounded-xl" />
+          <div className="space-y-4">
+            <Skeleton height="200px" rounded="rounded-xl" />
+            <Skeleton height="200px" rounded="rounded-xl" />
+          </div>
+        </div>
+      </GridContainer>
+    );
+  }
+
   return (
-    <div>
-      <div className="page-header">
-        <div>
-          <h1>Scripts</h1>
-          <p>Browse generated scripts. Use <strong>Create Short</strong> for the full production workflow.</p>
-        </div>
-      </div>
+    <GridContainer>
+      <div className="space-y-6">
+        <PageHeader
+          title="Script Library"
+          description="Browse AI-generated video scripts. Open any draft in Studio to curate scenes and render."
+          actions={
+            <Button
+              variant="primary"
+              size="sm"
+              icon="plus"
+              onClick={() => navigate('/app/create')}
+              className="shadow-brand-glow"
+            >
+              Draft New Script
+            </Button>
+          }
+        />
 
-      <div className="flex gap-2 mb-3" style={{ borderBottom: '1px solid var(--border-1)', paddingBottom: '10px' }}>
-        <button className={`btn btn-sm ${activeTab === 'draft' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setActiveTab('draft')}>
-          Drafts ({scripts.filter(s => s.status === 'draft').length})
-        </button>
-        <button className={`btn btn-sm ${activeTab === 'used' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setActiveTab('used')}>
-          Used ({scripts.filter(s => s.status === 'used_in_render').length})
-        </button>
-        <label className="flex items-center gap-1 ml-auto text-sm text-muted cursor-pointer">
-          <input type="checkbox" checked={showDiscarded} onChange={e => setShowDiscarded(e.target.checked)} />
-          Show Discarded ({scripts.filter(s => s.status === 'discarded').length})
-        </label>
-      </div>
+        {/* Tab Strip */}
+        <FilterBar tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
 
-      <div className="card">
-        <div className="card-header">
-          <h3 className="card-title">Generated Scripts</h3>
-        </div>
+        {/* Script Cards List */}
         {filteredScripts.length === 0 ? (
-          <p className="text-muted text-sm">No scripts found for this view.</p>
+          <EmptyState
+            icon="fileText"
+            title={`No ${activeTab} scripts`}
+            description={
+              activeTab === 'draft'
+                ? 'Generate a script from an Idea in the Studio to see it here.'
+                : activeTab === 'used_in_render'
+                ? 'Scripts that have already been rendered into videos appear here.'
+                : 'You have not discarded any scripts.'
+            }
+            action={
+              activeTab === 'draft' && (
+                <Button 
+                  variant="primary" 
+                  size="sm" 
+                  icon="sparkles" 
+                  onClick={() => navigate('/app/ideas')}
+                >
+                  Browse Concepts
+                </Button>
+              )
+            }
+          />
         ) : (
-          <div className="flex-col gap-2">
+          <div className="space-y-4">
             {filteredScripts.map(s => {
-              const isUsed = s.status === 'used_in_render';
+              const isDiscarded = s.status === 'discarded';
               return (
-                <div key={s.id} 
-                  style={{ padding: '12px 14px', background: 'var(--surface-input)', borderRadius: 'var(--r-sm)', border: '1px solid var(--border-1)', cursor: (isUsed || s.status === 'discarded') ? 'default' : 'pointer', transition: 'border-color 0.15s', opacity: s.status === 'discarded' ? 0.6 : 1 }}>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-sm" style={{ color: 'var(--text-0)' }}>
-                        {`Script #${s.id.substring(0, 8)}`}
-                      </span>
-                      <span className="badge" style={{ background: 'var(--surface-3)', color: 'var(--text-1)', fontSize: '10px' }}>{s.status}</span>
-                      {s.scenes?.length > 0 && (
-                        <span className="badge" style={{ background: 'var(--info-muted)', color: 'var(--info)', fontSize: '10px' }}>
-                          {s.scenes.length} scenes
+                <Card 
+                  key={s.id} 
+                  variant="surface" 
+                  className={`overflow-hidden p-0 flex flex-col md:flex-row transition-all ${
+                    isDiscarded ? 'opacity-60' : 'hover:border-border-strong'
+                  }`}
+                >
+                  {/* Left Column: Script Metadata & Controls */}
+                  <div className="p-5 md:w-[260px] lg:w-[280px] shrink-0 border-b md:border-b-0 md:border-r border-border bg-elevated/40 flex flex-col justify-between space-y-4">
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2">
+                        <span className="w-7 h-7 rounded-lg bg-canvas border border-border flex items-center justify-center text-brand-red shrink-0">
+                          <Icon name="fileText" size={14} />
                         </span>
-                      )}
+                        <span className="font-mono font-bold text-xs text-text-primary">
+                          #{s.id.substring(0, 8)}
+                        </span>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2">
+                        {s.scenes?.length > 0 && (
+                          <span className="bg-canvas border border-border px-2 py-0.5 rounded text-[10px] font-mono font-semibold text-text-secondary">
+                            {s.scenes.length} Scenes
+                          </span>
+                        )}
+                        {s.quality_score && (
+                          <ScoreBadge score={s.quality_score} label="QA" />
+                        )}
+                        {s.duration_est && (
+                          <span className="bg-canvas border border-border px-2 py-0.5 rounded text-[10px] font-mono text-text-muted">
+                            ~{Math.round(s.duration_est)}s
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="text-[11px] text-text-muted">
+                        Created {new Date(s.created_at).toLocaleDateString()}
+                      </div>
                     </div>
-                    <div className="flex gap-2 items-center flex-wrap justify-end">
-                      {s.status === 'draft' && (
-                        <div className="flex gap-1" onClick={e => e.stopPropagation()}>
-                          <button className="btn btn-sm btn-primary" onClick={e => { e.stopPropagation(); openInStudio(s.id); }}>
-                            <Icon name="edit" size={12} /> Open in Studio
-                          </button>
-                          <button className="btn btn-sm btn-secondary" onClick={e => regenerateScript(e, s.id)} disabled={regenerating === s.id}>
-                            {regenerating === s.id ? <span className="spinner" /> : <Icon name="refresh-cw" size={12} />}
-                          </button>
-                          <button className="btn btn-sm btn-danger" onClick={e => discardScript(e, s.id)}>
-                            <Icon name="trash" size={12} />
-                          </button>
+
+                    {s.status === 'draft' && (
+                      <div className="space-y-2 pt-3 border-t border-border/80">
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          icon="film"
+                          className="w-full shadow-brand-glow"
+                          onClick={() => openInStudio(s.id)}
+                        >
+                          Open in Studio
+                        </Button>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            icon={regenerating === s.id ? 'loader' : 'refresh-cw'}
+                            className="flex-1 text-xs"
+                            onClick={e => regenerateScript(e, s.id)}
+                            disabled={regenerating === s.id}
+                            loading={regenerating === s.id}
+                          >
+                            Regenerate
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            icon="trash"
+                            className="hover:text-danger hover:bg-danger/10"
+                            onClick={e => discardScript(e, s.id)}
+                            title="Discard script"
+                          />
                         </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Right Column: Scenes Flow & Narration Preview */}
+                  <div className="p-5 sm:p-6 flex-1 flex flex-col justify-between max-h-[320px] overflow-y-auto">
+                    <div className="space-y-3">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-text-muted block">
+                        Script Excerpt & Scenes
+                      </span>
+                      
+                      {s.scenes?.length > 0 ? (
+                        <div className="space-y-2.5">
+                          {s.scenes.slice(0, 4).map(sc => (
+                            <div key={sc.id} className="flex gap-3 items-start text-xs">
+                              <span className="font-mono font-bold text-brand-red uppercase text-[10px] shrink-0 mt-0.5">
+                                S{sc.scene_number}
+                              </span>
+                              <p className="text-text-secondary leading-relaxed line-clamp-2">
+                                {sc.narration}
+                              </p>
+                            </div>
+                          ))}
+                          {s.scenes.length > 4 && (
+                            <span className="text-[11px] font-mono text-text-muted block pt-1">
+                              + {s.scenes.length - 4} additional scene{s.scenes.length - 4 > 1 ? 's' : ''} in studio
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-text-secondary leading-relaxed whitespace-pre-wrap font-sans">
+                          {s.full_text || 'No narration content.'}
+                        </p>
                       )}
                     </div>
                   </div>
-
-                  {/* Scene-based preview */}
-                  {s.scenes?.length > 0 ? (
-                    <div className="scene-list-preview" style={{ gap: '6px' }}>
-                      {s.scenes.slice(0, 3).map((sc, i) => (
-                        <div key={sc.id} style={{ display: 'flex', gap: '8px', alignItems: 'baseline' }}>
-                          <span className="scene-number" style={{ fontSize: '9px', flexShrink: 0 }}>S{sc.scene_number}</span>
-                          <span className="text-sm text-muted" style={{ lineHeight: 1.4 }}>{sc.narration}</span>
-                        </div>
-                      ))}
-                      {s.scenes.length > 3 && (
-                        <span className="text-xs text-muted">+{s.scenes.length - 3} more scenes</span>
-                      )}
-                    </div>
-                  ) : (
-                    <p className="truncate text-sm text-muted" style={{ lineHeight: 1.4 }}>{s.full_text}</p>
-                  )}
-                </div>
-              )})}
+                </Card>
+              );
+            })}
           </div>
         )}
       </div>
-    </div>
+    </GridContainer>
   );
 }

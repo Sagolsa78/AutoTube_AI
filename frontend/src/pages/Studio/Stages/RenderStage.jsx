@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { api } from '../../../services/api';
 import Icon from '../../../components/Icon';
+import { Card, CardHeader, CardTitle, CardContent } from '../../../components/Card';
 import Button from '../../../components/Button';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -30,10 +31,12 @@ export default function RenderStage({
           toast.success('Video rendered successfully!');
         } else if (prog.status === 'failed') {
           setRendering(false);
-          setError(prog.notes || 'Unknown error');
+          setError(prog.notes || 'Unknown render error occurred');
           toast.error(`Render failed: ${prog.notes || 'Unknown error'}`);
         }
-      } catch (e) { console.error(e); }
+      } catch (e) {
+        console.error(e);
+      }
     }, 2000);
     return () => clearInterval(iv);
   }, [videoId, rendering]);
@@ -48,6 +51,7 @@ export default function RenderStage({
         script.id, selectedStyle, selectedCaption, null, selectedVoice
       );
       setVideoId(video.id);
+      toast.info('Rendering pipeline started...');
     } catch (e) {
       setRendering(false);
       setError(e.message);
@@ -55,126 +59,235 @@ export default function RenderStage({
     }
   };
 
+  // Rendering Active or Finished
   if (rendering || renderProgress) {
     if (error) {
       return (
-        <div className="create-stage">
-          <div className="render-failure" style={{ textAlign: 'center', padding: '60px 20px' }}>
-            <Icon name="alert-triangle" size={40} />
-            <h3 style={{ margin: '16px 0 8px' }}>Render Failed</h3>
-            <p className="text-muted" style={{ marginBottom: '24px' }}>{error}</p>
-            <div className="flex gap-2 justify-center">
-              <Button variant="secondary" onClick={onBack}>Edit Storyboard</Button>
-              <Button variant="primary" icon="refresh-cw" onClick={startRender}>Retry Render</Button>
-            </div>
+        <Card variant="surface" className="max-w-md mx-auto text-center p-8 space-y-6 border-danger/40">
+          <div className="w-16 h-16 bg-danger/10 text-danger rounded-2xl flex items-center justify-center mx-auto">
+            <Icon name="alert-triangle" size={32} />
           </div>
-        </div>
+          <div className="space-y-1">
+            <h3 className="text-xl font-bold text-text-primary">Render Failed</h3>
+            <p className="text-xs text-text-secondary">An issue occurred during video assembly.</p>
+          </div>
+          <div className="bg-elevated p-3 rounded-lg text-xs font-mono text-danger text-left break-words border border-border">
+            {error}
+          </div>
+          <div className="flex gap-3">
+            <Button variant="secondary" size="sm" className="flex-1" onClick={onBack}>
+              Edit Storyboard
+            </Button>
+            <Button variant="primary" size="sm" icon="refresh-cw" className="flex-1" onClick={startRender}>
+              Retry Render
+            </Button>
+          </div>
+        </Card>
       );
     }
 
     if (!rendering && (renderProgress?.status === 'ready' || renderProgress?.status === 'approved' || renderProgress?.status === 'uploaded')) {
       return (
-        <div className="create-stage">
-          <div className="render-success" style={{ textAlign: 'center', padding: '60px 20px' }}>
-            <Icon name="check-circle" size={48} style={{ color: 'var(--success)' }} />
-            <h3 style={{ margin: '16px 0 8px' }}>Video Ready!</h3>
-            <p className="text-muted" style={{ marginBottom: '24px' }}>Your Short has been rendered successfully.</p>
-            <div className="flex gap-2 justify-center">
-              <Button variant="primary" icon="video" onClick={() => navigate('/app/videos')}>
-                Review in Studio
-              </Button>
-              <Button variant="secondary" onClick={() => navigate('/app/ideas')}>
-                Create Another
-              </Button>
-            </div>
+        <Card variant="surface" className="max-w-md mx-auto text-center p-8 space-y-6 border-success/40">
+          <div className="w-16 h-16 bg-success/15 text-success rounded-2xl flex items-center justify-center mx-auto shadow-md">
+            <Icon name="check" size={36} />
           </div>
-        </div>
+          <div className="space-y-1">
+            <h3 className="text-xl font-bold text-success">Short Rendered Successfully!</h3>
+            <p className="text-xs text-text-secondary">
+              Your final 9:16 video has been generated with subtitles and audio and is ready for review.
+            </p>
+          </div>
+          <div className="space-y-3 pt-2">
+            <Button 
+              variant="primary" 
+              size="md" 
+              icon="play" 
+              className="w-full shadow-brand-glow"
+              onClick={() => navigate('/app/videos')}
+            >
+              Open in Review Queue
+            </Button>
+            <Button 
+              variant="secondary" 
+              size="sm" 
+              className="w-full"
+              onClick={() => navigate('/app/create')}
+            >
+              Produce Another Short
+            </Button>
+          </div>
+        </Card>
       );
     }
 
+    // Active Rendering Pipeline
     return (
-      <div className="create-stage">
-        <h2 className="stage-title">Rendering</h2>
-        
-        <div className="render-progress-container">
-          <div className="render-progress-visual">
-            <div className="render-progress-bar-track">
-              <div
-                className="render-progress-bar-fill"
-                style={{ width: `${renderProgress?.progress || 0}%` }}
-              />
-            </div>
-            <div className="render-progress-label">
-              {renderProgress?.stage_label || 'Queued'} — {Math.round(renderProgress?.progress || 0)}%
-            </div>
-          </div>
+      <Card variant="surface" className="max-w-lg mx-auto text-center p-8 space-y-6">
+        <div className="w-16 h-16 bg-elevated rounded-2xl flex items-center justify-center mx-auto text-brand-red border border-border shadow-inner">
+          <Icon name="loader" size={32} className="animate-spin text-brand-red" />
+        </div>
+        <div className="space-y-1">
+          <h2 className="text-xl font-bold text-text-primary tracking-tight">Rendering Video Pipeline</h2>
+          <p className="text-xs text-text-secondary">
+            Processing voiceover, synchronizing clips, burning subtitles, and muxing video...
+          </p>
+        </div>
 
-          <div className="render-stage-timeline">
-            {['tts', 'visuals', 'assembly', 'metadata', 'done'].map(s => {
-              const stageInfo = { tts: 'Voiceover', visuals: 'Visuals', assembly: 'Assembly', metadata: 'Metadata', done: 'Complete' };
-              const currentStageIdx = ['queued', 'tts', 'visuals', 'assembly', 'metadata', 'done'].indexOf(renderProgress?.render_stage || 'queued');
-              const thisIdx = ['queued', 'tts', 'visuals', 'assembly', 'metadata', 'done'].indexOf(s);
-              const isDone = thisIdx < currentStageIdx;
-              const isCurrent = thisIdx === currentStageIdx;
-              return (
-                <div key={s} className={`render-stage-step ${isDone ? 'done' : ''} ${isCurrent ? 'active' : ''}`}>
-                  <div className="render-stage-dot">
-                    {isDone ? <Icon name="check" size={12} /> : isCurrent ? <span className="spinner spinner-sm" /> : null}
-                  </div>
-                  <span>{stageInfo[s]}</span>
-                </div>
-              );
-            })}
+        {/* Progress Bar */}
+        <div className="space-y-2">
+          <div className="w-full bg-elevated rounded-full h-2.5 overflow-hidden">
+            <div 
+              className="bg-brand-red h-full rounded-full transition-all duration-500 ease-out"
+              style={{ width: `${Math.min(100, Math.max(5, renderProgress?.progress || 10))}%` }}
+            />
+          </div>
+          <div className="flex justify-between items-center text-xs font-mono">
+            <span className="text-text-muted">{renderProgress?.stage_label || 'Executing worker pipeline...'}</span>
+            <span className="text-brand-red font-bold">{Math.round(renderProgress?.progress || 10)}%</span>
           </div>
         </div>
-      </div>
+
+        {/* Stage Timeline */}
+        <div className="grid grid-cols-4 gap-2 pt-4 border-t border-border">
+          {['tts', 'visuals', 'assembly', 'metadata'].map((st) => {
+            const labels = { tts: 'Voice', visuals: 'Visuals', assembly: 'Assembly', metadata: 'Subtitles' };
+            const order = ['queued', 'tts', 'visuals', 'assembly', 'metadata', 'done'];
+            const curIdx = order.indexOf(renderProgress?.render_stage || 'queued');
+            const thisIdx = order.indexOf(st);
+            const isDone = thisIdx < curIdx;
+            const isCurrent = thisIdx === curIdx;
+
+            return (
+              <div key={st} className="flex flex-col items-center gap-1.5 text-center">
+                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                  isDone ? 'bg-success text-canvas' : isCurrent ? 'bg-warning text-canvas animate-pulse' : 'bg-elevated text-text-muted border border-border'
+                }`}>
+                  {isDone ? '✓' : ''}
+                </div>
+                <span className={`text-[10px] font-bold uppercase tracking-wider ${
+                  isDone ? 'text-success' : isCurrent ? 'text-warning font-extrabold' : 'text-text-muted'
+                }`}>
+                  {labels[st]}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </Card>
     );
   }
 
+  // Pre-render Configuration Form
   return (
-    <div className="create-stage">
-      <h2 className="stage-title">Render Settings</h2>
-      <p className="stage-desc">Configure the final visual style and voiceover for your video.</p>
-
-      <div className="render-config" style={{ background: 'var(--surface-1)', padding: '24px', borderRadius: 'var(--r-md)', border: '1px solid var(--border-1)', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-        <div className="render-config-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
-          <div className="field">
-            <label className="label text-xs">Video Style</label>
-            <select className="select" value={selectedStyle} onChange={e => setSelectedStyle(e.target.value)}>
-              <option value="fast_facts">Fast Facts</option>
-              <option value="documentary">Documentary</option>
-              <option value="cinematic">Cinematic</option>
-              <option value="minimal">Minimal</option>
-            </select>
-          </div>
-          <div className="field">
-            <label className="label text-xs">Voice</label>
-            <select className="select" value={selectedVoice} onChange={e => setSelectedVoice(e.target.value)}>
-              <option value="en-US-ChristopherNeural">Christopher (US Male)</option>
-              <option value="en-US-GuyNeural">Guy (US Male)</option>
-              <option value="en-US-EricNeural">Eric (US Male)</option>
-              <option value="en-US-JennyNeural">Jenny (US Female)</option>
-              <option value="en-US-AriaNeural">Aria (US Female)</option>
-              <option value="en-GB-SoniaNeural">Sonia (UK Female)</option>
-              <option value="en-GB-RyanNeural">Ryan (UK Male)</option>
-            </select>
-          </div>
-          <div className="field">
-            <label className="label text-xs">Caption Style</label>
-            <select className="select" value={selectedCaption} onChange={e => setSelectedCaption(e.target.value)}>
-              {captionStyles.map(cs => (
-                <option key={cs.key} value={cs.key}>{cs.name}</option>
-              ))}
-            </select>
-          </div>
+    <div className="space-y-6 max-w-4xl mx-auto">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border">
+        <div>
+          <h2 className="text-xl font-bold tracking-tight text-text-primary">Stage 4: Voice & Render Settings</h2>
+          <p className="text-xs text-text-secondary">Choose caption appearance, pacing style, and AI voice talent.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" icon="arrow-left" onClick={onBack}>
+            Back
+          </Button>
+          <Button 
+            variant="primary" 
+            size="sm" 
+            icon="play" 
+            className="shadow-brand-glow"
+            onClick={startRender} 
+            disabled={!script}
+          >
+            Start Render Pipeline
+          </Button>
         </div>
       </div>
 
-      <div className="flex gap-2 mt-4">
-        <Button variant="secondary" onClick={onBack}>Back to Storyboard</Button>
-        <Button variant="primary" icon="play" onClick={startRender} disabled={!script}>
-          Render Video
-        </Button>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        
+        {/* Visual Styling */}
+        <Card variant="surface">
+          <CardHeader
+            title={
+              <CardTitle icon={<Icon name="video" size={16} className="text-brand-red" />}>
+                Visual & Caption Configuration
+              </CardTitle>
+            }
+          />
+          <CardContent className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-text-muted mb-1.5">
+                Video Pacing & Style
+              </label>
+              <select
+                className="w-full bg-surface-input border border-border rounded-lg px-3 py-2 text-xs text-text-primary focus:border-brand-red focus:outline-none"
+                value={selectedStyle}
+                onChange={e => setSelectedStyle(e.target.value)}
+              >
+                <option value="fast_facts">Fast Facts (High Energy)</option>
+                <option value="documentary">Documentary (Paced & Atmospheric)</option>
+                <option value="cinematic">Cinematic (Widescreen to 9:16)</option>
+                <option value="minimal">Minimal (Clean & Modern)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-text-muted mb-1.5">
+                Subtitle / Caption Style
+              </label>
+              <select
+                className="w-full bg-surface-input border border-border rounded-lg px-3 py-2 text-xs text-text-primary focus:border-brand-red focus:outline-none"
+                value={selectedCaption}
+                onChange={e => setSelectedCaption(e.target.value)}
+              >
+                {(captionStyles || []).map(cs => (
+                  <option key={cs.key} value={cs.key}>{cs.name}</option>
+                ))}
+              </select>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Audio / Voiceover */}
+        <Card variant="surface">
+          <CardHeader
+            title={
+              <CardTitle icon={<Icon name="mic" size={16} className="text-info" />}>
+                Voiceover Engine (Edge-TTS)
+              </CardTitle>
+            }
+          />
+          <CardContent className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-text-muted mb-1.5">
+                Voice Actor Model
+              </label>
+              <select
+                className="w-full bg-surface-input border border-border rounded-lg px-3 py-2 text-xs text-text-primary focus:border-brand-red focus:outline-none"
+                value={selectedVoice}
+                onChange={e => setSelectedVoice(e.target.value)}
+              >
+                <optgroup label="US English">
+                  <option value="en-US-ChristopherNeural">Christopher (Male - Authoritative)</option>
+                  <option value="en-US-GuyNeural">Guy (Male - Casual)</option>
+                  <option value="en-US-EricNeural">Eric (Male - Energetic)</option>
+                  <option value="en-US-JennyNeural">Jenny (Female - Clear)</option>
+                  <option value="en-US-AriaNeural">Aria (Female - Narrative)</option>
+                </optgroup>
+                <optgroup label="UK English">
+                  <option value="en-GB-SoniaNeural">Sonia (Female - Sophisticated)</option>
+                  <option value="en-GB-RyanNeural">Ryan (Male - Crisp)</option>
+                </optgroup>
+              </select>
+            </div>
+
+            <div className="p-3 bg-elevated/70 rounded-lg border border-border text-xs text-text-secondary leading-relaxed">
+              <span className="font-bold text-text-primary block mb-1">Audio Synthesis Note:</span>
+              Voiceover is synthesized in real-time at ultra-low latency with burned-in word-level synchronization.
+            </div>
+          </CardContent>
+        </Card>
+
       </div>
     </div>
   );

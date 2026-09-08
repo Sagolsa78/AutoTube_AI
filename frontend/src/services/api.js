@@ -72,6 +72,7 @@ export const api = {
   searchAssets:   (query, count = 8) => request(`/assets/search?query=${encodeURIComponent(query)}&count=${count}`),
   assignAssetToScene: (sceneId, assetData) => request(`/assets/scenes/${sceneId}/assign`, { method: 'POST', body: JSON.stringify(assetData) }),
 
-  // ── System ───────────────────────────────────────
+  // ── System & Compute Plane ────────────────────────
   getSystemHealth: () => request('/system/health'),
+  getComputeTelemetry: () => request('/jobs/telemetry'),
 };

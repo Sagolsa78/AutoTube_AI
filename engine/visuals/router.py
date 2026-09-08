@@ -45,8 +45,27 @@ class VisualRouter:
         elif mode in ["MOTION_GRAPHIC", "SOURCE_FOOTAGE"]:
             log.warning(f"Mode {mode} not fully implemented yet. Falling back to STOCK.")
             return await self._resolve_stock(scene_data, idea_topic, used_source_ids)
+        elif mode == "AUTO":
+            # 1. Existing suitable source footage (omitted, SOURCE_FOOTAGE not fully implemented)
+            # 2. Suitable stock
+            res = await self._resolve_stock(scene_data, idea_topic, used_source_ids)
+            if res: return res
+            
+            # 3. Generated image
+            log.info("AUTO: STOCK failed, trying GENERATED_IMAGE.")
+            res = await self._resolve_generated_image(scene_data, idea_topic)
+            if res: return res
+            
+            # 4. Generated video
+            log.info("AUTO: GENERATED_IMAGE failed, trying GENERATED_VIDEO.")
+            res = await self._resolve_generated_video(scene_data, idea_topic)
+            if res: return res
+            
+            log.warning("AUTO mode failed to resolve any visual.")
+            return None
         else:
             log.error(f"Unknown visual mode: {mode}")
+            # Do NOT fall back safely for unknown modes, fail safely.
             return None
 
     async def _resolve_generated_image(self, scene_data: dict, idea_topic: str) -> Optional[str]:
@@ -55,7 +74,7 @@ class VisualRouter:
         if not client.is_available():
             return None
             
-        prompt = scene_data.get("visual_description") or scene_data.get("visual_intent") or idea_topic or "beautiful scenery"
+        prompt = scene_data.get("generation_prompt") or scene_data.get("visual_intent") or scene_data.get("visual_description") or idea_topic or "beautiful scenery"
         try:
             local_path = await client.generate_image(prompt, self.visual_dir)
             if local_path:
@@ -81,7 +100,7 @@ class VisualRouter:
         if not client.is_available():
             return None
             
-        prompt = scene_data.get("visual_description") or scene_data.get("visual_intent") or idea_topic or "beautiful scenery"
+        prompt = scene_data.get("generation_prompt") or scene_data.get("visual_intent") or scene_data.get("visual_description") or idea_topic or "beautiful scenery"
         try:
             local_path = await client.generate_video(prompt, self.visual_dir)
             if local_path:
