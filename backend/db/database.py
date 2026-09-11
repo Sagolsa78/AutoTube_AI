@@ -17,8 +17,8 @@ engine_kwargs = {
 # Add pool settings for PostgreSQL
 if "postgresql" in settings.DATABASE_URL:
     engine_kwargs.update({
-        "pool_size": 10,
-        "max_overflow": 20,
+        "pool_size": settings.DB_POOL_SIZE,
+        "max_overflow": settings.DB_MAX_OVERFLOW,
         "pool_pre_ping": True,
     })
     if "-pooler" in settings.DATABASE_URL or "pooler" in settings.DATABASE_URL:

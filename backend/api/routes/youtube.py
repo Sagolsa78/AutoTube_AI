@@ -51,12 +51,19 @@ async def start_youtube_auth(
     redirect_uri = f"{request.base_url.scheme}://{request.base_url.netloc}/api/youtube/callback"
     flow = get_oauth_flow(redirect_uri)
     
-    # We use the user_id as state to ensure the callback can link the token to the right user
+    # We use a signed JWT as state to prevent CSRF
+    import jwt
+    from backend.auth.provider import AuthProvider
+    auth_provider = AuthProvider()
+    secret = auth_provider.jwt_secret or "dev-secret"
+    
+    secure_state = jwt.encode({"sub": user.id, "exp": datetime.utcnow().timestamp() + 600}, secret, algorithm="HS256")
+    
     auth_url, state = flow.authorization_url(
         access_type="offline",
         include_granted_scopes="true",
         prompt="consent",
-        state=user.id
+        state=secure_state
     )
     
     return {"auth_url": auth_url}
@@ -70,9 +77,22 @@ async def youtube_auth_callback(
     db: AsyncSession = Depends(get_db)
 ):
     """Handle the OAuth callback from Google and store the credentials."""
-    user_id = state
     redirect_uri = f"{request.base_url.scheme}://{request.base_url.netloc}/api/youtube/callback"
     
+    import jwt
+    from backend.auth.provider import AuthProvider
+    auth_provider = AuthProvider()
+    secret = auth_provider.jwt_secret or "dev-secret"
+    
+    try:
+        payload = jwt.decode(state, secret, algorithms=["HS256"])
+        user_id = payload.get("sub")
+        if not user_id:
+            raise ValueError("Missing sub in state")
+    except Exception as state_err:
+        log.warning(f"Invalid state parameter: {state_err}")
+        raise HTTPException(status_code=400, detail="Invalid OAuth state parameter")
+        
     try:
         flow = get_oauth_flow(redirect_uri)
         flow.fetch_token(code=code)
@@ -87,8 +107,9 @@ async def youtube_auth_callback(
             conn = YouTubeConnection(user_id=user_id)
             db.add(conn)
             
-        conn.access_token = credentials.token
-        conn.refresh_token = credentials.refresh_token or conn.refresh_token
+        from backend.security import encrypt_value
+        conn.access_token = encrypt_value(credentials.token)
+        conn.refresh_token = encrypt_value(credentials.refresh_token) if credentials.refresh_token else conn.refresh_token
         conn.expires_at = credentials.expiry
         
         # Optional: fetch channel ID using the API

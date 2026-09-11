@@ -52,40 +52,4 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           JOB_ID: ${{ inputs.job_id }}
-        run: |
-          # A single-shot execution of the worker targeting the specific job ID
-          # python -m backend.worker.main --job-id $JOB_ID (Requires modifying worker/main.py to accept args)
-          # For now, we will create a small single-shot script inline or add CLI args to worker/main.py
-          
-          cat << 'EOF' > run_single_job.py
-          import asyncio
-          import sys
-          import logging
-          import os
-          from backend.db.database import AsyncSessionLocal
-          from backend.models.models import Video, VideoStatus
-          from backend.api.routes.videos import _run_render
-          
-          logging.basicConfig(level=logging.INFO)
-          log = logging.getLogger("GitHubActionRunner")
-          
-          async def run_one():
-              job_id = os.environ.get("JOB_ID")
-              if not job_id:
-                  log.error("No JOB_ID provided")
-                  sys.exit(1)
-                  
-              log.info(f"Running job for video ID: {job_id}")
-              # Find the video and reconstruct the job
-              # In a real implementation, the worker logic from backend/worker/main.py 
-              # would be reused here for a single ID instead of polling.
-              # For MVP, we will just call the polling logic but modify it to only look at this ID.
-              
-              # Due to complexity, this will be fully implemented when the Job model migration is complete.
-              log.info("Job execution complete")
-              
-          if __name__ == "__main__":
-              asyncio.run(run_one())
-          EOF
-          
-          python run_single_job.py
+          python -m backend.worker.main --job-id "$JOB_ID"

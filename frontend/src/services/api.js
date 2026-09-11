@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL || '';
+const API_URL = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || '';
 const BASE = API_URL ? `${API_URL.replace(/\/$/, '')}/api` : '/api';
 
 let authToken = localStorage.getItem('autotube_auth_token') || null;

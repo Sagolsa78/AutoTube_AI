@@ -18,8 +18,9 @@ from typing import Dict, Any, Optional, List
 
 from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
+import os
 
 from backend.db.database import get_db
 from backend.models.models import Job, JobStatus, User
@@ -87,6 +88,28 @@ async def create_job(
     db: AsyncSession = Depends(get_db)
 ):
     """Submit a compute job. Enforces the §5 Worker Router decision tree."""
+    # Quota check
+    active_q = select(func.count(Job.id)).where(
+        Job.user_id == user.id,
+        Job.status.in_([JobStatus.queued.value, JobStatus.dispatched.value, JobStatus.waiting_for_local_worker.value, JobStatus.running.value])
+    )
+    res_active = await db.execute(active_q)
+    active_count = res_active.scalar() or 0
+    
+    if active_count >= int(os.getenv("MAX_ACTIVE_JOBS_PER_USER", "2")):
+        raise HTTPException(status_code=429, detail="Too many active jobs. Please wait for them to finish.")
+        
+    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    daily_q = select(func.count(Job.id)).where(
+        Job.user_id == user.id,
+        Job.created_at >= today_start
+    )
+    res_daily = await db.execute(daily_q)
+    daily_count = res_daily.scalar() or 0
+    
+    if daily_count >= int(os.getenv("MAX_DAILY_JOBS_PER_USER", "20")):
+        raise HTTPException(status_code=429, detail="Daily job limit reached.")
+
     job_id = str(uuid.uuid4())
 
     # 1. Route via Worker Router
