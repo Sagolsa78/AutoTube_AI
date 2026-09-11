@@ -40,9 +40,10 @@ async def _get_credentials(user_id: str) -> Credentials:
         client_id = client_secrets.get("installed", {}).get("client_id", "")
         client_secret = client_secrets.get("installed", {}).get("client_secret", "")
         
+        from backend.security import decrypt_value
         creds = Credentials(
-            token=conn.access_token,
-            refresh_token=conn.refresh_token,
+            token=decrypt_value(conn.access_token),
+            refresh_token=decrypt_value(conn.refresh_token),
             token_uri="https://oauth2.googleapis.com/token",
             client_id=client_id,
             client_secret=client_secret,
@@ -52,7 +53,8 @@ async def _get_credentials(user_id: str) -> Credentials:
         if not creds.valid:
             if creds.expired and creds.refresh_token:
                 creds.refresh(Request())
-                conn.access_token = creds.token
+                from backend.security import encrypt_value
+                conn.access_token = encrypt_value(creds.token)
                 # Optionally update expiry if provided
                 if creds.expiry:
                     # Make it timezone aware

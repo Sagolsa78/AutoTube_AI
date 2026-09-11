@@ -59,3 +59,40 @@ async def verify_control_plane_auth(
         detail="Invalid or missing authentication credentials for AutoTube Control Plane.",
         headers={"WWW-Authenticate": "Bearer"},
     )
+
+
+# ── Encryption Helpers ────────────────────────────────────────────────────────
+
+from cryptography.fernet import Fernet
+import base64
+
+ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
+
+def get_fernet() -> Optional[Fernet]:
+    if not ENCRYPTION_KEY:
+        return None
+    try:
+        return Fernet(ENCRYPTION_KEY.encode('utf-8'))
+    except ValueError:
+        log.error("Invalid ENCRYPTION_KEY format. Must be 32 url-safe base64-encoded bytes.")
+        return None
+
+def encrypt_value(value: str) -> str:
+    if not value:
+        return value
+    f = get_fernet()
+    if not f:
+        return value
+    return f.encrypt(value.encode('utf-8')).decode('utf-8')
+
+def decrypt_value(encrypted_value: str) -> str:
+    if not encrypted_value:
+        return encrypted_value
+    f = get_fernet()
+    if not f:
+        return encrypted_value
+    try:
+        return f.decrypt(encrypted_value.encode('utf-8')).decode('utf-8')
+    except Exception as e:
+        log.warning(f"Decryption failed, assuming plain text: {e}")
+        return encrypted_value

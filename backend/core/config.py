@@ -20,6 +20,8 @@ class Settings(BaseSettings):
 
     # ── Database ──────────────────────────────────────────────────────────────
     DATABASE_URL: str = "sqlite+aiosqlite:///./storage/autoshorts.db"
+    DB_POOL_SIZE: int = 5
+    DB_MAX_OVERFLOW: int = 10
 
     @field_validator("DATABASE_URL", mode="after")
     @classmethod
