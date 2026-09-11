@@ -10,11 +10,11 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 # pyrefly: ignore [missing-import]
 from fastapi.middleware.cors import CORSMiddleware
-# pyrefly: ignore [missing-import]
 from fastapi.staticfiles import StaticFiles
 
+from backend.core.config import settings
 from backend.db.database import init_db
-from backend.api.routes import ideas, scripts, videos, channels, analytics, profile, assets, health, jobs
+from backend.api.routes import ideas, scripts, videos, channels, analytics, profile, assets, health, jobs, youtube
 
 logging.basicConfig(
     level=logging.INFO,
@@ -25,14 +25,10 @@ log = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    log.info("Starting AutoShorts Studio...")
+    log.info("Starting AutoTube AI...")
     await init_db()
     log.info("Database ready.")
-
-    from backend.worker import start_worker
-    start_worker()
-    log.info("Durable background worker started.")
-
+    # Local worker is now a separate standalone process: python -m backend.worker.main
     yield
     log.info("Shutting down.")
 
@@ -46,7 +42,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.parsed_cors_origins if settings.parsed_cors_origins else ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -64,6 +60,7 @@ app.include_router(videos.router,    prefix="/api/videos",    tags=["videos"])
 app.include_router(assets.router)
 app.include_router(analytics.router, prefix="/api/analytics", tags=["analytics"])
 app.include_router(jobs.router, prefix="/api/jobs", tags=["jobs"])
+app.include_router(youtube.router, prefix="/api/youtube", tags=["youtube"])
 app.include_router(health.router, prefix="/api/system/health", tags=["health"])
 
 

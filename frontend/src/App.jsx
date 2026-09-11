@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Landing from './pages/Landing';
+import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import StudioShell from './pages/Studio/StudioShell';
 import Ideas from './pages/Ideas';
@@ -21,6 +22,7 @@ export default function App() {
       <Toaster position="bottom-right" richColors theme="dark" />
       <Routes>
         <Route path="/" element={<Landing />} />
+        <Route path="/login" element={<Login />} />
         <Route path="/app" element={<AppShell />}>
           <Route index element={<Dashboard />} />
           <Route path="create" element={<StudioShell />} />

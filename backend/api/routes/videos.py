@@ -14,8 +14,9 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db.database import get_db, AsyncSessionLocal
-from backend.models.models import Video, VideoStatus, Script, Channel, Idea, UserProfile, ScriptStatus, Scene
+from backend.models.models import Video, VideoStatus, Script, Channel, Idea, User, ScriptStatus, Scene
 from engine.models import RenderJob
+from backend.auth.dependencies import get_current_user
 
 router = APIRouter()
 log = logging.getLogger(__name__)
@@ -104,9 +105,10 @@ async def _set_stage(db, video_id: str, stage: str, progress: float | None = Non
 @router.get("/", response_model=list[VideoOut])
 async def list_videos(
     status: str | None = None,
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    q = select(Video)
+    q = select(Video).where(Video.user_id == user.id)
     if status:
         q = q.where(Video.status == status)
     result = await db.execute(q)
@@ -114,10 +116,14 @@ async def list_videos(
 
 
 @router.get("/{video_id}/progress")
-async def get_render_progress(video_id: str, db: AsyncSession = Depends(get_db)):
+async def get_render_progress(
+    video_id: str, 
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
     """Lightweight endpoint for polling render progress."""
     v = await db.get(Video, video_id)
-    if not v:
+    if not v or v.user_id != user.id:
         raise HTTPException(404, "Video not found")
     stage_info = RENDER_STAGES.get(v.render_stage or "queued", RENDER_STAGES["queued"])
     return {
@@ -144,9 +150,21 @@ async def _run_render(video_id: str, job: RenderJob):
 
             log.info(f"Starting background render for video {video_id}")
             
-            profile = await db.get(UserProfile, DEFAULT_PROFILE_ID)
+            profile = await db.get(User, video.user_id)
+
+            import asyncio
+            async def _check_cancel_pause():
+                while True:
+                    await db.refresh(video)
+                    if video.status.value == "cancelled" or video.status == "cancelled":
+                        raise Exception("Video rendering cancelled by user.")
+                    if video.status.value != "paused" and video.status != "paused":
+                        break
+                    await asyncio.sleep(2)
+
             
             # ── Stage 1: TTS ──────────────────────────────────────────────
+            await _check_cancel_pause()
             video.render_stage = "tts"
             video.render_progress = 10
             await db.commit()
@@ -171,6 +189,7 @@ async def _run_render(video_id: str, job: RenderJob):
             job.word_boundaries = tts.get("word_boundaries", [])
 
             # ── Stage 2: Visuals (scene-aware with asset caching) ─────────
+            await _check_cancel_pause()
             video.render_stage = "visuals"
             video.render_progress = 30
             await db.commit()
@@ -197,6 +216,7 @@ async def _run_render(video_id: str, job: RenderJob):
                     video.render_progress = 30 + (30 * (i / len(scenes)))
                     await db.commit()
                     
+                    await _check_cancel_pause()
                     asset_path = None
                     
                     # 1. Check if scene already has an assigned asset (e.g., user selected)
@@ -246,6 +266,7 @@ async def _run_render(video_id: str, job: RenderJob):
             job.clip_paths = valid_clip_paths
 
             # ── Stage 3: Assembly ─────────────────────────────────────────
+            await _check_cancel_pause()
             video.render_stage = "assembly"
             video.render_progress = 60
             await db.commit()
@@ -260,18 +281,20 @@ async def _run_render(video_id: str, job: RenderJob):
             video.notes = None
 
             # Upload to Cloudflare R2 / S3 if cloud storage is configured
-            from backend.cloud_storage import storage
-            if storage.provider in ["s3", "r2"]:
+            from backend.storage import storage
+            from backend.core.config import settings
+            if settings.STORAGE_BACKEND in ["s3", "r2"]:
                 try:
                     r2_key = f"videos/{video.id}.mp4"
-                    await storage.upload_file(job.output_path, r2_key)
-                    pub_url = storage.get_public_url(r2_key)
-                    video.path = pub_url or r2_key
-                    log.info(f"Video {video.id} uploaded to cloud storage ({storage.provider}): {video.path}")
+                    public_url = await storage.put_file(job.output_path, r2_key)
+                    video.path = r2_key  # Store the key
+                    video.notes = f"Uploaded to R2: {public_url}"
+                    log.info(f"Video {video.id} uploaded to cloud storage ({settings.STORAGE_BACKEND}): {video.path}")
                 except Exception as st_err:
                     log.warning(f"Failed to upload video to cloud storage: {st_err}")
 
             # ── Stage 4: Metadata ─────────────────────────────────────────
+            await _check_cancel_pause()
             video.render_stage = "metadata"
             video.render_progress = 80
             await db.commit()
@@ -316,13 +339,17 @@ Respond ONLY with a JSON object in this exact format (no markdown):
             
             # Draft Upload to YouTube
             from integrations.youtube.uploader import upload_video as yt_upload
-            from backend.settings import YOUTUBE_TOKEN_FILE
-            from backend.models.models import Publication
+            from backend.models.models import Publication, YouTubeConnection
             
-            if YOUTUBE_TOKEN_FILE.exists():
+            yt_conn_q = select(YouTubeConnection).where(YouTubeConnection.user_id == video.user_id)
+            yt_conn_res = await db.execute(yt_conn_q)
+            yt_conn = yt_conn_res.scalars().first()
+            
+            if yt_conn and yt_conn.access_token:
                 try:
-                    yt_id = yt_upload(
-                        video.path,
+                    yt_id = await yt_upload(
+                        user_id=video.user_id,
+                        video_path=video.path,
                         title=video.selected_title or "Draft Short",
                         description=f"{video.description}\n\n{' '.join(['#'+t for t in video.hashtags])}",
                         tags=video.hashtags,
@@ -330,6 +357,7 @@ Respond ONLY with a JSON object in this exact format (no markdown):
                         made_for_kids=False,
                     )
                     pub = Publication(
+                        user_id=video.user_id,
                         video_id=video.id,
                         youtube_id=yt_id,
                         url=f"https://youtu.be/{yt_id}",
@@ -347,7 +375,7 @@ Respond ONLY with a JSON object in this exact format (no markdown):
                             # Make it public immediately
                             from integrations.youtube.uploader import _get_credentials
                             from googleapiclient.discovery import build
-                            creds = _get_credentials()
+                            creds = await _get_credentials(video.user_id)
                             youtube = build("youtube", "v3", credentials=creds)
                             youtube.videos().update(part="status", body={
                                 "id": yt_id,
@@ -365,6 +393,7 @@ Respond ONLY with a JSON object in this exact format (no markdown):
                     log.warning("Draft YouTube upload failed: %s", upload_exc)
             
             # ── Stage 5: Done ─────────────────────────────────────────────
+            await _check_cancel_pause()
             video.render_stage = "done"
             video.render_progress = 100
             script.status = ScriptStatus.used_in_render
@@ -382,7 +411,12 @@ Respond ONLY with a JSON object in this exact format (no markdown):
 
 
 @router.post("/render", response_model=VideoOut, status_code=202)
-async def render_video(body: RenderIn, bg: BackgroundTasks, db: AsyncSession = Depends(get_db)):
+async def render_video(
+    body: RenderIn, 
+    bg: BackgroundTasks, 
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
     """
     Queue render pipeline: TTS → visuals → FFmpeg assembly.
     """
@@ -395,7 +429,7 @@ async def render_video(body: RenderIn, bg: BackgroundTasks, db: AsyncSession = D
         raise HTTPException(400, "Script has no full_text — regenerate it")
 
     # Load user profile for defaults
-    profile = await db.get(UserProfile, DEFAULT_PROFILE_ID)
+    profile = user
     caption_style = body.caption_style or (profile.caption_style if profile else "bold_centered")
 
     # Get niche and language
@@ -408,6 +442,7 @@ async def render_video(body: RenderIn, bg: BackgroundTasks, db: AsyncSession = D
 
     video = Video(
         script_id=body.script_id,
+        user_id=user.id,
         style=body.style,
         caption_style=caption_style,
         voice_override=body.voice_override,
@@ -459,23 +494,30 @@ async def render_video(body: RenderIn, bg: BackgroundTasks, db: AsyncSession = D
             job.watermark_position = profile.watermark_position or "bottom_right"
             job.watermark_scale = profile.watermark_scale or 0.12
 
-    # Phase 3: Route to durable task queue instead of asyncio.create_task
-    from backend.worker import queue_render_task
-    queue_render_task(video.id, video.tenant_id, job=job)
+    # Worker will pick up the job since video.status is rendering
     return _fmt(video)
 
 @router.get("/{video_id}", response_model=VideoOut)
-async def get_video(video_id: str, db: AsyncSession = Depends(get_db)):
+async def get_video(
+    video_id: str, 
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
     v = await db.get(Video, video_id)
-    if not v:
+    if not v or v.user_id != user.id:
         raise HTTPException(404, "Video not found")
     return _fmt(v)
 
 
 @router.patch("/{video_id}", response_model=VideoOut)
-async def update_video(video_id: str, body: VideoUpdateIn, db: AsyncSession = Depends(get_db)):
+async def update_video(
+    video_id: str, 
+    body: VideoUpdateIn, 
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
     v = await db.get(Video, video_id)
-    if not v:
+    if not v or v.user_id != user.id:
         raise HTTPException(404, "Video not found")
     if body.selected_title is not None:
         v.selected_title = body.selected_title
@@ -489,9 +531,13 @@ async def update_video(video_id: str, body: VideoUpdateIn, db: AsyncSession = De
 
 
 @router.get("/{video_id}/preview")
-async def preview_video(video_id: str, db: AsyncSession = Depends(get_db)):
+async def preview_video(
+    video_id: str, 
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
     v = await db.get(Video, video_id)
-    if not v or not v.path:
+    if not v or v.user_id != user.id or not v.path:
         raise HTTPException(404, "Video file not found")
     
     # 1. If path is an HTTP(S) remote URL (e.g. R2 public CDN)
@@ -501,10 +547,11 @@ async def preview_video(video_id: str, db: AsyncSession = Depends(get_db)):
         
     # 2. If storage provider is S3/R2 and file is a remote object key
     if not os.path.exists(v.path):
-        from backend.cloud_storage import storage
-        if storage.provider in ["s3", "r2"]:
+        from backend.storage import storage
+        from backend.core.config import settings
+        if settings.STORAGE_BACKEND in ["s3", "r2"]:
             try:
-                signed_url = await storage.get_signed_url(v.path)
+                signed_url = await storage.generate_signed_url(v.path)
                 from fastapi.responses import RedirectResponse
                 return RedirectResponse(url=signed_url, status_code=307)
             except Exception as e:
@@ -516,9 +563,14 @@ async def preview_video(video_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.patch("/{video_id}/approve", response_model=VideoOut)
-async def approve_video(video_id: str, body: ApproveIn | None = None, db: AsyncSession = Depends(get_db)):
+async def approve_video(
+    video_id: str, 
+    body: ApproveIn | None = None, 
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
     v = await db.get(Video, video_id)
-    if not v:
+    if not v or v.user_id != user.id:
         raise HTTPException(404, "Video not found")
         
     if body:
@@ -538,7 +590,7 @@ async def approve_video(video_id: str, body: ApproveIn | None = None, db: AsyncS
         from integrations.youtube.uploader import _get_credentials
         from googleapiclient.discovery import build
         try:
-            creds = _get_credentials()
+            creds = await _get_credentials(user.id)
             youtube = build("youtube", "v3", credentials=creds)
             body = {
                 "id": pub.youtube_id,
@@ -566,9 +618,13 @@ async def approve_video(video_id: str, body: ApproveIn | None = None, db: AsyncS
 
 
 @router.patch("/{video_id}/reject", response_model=VideoOut)
-async def reject_video(video_id: str, db: AsyncSession = Depends(get_db)):
+async def reject_video(
+    video_id: str, 
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
     v = await db.get(Video, video_id)
-    if not v:
+    if not v or v.user_id != user.id:
         raise HTTPException(404, "Video not found")
     v.status = VideoStatus.rejected
     await db.flush()
@@ -576,10 +632,15 @@ async def reject_video(video_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/{video_id}/upload")
-async def upload_video(video_id: str, body: UploadIn, db: AsyncSession = Depends(get_db)):
+async def upload_video(
+    video_id: str, 
+    body: UploadIn, 
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
     """Upload an approved video to YouTube as private."""
     v = await db.get(Video, video_id)
-    if not v:
+    if not v or v.user_id != user.id:
         raise HTTPException(404, "Video not found")
     if v.status != VideoStatus.approved:
         raise HTTPException(400, "Video must be approved before uploading")
@@ -589,8 +650,9 @@ async def upload_video(video_id: str, body: UploadIn, db: AsyncSession = Depends
     from integrations.youtube.uploader import upload_video as yt_upload
     from backend.models.models import Publication
     try:
-        yt_id = yt_upload(
-            v.path,
+        yt_id = await yt_upload(
+            user_id=user.id,
+            video_path=v.path,
             title=body.title,
             description=body.description,
             tags=body.tags,
@@ -601,6 +663,7 @@ async def upload_video(video_id: str, body: UploadIn, db: AsyncSession = Depends
         raise HTTPException(500, f"YouTube upload failed: {exc}")
 
     pub = Publication(
+        user_id=user.id,
         video_id=video_id,
         youtube_id=yt_id,
         url=f"https://youtu.be/{yt_id}",
@@ -615,6 +678,51 @@ async def upload_video(video_id: str, body: UploadIn, db: AsyncSession = Depends
     await db.flush()
     return {"youtube_id": yt_id, "url": f"https://youtu.be/{yt_id}"}
 
+
+
+@router.post("/{video_id}/cancel", response_model=VideoOut)
+async def cancel_video(
+    video_id: str, 
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    v = await db.get(Video, video_id)
+    if not v or v.user_id != user.id:
+        raise HTTPException(404, "Video not found")
+    v.status = VideoStatus.cancelled
+    await db.commit()
+    await db.refresh(v)
+    return _fmt(v)
+
+@router.post("/{video_id}/pause", response_model=VideoOut)
+async def pause_video(
+    video_id: str, 
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    v = await db.get(Video, video_id)
+    if not v or v.user_id != user.id:
+        raise HTTPException(404, "Video not found")
+    if v.status == VideoStatus.rendering:
+        v.status = VideoStatus.paused
+        await db.commit()
+        await db.refresh(v)
+    return _fmt(v)
+
+@router.post("/{video_id}/resume", response_model=VideoOut)
+async def resume_video(
+    video_id: str, 
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    v = await db.get(Video, video_id)
+    if not v or v.user_id != user.id:
+        raise HTTPException(404, "Video not found")
+    if v.status == VideoStatus.paused:
+        v.status = VideoStatus.rendering
+        await db.commit()
+        await db.refresh(v)
+    return _fmt(v)
 
 def _fmt(v: Video) -> dict:
     return {

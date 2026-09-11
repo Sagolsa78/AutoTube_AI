@@ -1,5 +1,6 @@
 """
 User profile router — manage display name, default CTA, logo/watermark, caption style.
+Now fully supports multi-tenant users.
 """
 from __future__ import annotations
 import os
@@ -13,18 +14,15 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db.database import get_db
-from backend.models.models import UserProfile
-from backend.settings import STORAGE
+from backend.models.models import User
+from backend.core.config import settings
 from engine.captions.styles import list_caption_styles
+from backend.auth.dependencies import get_current_user
 
 router = APIRouter()
 
-LOGO_DIR = STORAGE / "logos"
+LOGO_DIR = Path(settings.STORAGE_ROOT) / "logos"
 LOGO_DIR.mkdir(parents=True, exist_ok=True)
-
-# For the MVP we use a single-user profile.  The first row created becomes
-# "the" profile.  Multi-user can be layered on later with auth middleware.
-DEFAULT_PROFILE_ID = "default-user"
 
 
 class ProfileOut(BaseModel):
@@ -65,72 +63,65 @@ class ProfileUpdate(BaseModel):
     auto_approve: bool | None = None
 
 
-async def _ensure_profile(db: AsyncSession) -> UserProfile:
-    """Return the singleton user profile, creating it if needed."""
-    profile = await db.get(UserProfile, DEFAULT_PROFILE_ID)
-    if not profile:
-        profile = UserProfile(id=DEFAULT_PROFILE_ID)
-        db.add(profile)
-        await db.flush()
-    return profile
-
-
 @router.get("/", response_model=ProfileOut)
-async def get_profile(db: AsyncSession = Depends(get_db)):
-    profile = await _ensure_profile(db)
-    return _fmt(profile)
+async def get_profile(user: User = Depends(get_current_user)):
+    return _fmt(user)
 
 
 @router.patch("/", response_model=ProfileOut)
-async def update_profile(body: ProfileUpdate, db: AsyncSession = Depends(get_db)):
-    profile = await _ensure_profile(db)
+async def update_profile(
+    body: ProfileUpdate, 
+    user: User = Depends(get_current_user), 
+    db: AsyncSession = Depends(get_db)
+):
     for field, value in body.model_dump(exclude_unset=True).items():
-        setattr(profile, field, value)
+        setattr(user, field, value)
     await db.flush()
-    return _fmt(profile)
+    return _fmt(user)
 
 
 @router.post("/logo", response_model=ProfileOut)
 async def upload_logo(
     file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Upload a PNG/JPEG logo to use as watermark in rendered videos."""
-    profile = await _ensure_profile(db)
-
     ext = Path(file.filename or "logo.png").suffix.lower()
     if ext not in {".png", ".jpg", ".jpeg", ".webp"}:
         raise HTTPException(400, "Logo must be PNG, JPEG, or WebP")
 
-    filename = f"logo_{uuid.uuid4().hex[:8]}{ext}"
+    filename = f"logo_{user.id}_{uuid.uuid4().hex[:8]}{ext}"
     dest = LOGO_DIR / filename
 
     # Delete old logo file
-    if profile.logo_path and Path(profile.logo_path).exists():
+    if user.logo_path and Path(user.logo_path).exists():
         try:
-            os.remove(profile.logo_path)
+            os.remove(user.logo_path)
         except OSError:
             pass
 
     with open(dest, "wb") as f:
         shutil.copyfileobj(file.file, f)
 
-    profile.logo_path = str(dest)
+    user.logo_path = str(dest)
     await db.flush()
-    return _fmt(profile)
+    return _fmt(user)
 
 
 @router.delete("/logo", response_model=ProfileOut)
-async def delete_logo(db: AsyncSession = Depends(get_db)):
-    profile = await _ensure_profile(db)
-    if profile.logo_path and Path(profile.logo_path).exists():
+async def delete_logo(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    if user.logo_path and Path(user.logo_path).exists():
         try:
-            os.remove(profile.logo_path)
+            os.remove(user.logo_path)
         except OSError:
             pass
-    profile.logo_path = None
+    user.logo_path = None
     await db.flush()
-    return _fmt(profile)
+    return _fmt(user)
 
 
 @router.get("/caption-styles")
@@ -139,7 +130,7 @@ async def get_caption_styles():
     return list_caption_styles()
 
 
-def _fmt(p: UserProfile) -> dict:
+def _fmt(p: User) -> dict:
     return {
         "id":                 p.id,
         "display_name":      p.display_name or "Creator",

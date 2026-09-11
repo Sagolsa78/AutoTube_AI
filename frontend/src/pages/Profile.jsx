@@ -14,6 +14,8 @@ export default function Profile() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef();
+  
+  const [ytStatus, setYtStatus] = useState(null);
 
   // Editable settings
   const [displayName, setDisplayName] = useState('');
@@ -35,9 +37,14 @@ export default function Profile() {
 
   const load = async () => {
     try {
-      const [prof, styles] = await Promise.all([api.getProfile(), api.getCaptionStyles()]);
+      const [prof, styles, yt] = await Promise.all([
+        api.getProfile(), 
+        api.getCaptionStyles(),
+        api.getYoutubeStatus()
+      ]);
       setProfile(prof);
       setCaptionStyles(styles || []);
+      setYtStatus(yt);
       setDisplayName(prof?.display_name || '');
       setChannelName(prof?.channel_name || '');
       setDefaultCta(prof?.default_cta || '');
@@ -113,6 +120,26 @@ export default function Profile() {
       toast.success('Watermark removed');
     } catch (e) { 
       console.error(e); 
+    }
+  };
+
+  const handleYoutubeConnect = async () => {
+    try {
+      // get auth url from backend
+      const res = await api.getYoutubeAuthUrl();
+      window.location.href = res.auth_url;
+    } catch (e) {
+      toast.error('Failed to start YouTube authentication');
+    }
+  };
+
+  const handleYoutubeDisconnect = async () => {
+    try {
+      await api.disconnectYoutube();
+      setYtStatus({ connected: false });
+      toast.success('YouTube disconnected');
+    } catch (e) {
+      toast.error('Failed to disconnect YouTube');
     }
   };
 
@@ -477,6 +504,39 @@ export default function Profile() {
                       </div>
                     );
                   })}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Integrations */}
+            <Card variant="surface">
+              <CardHeader
+                title={
+                  <CardTitle icon={<Icon name="link" size={16} className="text-brand-red" />}>
+                    Integrations
+                  </CardTitle>
+                }
+              />
+              <CardContent>
+                <div className="flex items-center justify-between p-4 bg-elevated rounded-xl border border-border">
+                  <div className="flex items-center gap-3">
+                    <Icon name="youtube" size={24} className="text-[#FF0000]" />
+                    <div>
+                      <h4 className="text-sm font-bold text-text-primary">YouTube Account</h4>
+                      <p className="text-[11px] text-text-muted">
+                        {ytStatus?.connected 
+                          ? `Connected to ${ytStatus.channel_title || 'Channel'}` 
+                          : 'Not connected. Connect to automatically upload Shorts.'}
+                      </p>
+                    </div>
+                  </div>
+                  <Button 
+                    variant={ytStatus?.connected ? 'secondary' : 'primary'} 
+                    size="sm" 
+                    onClick={ytStatus?.connected ? handleYoutubeDisconnect : handleYoutubeConnect}
+                  >
+                    {ytStatus?.connected ? 'Disconnect' : 'Connect'}
+                  </Button>
                 </div>
               </CardContent>
             </Card>

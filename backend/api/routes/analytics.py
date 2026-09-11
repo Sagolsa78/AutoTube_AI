@@ -3,7 +3,8 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from backend.db.database import get_db
-from backend.models.models import Video, Publication, Analytics, Script, Idea, DEFAULT_PROFILE_ID
+from backend.models.models import Video, Publication, Analytics, Script, Idea, User
+from backend.auth.dependencies import get_current_user
 from backend.youtube import youtube_client
 
 router = APIRouter()
@@ -21,18 +22,21 @@ def get_dir_size(path: str) -> float:
     return round(total_bytes / (1024 * 1024), 2)
 
 @router.get("/")
-async def get_dashboard_analytics(db: AsyncSession = Depends(get_db)):
+async def get_dashboard_analytics(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
     """
     Returns aggregated analytics for the dashboard and analytics view.
     Includes YouTube monetization progress, storage usage telemetry, and topic breakdowns.
     """
-    tenant_id = DEFAULT_PROFILE_ID # In a real app with Auth, extract from JWT token
+    user_id = user.id
 
     # Simulate fetching real analytics for the channel
-    yt_channel_data = await youtube_client.fetch_channel_analytics(tenant_id)
+    yt_channel_data = await youtube_client.fetch_channel_analytics(user_id)
 
     # Total uploaded videos & publications for this tenant
-    pub_q = select(Publication).where(Publication.status == "live", Publication.tenant_id == tenant_id)
+    pub_q = select(Publication).where(Publication.status == "live", Publication.user_id == user_id)
     pubs = (await db.execute(pub_q)).scalars().all()
     
     total_views = 0
@@ -40,7 +44,7 @@ async def get_dashboard_analytics(db: AsyncSession = Depends(get_db)):
     total_likes = 0
 
     for pub in pubs:
-        an_q = select(Analytics).where(Analytics.video_id == pub.video_id, Analytics.tenant_id == tenant_id)
+        an_q = select(Analytics).where(Analytics.video_id == pub.video_id, Analytics.user_id == user_id)
         an = (await db.execute(an_q)).scalars().first()
         if an:
             total_views += an.views
@@ -48,10 +52,10 @@ async def get_dashboard_analytics(db: AsyncSession = Depends(get_db)):
             total_likes += an.likes
 
     # Video & Content counts for this tenant
-    total_videos_res = await db.execute(select(func.count(Video.id)).where(Video.tenant_id == tenant_id))
+    total_videos_res = await db.execute(select(func.count(Video.id)).where(Video.user_id == user_id))
     total_videos = total_videos_res.scalar() or 0
 
-    total_ideas_res = await db.execute(select(func.count(Idea.id)).where(Idea.tenant_id == tenant_id))
+    total_ideas_res = await db.execute(select(func.count(Idea.id)).where(Idea.user_id == user_id))
     total_ideas = total_ideas_res.scalar() or 0
 
     # Disk usage telemetry (MB)

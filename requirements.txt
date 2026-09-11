@@ -37,3 +37,4 @@ aioboto3>=13.1.0
 
 # Queue
 redis>=5.0.0
+pydantic-settings>=2.0.0

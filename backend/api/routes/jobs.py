@@ -22,7 +22,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db.database import get_db
-from backend.models.models import Job, JobStatus
+from backend.models.models import Job, JobStatus, User
+from backend.auth.dependencies import get_current_user
 from backend.worker_router import (
     dispatch_job,
     router_registry,
@@ -80,7 +81,11 @@ class JobFailRequest(BaseModel):
 # ── Job Lifecycle Endpoints ───────────────────────────────────────────────────
 
 @router.post("/", response_model=JobResponse)
-async def create_job(request: JobCreateRequest, db: AsyncSession = Depends(get_db)):
+async def create_job(
+    request: JobCreateRequest, 
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
     """Submit a compute job. Enforces the §5 Worker Router decision tree."""
     job_id = str(uuid.uuid4())
 
@@ -90,6 +95,7 @@ async def create_job(request: JobCreateRequest, db: AsyncSession = Depends(get_d
     # 2. Persist canonical record into PostgreSQL (single source of truth)
     new_job = Job(
         id=job_id,
+        user_id=user.id,
         capability=request.capability.value,
         status=route_meta["status"],
         payload=request.payload,
@@ -112,9 +118,13 @@ async def get_telemetry(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/{job_id}", response_model=JobResponse)
-async def get_job_status(job_id: str, db: AsyncSession = Depends(get_db)):
+async def get_job_status(
+    job_id: str, 
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
     """Query canonical job state and result from PostgreSQL."""
-    stmt = select(Job).where(Job.id == job_id)
+    stmt = select(Job).where(Job.id == job_id, Job.user_id == user.id)
     res = await db.execute(stmt)
     job = res.scalar_one_or_none()
     if not job:
@@ -123,9 +133,13 @@ async def get_job_status(job_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/{job_id}/cancel", response_model=JobResponse)
-async def cancel_job(job_id: str, db: AsyncSession = Depends(get_db)):
+async def cancel_job(
+    job_id: str, 
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
     """Cancel a running or queued compute job."""
-    stmt = select(Job).where(Job.id == job_id)
+    stmt = select(Job).where(Job.id == job_id, Job.user_id == user.id)
     res = await db.execute(stmt)
     job = res.scalar_one_or_none()
     if not job:
