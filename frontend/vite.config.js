@@ -14,7 +14,7 @@ export default defineConfig({
     host: true, // Listen on all local IPs (0.0.0.0) so smartphones on LAN can connect
     port: 5173,
     proxy: {
-      '/api': 'http://localhost:8000',
+      '/api': 'http://127.0.0.1:8000',
     },
   },
 })

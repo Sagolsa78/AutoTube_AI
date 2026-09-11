@@ -11,9 +11,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db.database import get_db
-from backend.models.models import Idea, IdeaStatus, Channel, UserProfile
+from backend.models.models import Idea, IdeaStatus, Channel, User
 from integrations.providers.ai_providers import generate_with_fallback
-from backend.api.routes.profile import _ensure_profile
+from backend.auth.dependencies import get_current_user
 from engine.script.trends import fetch_trending_topics
 
 log = logging.getLogger(__name__)
@@ -54,9 +54,10 @@ def _extract_json_list(raw: str) -> list:
 async def list_ideas(
     channel_id: str | None = None,
     status: str | None = None,
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    q = select(Idea)
+    q = select(Idea).join(Channel).where(Channel.user_id == user.id)
     if channel_id:
         q = q.where(Idea.channel_id == channel_id)
     if status:
@@ -66,13 +67,17 @@ async def list_ideas(
 
 
 @router.post("/generate", response_model=list[IdeaOut], status_code=201)
-async def generate_ideas(body: GenerateIdeasIn, db: AsyncSession = Depends(get_db)):
+async def generate_ideas(
+    body: GenerateIdeasIn, 
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
     """
     Dynamically generates trending, highly interesting content ideas using the LLM.
     Ensures they are novel and not repeated.
     """
     channel = await db.get(Channel, body.channel_id)
-    if not channel:
+    if not channel or channel.user_id != user.id:
         raise HTTPException(404, "Channel not found")
 
     niche = body.niche or channel.niche
@@ -85,8 +90,7 @@ async def generate_ideas(body: GenerateIdeasIn, db: AsyncSession = Depends(get_d
     avoid_str = f"DO NOT use these recently covered topics: {', '.join(recent_topics)}" if recent_topics else ""
 
     # Fetch trending topics using user profile niche keywords
-    profile = await _ensure_profile(db)
-    kw_list = profile.niche_keywords or [niche]
+    kw_list = user.niche_keywords or [niche]
     try:
         trending = fetch_trending_topics(kw_list)
     except Exception as e:
@@ -132,6 +136,7 @@ Example:
     created = []
     for topic in topics:
         idea = Idea(
+            user_id=user.id,
             channel_id=body.channel_id,
             title=topic,
             topic=topic,
@@ -147,9 +152,16 @@ Example:
 
 
 @router.post("/{idea_id}/discard", response_model=IdeaOut)
-async def discard_idea(idea_id: str, db: AsyncSession = Depends(get_db)):
+async def discard_idea(
+    idea_id: str, 
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
     idea = await db.get(Idea, idea_id)
     if not idea:
+        raise HTTPException(404, "Idea not found")
+    channel = await db.get(Channel, idea.channel_id)
+    if not channel or channel.user_id != user.id:
         raise HTTPException(404, "Idea not found")
     if idea.status == IdeaStatus.promoted:
         raise HTTPException(400, "Cannot discard an idea that has already been promoted to a script.")

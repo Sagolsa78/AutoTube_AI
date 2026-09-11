@@ -10,7 +10,8 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db.database import get_db
-from backend.models.models import Script, Idea, IdeaStatus, Channel, ScriptStatus, Scene
+from backend.models.models import Script, Idea, IdeaStatus, Channel, ScriptStatus, Scene, User
+from backend.auth.dependencies import get_current_user
 
 router = APIRouter()
 
@@ -52,8 +53,12 @@ class ScriptUpdateIn(BaseModel):
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("/", response_model=list[ScriptOut])
-async def list_scripts(idea_id: str | None = None, db: AsyncSession = Depends(get_db)):
-    q = select(Script).options(selectinload(Script.scenes))
+async def list_scripts(
+    idea_id: str | None = None, 
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    q = select(Script).join(Idea).join(Channel).where(Channel.user_id == user.id).options(selectinload(Script.scenes))
     if idea_id:
         q = q.where(Script.idea_id == idea_id)
     result = await db.execute(q)
@@ -65,6 +70,7 @@ async def generate_script_for_idea(
     idea_id: str, 
     language: str | None = None, 
     locale: str | None = None, 
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -74,6 +80,11 @@ async def generate_script_for_idea(
     idea = await db.get(Idea, idea_id)
     if not idea:
         raise HTTPException(404, "Idea not found")
+        
+    channel = await db.get(Channel, idea.channel_id)
+    if not channel or channel.user_id != user.id:
+        raise HTTPException(404, "Idea not found")
+
     if idea.status not in (IdeaStatus.promoted, IdeaStatus.pending):
         raise HTTPException(400, f"Idea status is '{idea.status}' — promote it first")
 
@@ -106,6 +117,7 @@ async def generate_script_for_idea(
         raise HTTPException(500, f"Script generation failed: {exc}")
 
     script = Script(
+        user_id        = user.id,
         idea_id        = idea_id,
         full_text      = full_text,
         duration_est   = duration_est,
@@ -120,6 +132,7 @@ async def generate_script_for_idea(
     # Create Scene rows from LLM output
     for s_spec in story_spec.scenes:
         scene_obj = Scene(
+            user_id=user.id,
             script_id=script.id,
             scene_number=s_spec.scene_number,
             narration=s_spec.narration,
@@ -139,8 +152,12 @@ async def generate_script_for_idea(
 
 
 @router.get("/{script_id}", response_model=ScriptOut)
-async def get_script(script_id: str, db: AsyncSession = Depends(get_db)):
-    q = select(Script).where(Script.id == script_id).options(selectinload(Script.scenes))
+async def get_script(
+    script_id: str, 
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    q = select(Script).join(Idea).join(Channel).where(Channel.user_id == user.id, Script.id == script_id).options(selectinload(Script.scenes))
     res = await db.execute(q)
     s = res.scalars().first()
     if not s:
@@ -149,9 +166,14 @@ async def get_script(script_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.patch("/{script_id}", response_model=ScriptOut)
-async def update_script(script_id: str, body: ScriptUpdateIn, db: AsyncSession = Depends(get_db)):
+async def update_script(
+    script_id: str, 
+    body: ScriptUpdateIn, 
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
     """Inline editing of script text and individual scenes."""
-    q = select(Script).where(Script.id == script_id).options(selectinload(Script.scenes))
+    q = select(Script).join(Idea).join(Channel).where(Channel.user_id == user.id, Script.id == script_id).options(selectinload(Script.scenes))
     res = await db.execute(q)
     s = res.scalars().first()
     if not s:
@@ -212,8 +234,15 @@ async def update_script(script_id: str, body: ScriptUpdateIn, db: AsyncSession =
 
 
 @router.post("/{script_id}/regenerate", response_model=ScriptOut)
-async def regenerate_script(script_id: str, db: AsyncSession = Depends(get_db)):
-    old_script = await db.get(Script, script_id)
+async def regenerate_script(
+    script_id: str, 
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    q = select(Script).join(Idea).join(Channel).where(Channel.user_id == user.id, Script.id == script_id)
+    res = await db.execute(q)
+    old_script = res.scalars().first()
+    
     if not old_script:
         raise HTTPException(404, "Script not found")
     if old_script.status == ScriptStatus.used_in_render:
@@ -222,12 +251,16 @@ async def regenerate_script(script_id: str, db: AsyncSession = Depends(get_db)):
     old_script.status = ScriptStatus.discarded
     await db.flush()
 
-    return await generate_script_for_idea(old_script.idea_id, db)
+    return await generate_script_for_idea(old_script.idea_id, None, None, user, db)
 
 
 @router.post("/{script_id}/discard", response_model=ScriptOut)
-async def discard_script(script_id: str, db: AsyncSession = Depends(get_db)):
-    q = select(Script).where(Script.id == script_id).options(selectinload(Script.scenes))
+async def discard_script(
+    script_id: str, 
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    q = select(Script).join(Idea).join(Channel).where(Channel.user_id == user.id, Script.id == script_id).options(selectinload(Script.scenes))
     res = await db.execute(q)
     s = res.scalars().first()
     if not s:

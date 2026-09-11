@@ -1,9 +1,24 @@
 const API_URL = import.meta.env.VITE_API_URL || '';
 const BASE = API_URL ? `${API_URL.replace(/\/$/, '')}/api` : '/api';
 
+let authToken = localStorage.getItem('autotube_auth_token') || null;
+
+export const setAuthToken = (token) => {
+  authToken = token;
+  if (token) {
+    localStorage.setItem('autotube_auth_token', token);
+  } else {
+    localStorage.removeItem('autotube_auth_token');
+  }
+};
+
 async function request(endpoint, options = {}) {
   const url = `${BASE}${endpoint}`;
   const headers = { ...options.headers };
+
+  if (authToken) {
+    headers['Authorization'] = `Bearer ${authToken}`;
+  }
 
   // Don't set Content-Type for FormData (browser sets the multipart boundary)
   if (!(options.body instanceof FormData)) {
@@ -13,6 +28,11 @@ async function request(endpoint, options = {}) {
   const res = await fetch(url, { ...options, headers });
 
   if (!res.ok) {
+    if (res.status === 401) {
+      setAuthToken(null);
+      window.location.href = '/login';
+      return;
+    }
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || `API ${res.status}: ${res.statusText}`);
   }
@@ -61,6 +81,9 @@ export const api = {
   },
   rejectVideo:    (id) => request(`/videos/${id}/reject`, { method: 'PATCH' }),
   uploadVideo:    (id, meta) => request(`/videos/${id}/upload`, { method: 'POST', body: JSON.stringify(meta) }),
+  cancelVideo:    (id) => request(`/videos/${id}/cancel`, { method: 'POST' }),
+  pauseVideo:     (id) => request(`/videos/${id}/pause`, { method: 'POST' }),
+  resumeVideo:    (id) => request(`/videos/${id}/resume`, { method: 'POST' }),
 
   // ── Analytics ────────────────────────────────────
   getDashboardAnalytics: () => request('/analytics/'),
@@ -76,4 +99,9 @@ export const api = {
   // ── System & Compute Plane ────────────────────────
   getSystemHealth: () => request('/system/health'),
   getComputeTelemetry: () => request('/jobs/telemetry'),
+
+  // ── Integrations (YouTube) ────────────────────────
+  getYoutubeAuthUrl: () => request('/youtube/auth'),
+  getYoutubeStatus: () => request('/youtube/status'),
+  disconnectYoutube: () => request('/youtube/disconnect', { method: 'DELETE' }),
 };

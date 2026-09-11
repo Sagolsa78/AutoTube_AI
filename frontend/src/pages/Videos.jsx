@@ -339,7 +339,7 @@ export default function Videos({ filter }) {
               <CustomPlayer src={`/api/videos/${activeVideo.id}/preview`} />
             ) : (
               <div className="w-full aspect-[9/16] max-h-[580px] bg-surface rounded-xl border border-border flex items-center justify-center p-6 shadow-card-subtle">
-                {activeVideo.status === 'rendering' ? (
+                {['rendering', 'paused'].includes(activeVideo.status) ? (
                   <div className="flex flex-col items-center text-center w-full max-w-[260px]">
                     <Icon name="loader" size={36} className="text-warning animate-spin mb-4" />
                     <span className="text-base font-bold text-warning mb-4">Rendering Video</span>
@@ -370,6 +370,21 @@ export default function Videos({ filter }) {
                       <div className="bg-warning h-full transition-all duration-300" style={{ width: `${activeVideo.render_progress || 0}%` }} />
                     </div>
                     <span className="text-xs font-mono text-text-muted">{Math.round(activeVideo.render_progress || 0)}% Completed</span>
+                    
+                    <div className="flex gap-2 w-full mt-4">
+                      {activeVideo.status === 'rendering' ? (
+                        <button type="button" className="btn btn-secondary flex-1 py-2 text-xs flex items-center justify-center" onClick={() => api.pauseVideo(activeVideo.id).then(load)}>
+                          <Icon name="pause" size={14} className="mr-1" /> Pause
+                        </button>
+                      ) : (
+                        <button type="button" className="btn btn-primary flex-1 py-2 text-xs flex items-center justify-center" onClick={() => api.resumeVideo(activeVideo.id).then(load)}>
+                          <Icon name="play" size={14} className="mr-1" /> Resume
+                        </button>
+                      )}
+                      <button type="button" className="btn btn-danger flex-1 py-2 text-xs flex items-center justify-center" onClick={() => api.cancelVideo(activeVideo.id).then(load)}>
+                        <Icon name="x" size={14} className="mr-1" /> Cancel
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <div className="flex flex-col items-center text-text-muted gap-2">
@@ -549,7 +564,7 @@ export default function Videos({ filter }) {
                       >
                         {/* Poster / Preview representation */}
                         <div className="absolute inset-0 bg-elevated flex items-center justify-center">
-                          {v.status === 'rendering' ? (
+                          {['rendering', 'paused'].includes(v.status) ? (
                             <Icon name="loader" size={20} className="text-warning animate-spin" />
                           ) : (
                             <Icon name="video" size={22} className={isActive ? 'text-brand-red' : 'text-text-muted'} />
@@ -564,6 +579,8 @@ export default function Videos({ filter }) {
                           <span className={`w-2 h-2 rounded-full ${
                             v.status === 'ready' ? 'bg-success' :
                             v.status === 'rendering' ? 'bg-warning animate-pulse' :
+                            v.status === 'paused' ? 'bg-warning' :
+                            v.status === 'cancelled' ? 'bg-danger' :
                             v.status === 'uploaded' ? 'bg-info' : 'bg-text-muted'
                           }`} />
                         </div>

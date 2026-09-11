@@ -49,6 +49,7 @@ async def assign_asset_to_scene(
     if not asset:
         # Create a new asset entry (without downloading yet)
         asset = Asset(
+            user_id=scene.user_id,
             script_id=None,
             source_asset_id=source_asset_id,
             asset_type="video_clip",

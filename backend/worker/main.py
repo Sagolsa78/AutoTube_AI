@@ -1,19 +1,20 @@
 """
-Phase 18: Durable Queue Worker
-Polls the database for jobs in the 'rendering' state and executes them sequentially.
-Replaces transient in-memory asyncio.create_task.
+Durable Queue Worker for AutoTube AI.
+Polls the database for videos in the 'rendering' state and executes them sequentially.
+Run this as a separate process: python -m backend.worker.main
 """
 import logging
 import asyncio
 from backend.db.database import AsyncSessionLocal
-from backend.models.models import Video, VideoStatus, Script, Idea, Channel, UserProfile
+from backend.models.models import Video, VideoStatus, Script, Idea, Channel, User
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s — %(message)s",
+)
 log = logging.getLogger(__name__)
-
-# Single background task reference
-_WORKER_TASK = None
 
 async def poll_jobs():
     """Continuously polls the database for rendering jobs and processes them one by one."""
@@ -34,7 +35,6 @@ async def poll_jobs():
                 if video:
                     log.info(f"[Worker] Found pending job for video: {video.id}")
                     
-                    # Reconstruct RenderJob from database
                     try:
                         script_q = select(Script).where(Script.id == video.script_id).options(selectinload(Script.scenes))
                         script_res = await db.execute(script_q)
@@ -48,7 +48,7 @@ async def poll_jobs():
                             
                         idea = await db.get(Idea, script.idea_id)
                         channel = await db.get(Channel, idea.channel_id) if idea else None
-                        profile = await db.get(UserProfile, video.tenant_id or "default-user")
+                        profile = await db.get(User, video.user_id)
                         
                         spec_data = script.body or {}
                         from engine.story.schemas import StorySpec, SceneSpec
@@ -94,14 +94,10 @@ async def poll_jobs():
                         continue
 
             if video and job:
-                # Execute it (outside the db session so _run_render can manage its own)
-                # Wait, _run_render doesn't assume much, but it creates its own session.
-                # If we await it here, we process sequentially.
                 try:
                     await _run_render(video.id, job)
                 except Exception as e:
                     log.error(f"[Worker] Unhandled error during render of {video.id}: {e}")
-                    # Recovery mechanism if _run_render crashed violently
                     async with AsyncSessionLocal() as db_err:
                         v = await db_err.get(Video, video.id)
                         if v and v.status == VideoStatus.rendering:
@@ -109,7 +105,6 @@ async def poll_jobs():
                             v.notes = f"Worker crash: {e}"
                             await db_err.commit()
             else:
-                # No jobs found, sleep before next poll
                 await asyncio.sleep(5)
                 
         except asyncio.CancelledError:
@@ -119,16 +114,5 @@ async def poll_jobs():
             log.error(f"[Worker] Polling loop encountered error: {e}")
             await asyncio.sleep(10)
 
-def start_worker():
-    global _WORKER_TASK
-    if _WORKER_TASK is None or _WORKER_TASK.done():
-        _WORKER_TASK = asyncio.create_task(poll_jobs())
-
-def queue_render_task(video_id: str, tenant_id: str, job=None):
-    """
-    Since the worker polls the DB, this function no longer spawns an isolated task.
-    It just ensures the worker is running.
-    """
-    log.info(f"[Worker] Acknowledged new render request for {video_id}.")
-    start_worker()
-    return True
+if __name__ == "__main__":
+    asyncio.run(poll_jobs())

@@ -10,13 +10,14 @@ AutoShorts Studio is a professional-grade, faceless YouTube Shorts automation pi
 ## ✨ Features
 
 - **$0 Billing Mode:** Fully operational using local LLMs (via Ollama) and free-tier APIs (Google Gemini, Groq, OpenRouter, Pexels, Edge TTS).
+- **Multi-Tenant Cloud Ready:** Fully migrated to an Async PostgreSQL database with JWT-based Authentication, enabling public beta hosting where users can securely connect their own YouTube channels.
+- **Durable Background Workers:** Separate `worker` daemon orchestrates the heavy FFmpeg rendering pipeline asynchronously, allowing the API to remain fast and scalable. 
 - **Premium UI/UX:** A bespoke, enterprise-grade React dashboard built on "Pro Max" design principles (glassmorphism, accessible keyboard navigation, dynamic SVG iconography).
 - **Dynamic Caption Engine:** 7 highly polished burnt-in subtitle styles (e.g., Neon Glow, Karaoke Pop, Minimalist) using advanced FFmpeg ASS filtergraphs.
 - **Intelligent Video Assembly:** Automatically normalizes color/exposure across fetched stock clips and applies smooth 0.3s crossfades for professional-feeling cuts.
 - **Custom Watermarking:** Upload your channel logo, adjust opacity/scale/position, and have it composited natively into every render.
 - **Smart Visual Prompts:** LLM actively generates 3-4 word, highly concrete visual search prompts ensuring hyper-relevant stock footage matching.
-- **Provider Fallback:** Never fail a generation. If Ollama is down, it seamlessly cascades to Gemini, then Groq, then OpenRouter.
-- **Direct YouTube Upload:** Publish straight to your channel (Private, Unlisted, Public) using Google OAuth2.
+- **Direct YouTube Upload:** Publish straight to your channel using a fully web-based Google OAuth2 flow stored securely in your tenant profile.
 
 ## 🚀 Getting Started
 
@@ -70,18 +71,26 @@ Navigate to `http://localhost:5173` to access the AutoShorts Studio dashboard.
 
 ## 🛠️ Architecture
 
-- **Backend:** `FastAPI` serves as the orchestration engine, handling asynchronous tasks, database state (SQLite via `SQLAlchemy`), and FFmpeg subprocess management.
+- **Backend:** `FastAPI` serves as the control plane API. It handles webhooks, job queuing, and state management via an Async `SQLAlchemy` connection to PostgreSQL.
+- **Worker Daemon:** A standalone durable worker process (`backend.worker.main`) actively polls PostgreSQL for queued jobs. This completely decouples heavy FFmpeg subprocess rendering from the web layer.
+- **Storage Abstraction:** The application supports local filesystem storage (`STORAGE_PROVIDER=local`) for dev and Cloudflare R2/S3 storage (`STORAGE_PROVIDER=r2`) for production.
 - **Frontend:** `React` with `Vite` provides a snappy, SPA experience with custom styling (`index.css`) avoiding heavy framework bloat.
-- **Database:** Local SQLite (`storage/autoshorts.db`) containing `UserProfile`, `Idea`, `Script`, `Video`, and `Channel` models.
-- **Rendering Engine:** `assembler.py` handles complex FFmpeg filtergraphs, performing scale/crop, color matching (`eq`), cascading crossfades (`xfade`), and subtitle overlay (`subtitles`).
+- **Authentication:** Tenant isolation is baked-in, allowing a single deployed instance to support multiple creators via JWT/API Key checks.
 
-## 🔑 YouTube API Integration (Optional)
+## 🐳 Docker Deployment
 
-To enable direct uploading:
+To spin up the entire cluster (Postgres, API, Worker, Frontend) locally:
+```bash
+docker-compose up -d --build
+```
+
+## 🔑 YouTube OAuth Integration
+
+To enable direct multi-tenant uploading:
 1. Go to the [Google Cloud Console](https://console.cloud.google.com/).
 2. Create a project and enable the **YouTube Data API v3**.
-3. Create OAuth 2.0 Client IDs (Desktop App type).
-4. Download the JSON and save it as `client_secret.json` in the root directory.
+3. Create OAuth 2.0 Client IDs (Web Application type). Add `http://localhost:8080/api/youtube/callback` to the redirect URIs.
+4. Download the JSON and save it as `client_secrets.json` in the `secrets/` directory.
 
 ## 🤝 Contributing
 
