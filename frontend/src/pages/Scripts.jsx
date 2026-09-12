@@ -11,6 +11,7 @@ import ScoreBadge from '../components/ScoreBadge';
 import EmptyState from '../components/EmptyState';
 import Skeleton from '../components/Skeleton';
 import { toast } from 'sonner';
+import { useChannel } from '../contexts/ChannelContext';
 
 export default function Scripts() {
   const [scripts, setScripts] = useState([]);
@@ -18,10 +19,12 @@ export default function Scripts() {
   const [activeTab, setActiveTab] = useState('draft');
   const [regenerating, setRegenerating] = useState(null);
   const navigate = useNavigate();
+  const { activeChannelId } = useChannel();
 
   const loadData = async () => {
     try {
-      const allScripts = await api.getScripts();
+      setLoading(true);
+      const allScripts = await api.getScripts(activeChannelId);
       setScripts((allScripts || []).sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
     } catch (e) { 
       console.error(e); 
@@ -30,7 +33,14 @@ export default function Scripts() {
     }
   };
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => { 
+      if (activeChannelId) {
+          loadData(); 
+      } else {
+          setScripts([]);
+          setLoading(false);
+      }
+  }, [activeChannelId]);
 
   const discardScript = async (e, id) => {
     e.stopPropagation();
@@ -178,16 +188,21 @@ export default function Scripts() {
                       </div>
                     </div>
 
-                    {s.status === 'draft' && (
+                    {s.status === 'draft' || s.status === 'used_in_render' ? (
                       <div className="space-y-2 pt-3 border-t border-border/80">
+                        {s.latest_video_status === 'failed' && s.latest_video_error && (
+                          <div className="text-[10px] text-brand-red bg-brand-red/10 border border-brand-red/20 rounded p-2 mb-2 line-clamp-3" title={s.latest_video_error}>
+                            <span className="font-bold">Render Failed:</span> {s.latest_video_error}
+                          </div>
+                        )}
                         <Button
                           variant="primary"
                           size="sm"
-                          icon="film"
+                          icon={s.status === 'used_in_render' ? 'copy' : 'film'}
                           className="w-full shadow-brand-glow"
                           onClick={() => openInStudio(s.id)}
                         >
-                          Open in Studio
+                          {s.status === 'used_in_render' ? 'Reuse in Studio' : 'Open in Studio'}
                         </Button>
                         <div className="flex gap-2">
                           <Button
@@ -211,7 +226,7 @@ export default function Scripts() {
                           />
                         </div>
                       </div>
-                    )}
+                    ) : null}
                   </div>
 
                   {/* Right Column: Scenes Flow & Narration Preview */}

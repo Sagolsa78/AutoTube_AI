@@ -35,16 +35,32 @@ export default function Profile() {
   const [hashtagSet, setHashtagSet] = useState('');
   const [autoApprove, setAutoApprove] = useState(false);
 
+  // AI Model Settings
+  const [modelsData, setModelsData] = useState(null);
+  const [selectedProvider, setSelectedProvider] = useState('ollama');
+  const [selectedModel, setSelectedModel] = useState('qwen2.5-coder:7b');
+  const [savingModel, setSavingModel] = useState(false);
+
   const load = async () => {
     try {
-      const [prof, styles, yt] = await Promise.all([
+      const [prof, styles, yt, models] = await Promise.all([
         api.getProfile(), 
         api.getCaptionStyles(),
-        api.getYoutubeStatus()
+        api.getYoutubeStatus(),
+        api.getModels().catch(() => null)
       ]);
       setProfile(prof);
       setCaptionStyles(styles || []);
       setYtStatus(yt);
+      if (models) {
+        setModelsData(models);
+        if (models.user_preference?.preferred_ai_provider) {
+          setSelectedProvider(models.user_preference.preferred_ai_provider);
+        }
+        if (models.user_preference?.preferred_ai_model) {
+          setSelectedModel(models.user_preference.preferred_ai_model);
+        }
+      }
       setDisplayName(prof?.display_name || '');
       setChannelName(prof?.channel_name || '');
       setDefaultCta(prof?.default_cta || '');
@@ -62,6 +78,20 @@ export default function Profile() {
       setAutoApprove(prof?.auto_approve ?? false);
     } catch (e) { 
       console.error(e); 
+    }
+  };
+
+  const saveAiModel = async () => {
+    setSavingModel(true);
+    try {
+      await api.updateAiSettings({ provider: selectedProvider, model: selectedModel });
+      toast.success(`Active AI model set to ${selectedModel} via ${selectedProvider.toUpperCase()}`);
+      const m = await api.getModels();
+      setModelsData(m);
+    } catch (e) {
+      toast.error('Failed to update AI model: ' + e.message);
+    } finally {
+      setSavingModel(false);
     }
   };
 
@@ -323,6 +353,114 @@ export default function Profile() {
           {/* RIGHT COLUMN: Settings Forms (8 cols) */}
           <div className="lg:col-span-8 space-y-6">
             
+            {/* AI Model & Inference Provider Settings */}
+            <Card variant="surface" className="border-brand-red/30">
+              <CardHeader
+                title={
+                  <div className="flex items-center justify-between w-full">
+                    <CardTitle icon={<Icon name="cpu" size={16} className="text-brand-red" />}>
+                      AI Intelligence & LLM Selection
+                    </CardTitle>
+                    <span className="text-[10px] font-mono uppercase tracking-wider bg-brand-red/10 text-brand-red px-2 py-0.5 rounded border border-brand-red/20 font-bold">
+                      {selectedProvider === 'ollama' ? '⚡ Local Inference' : '☁️ Cloud Inference'}
+                    </span>
+                  </div>
+                }
+              />
+              <CardContent className="space-y-4">
+                <p className="text-xs text-text-muted">
+                  Choose which language model powers idea generation and structured 3-act storytelling. 
+                  Local Ollama models run completely free on your local GPU/CPU; cloud providers utilize external APIs.
+                </p>
+
+                {/* Provider Selector Grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  {[
+                    { id: 'ollama', label: 'Ollama', sub: 'Local Offline', isLocal: true },
+                    { id: 'gemini', label: 'Gemini', sub: 'Google AI', isLocal: false },
+                    { id: 'groq', label: 'Groq', sub: 'Llama 3.3', isLocal: false },
+                    { id: 'openrouter', label: 'OpenRouter', sub: 'DeepSeek / Multi', isLocal: false },
+                  ].map(p => {
+                    const isAvail = modelsData?.providers?.[p.id]?.available;
+                    const isSelected = selectedProvider === p.id;
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedProvider(p.id);
+                          const provModels = modelsData?.providers?.[p.id]?.models || [];
+                          if (provModels.length > 0 && !provModels.includes(selectedModel)) {
+                            setSelectedModel(provModels[0]);
+                          }
+                        }}
+                        className={`p-3 rounded-xl border text-left transition-all relative select-none ${
+                          isSelected 
+                            ? 'bg-brand-red/10 border-brand-red shadow-brand-glow text-text-primary' 
+                            : 'bg-surface-input border-border hover:border-text-muted text-text-secondary'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-bold">{p.label}</span>
+                          <span className={`w-2 h-2 rounded-full ${isAvail ? 'bg-success' : 'bg-text-muted'}`} />
+                        </div>
+                        <span className="text-[10px] text-text-muted block leading-tight">{p.sub}</span>
+                        <span className="text-[9px] font-mono mt-1.5 block text-text-secondary">
+                          {isAvail ? (p.isLocal ? '● Installed' : '● Ready') : '○ Unconfigured'}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Model Selector for chosen Provider */}
+                <div className="bg-elevated p-3.5 rounded-xl border border-border space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase tracking-wider text-text-muted mb-1">
+                        Active Model ({selectedProvider.toUpperCase()})
+                      </label>
+                      <div className="text-xs text-text-secondary">
+                        {selectedProvider === 'ollama' ? (
+                          <span>Installed model on your machine: <code className="text-brand-red font-mono">qwen2.5-coder:7b</code></span>
+                        ) : (
+                          <span>Cloud model managed via configured API key</span>
+                        )}
+                      </div>
+                    </div>
+
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={saveAiModel}
+                      loading={savingModel}
+                      disabled={savingModel}
+                      className="shrink-0 shadow-brand-glow"
+                    >
+                      Apply Active Model
+                    </Button>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {(modelsData?.providers?.[selectedProvider]?.models || ['qwen2.5-coder:7b']).map(m => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => setSelectedModel(m)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-mono font-medium border transition-colors ${
+                          selectedModel === m
+                            ? 'bg-brand-red text-white border-brand-red shadow-sm'
+                            : 'bg-surface-input border-border text-text-secondary hover:text-text-primary hover:border-text-muted'
+                        }`}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
             {/* Brand & Content Identity */}
             <Card variant="surface">
               <CardHeader

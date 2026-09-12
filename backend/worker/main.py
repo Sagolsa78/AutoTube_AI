@@ -23,8 +23,9 @@ log = logging.getLogger(__name__)
 
 
 async def execute_job(job_id: str):
-    """Executes a single RENDER job using the RenderingService."""
+    """Executes a single job based on its capability."""
     from backend.services.rendering_service import run_job
+    from backend.services.asset_service import execute_asset_job
     
     async with AsyncSessionLocal() as db:
         # Load the Job
@@ -42,32 +43,36 @@ async def execute_job(job_id: str):
         job_record.started_at = datetime.utcnow()
         await db.commit()
         
-        # Load associated Video
-        payload = job_record.payload or {}
-        video_id = payload.get("video_id")
-        
-        if not video_id:
-            job_record.status = JobStatus.failed.value
-            job_record.error_message = "No video_id in payload."
-            job_record.completed_at = datetime.utcnow()
-            await db.commit()
-            log.error(f"[Worker] Job {job_id} failed: No video_id.")
-            return False
-
         try:
-            render_job = RenderJob(**payload)
-            # Run the rendering pipeline
-            await run_job(video_id, render_job)
-            
-            # Since run_job is decoupled, it updates the Video directly.
-            # Check the resulting video status to determine job success.
-            await db.refresh(job_record)
-            video = await db.get(Video, video_id)
-            if video and video.status == VideoStatus.ready:
-                job_record.status = JobStatus.completed.value
+            if job_record.capability == "RENDER":
+                payload = job_record.payload or {}
+                video_id = payload.get("video_id")
+                if not video_id:
+                    raise ValueError("No video_id in RENDER payload.")
+                
+                render_job = RenderJob(**payload)
+                await run_job(video_id, render_job)
+                
+                # Render updates Video directly. Check status.
+                await db.refresh(job_record)
+                video = await db.get(Video, video_id)
+                if video and video.status == VideoStatus.ready:
+                    job_record.status = JobStatus.completed.value
+                else:
+                    job_record.status = JobStatus.failed.value
+                    job_record.error_message = video.notes if video else "Unknown failure"
+                    
+            elif job_record.capability in ["IMAGE", "VIDEO"]:
+                # Execute Asset Generation Job
+                success = await execute_asset_job(job_id)
+                await db.refresh(job_record)
+                if not success and job_record.status != JobStatus.failed.value:
+                    job_record.status = JobStatus.failed.value
+                    
             else:
-                job_record.status = JobStatus.failed.value
-                job_record.error_message = video.notes if video else "Unknown failure"
+                raise ValueError(f"Unsupported capability: {job_record.capability}")
+            
+
                 
         except Exception as e:
             log.exception(f"[Worker] Unhandled error running job {job_id}: {e}")
@@ -91,7 +96,7 @@ async def poll_jobs():
                 # Find oldest queued job
                 q = select(Job).where(
                     Job.status.in_([JobStatus.queued.value, JobStatus.waiting_for_local_worker.value, JobStatus.dispatched.value]),
-                    Job.capability == "RENDER"
+                    Job.capability.in_(["RENDER", "IMAGE", "VIDEO"])
                 ).order_by(Job.created_at.asc()).limit(1)
                 
                 res = await db.execute(q)

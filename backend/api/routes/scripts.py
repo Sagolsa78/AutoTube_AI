@@ -43,6 +43,8 @@ class ScriptOut(BaseModel):
     language:       str | None = None
     locale:         str | None = None
     claims:         list | None = None
+    latest_video_status: str | None = None
+    latest_video_error: str | None = None
 
 class ScriptUpdateIn(BaseModel):
     """Allows editing full_text or individual scene narration/visual_description."""
@@ -54,11 +56,17 @@ class ScriptUpdateIn(BaseModel):
 
 @router.get("/", response_model=list[ScriptOut])
 async def list_scripts(
+    channel_id: str | None = None,
     idea_id: str | None = None, 
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    q = select(Script).join(Idea).join(Channel).where(Channel.user_id == user.id).options(selectinload(Script.scenes))
+    q = select(Script).join(Idea).join(Channel).where(Channel.user_id == user.id).options(
+        selectinload(Script.scenes),
+        selectinload(Script.videos)
+    )
+    if channel_id:
+        q = q.where(Channel.id == channel_id)
     if idea_id:
         q = q.where(Script.idea_id == idea_id)
     result = await db.execute(q)
@@ -70,6 +78,8 @@ async def generate_script_for_idea(
     idea_id: str, 
     language: str | None = None, 
     locale: str | None = None, 
+    provider: str | None = None,
+    model: str | None = None,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -89,17 +99,24 @@ async def generate_script_for_idea(
         raise HTTPException(400, f"Idea status is '{idea.status}' — promote it first")
 
     # Get niche and language from channel
-    channel = await db.get(Channel, idea.channel_id)
-    niche = channel.niche if channel else "science_wow"
-    final_language = language or (channel.language if channel else "en")
+    niche = channel.niche
+    final_language = language or channel.language
     final_locale = locale or "US"
+    preferred_prov = provider or user.preferred_ai_provider or settings.DEFAULT_AI_PROVIDER
+    preferred_mod = model or user.preferred_ai_model or settings.DEFAULT_AI_MODEL
 
     # Run generation pipeline
     from engine.script.generator import generate_script
     from engine.quality.checker import check_script
     from engine.research.verifier import FactVerifier
     try:
-        story_spec, provider_used = generate_script(idea.topic, niche, final_language)
+        story_spec, provider_used = generate_script(
+            idea.topic,
+            niche=niche,
+            language=final_language,
+            provider=preferred_prov,
+            model=preferred_mod
+        )
         story_spec.language = final_language
         story_spec.locale = final_locale
         full_text = " ".join([s.narration for s in story_spec.scenes if s.narration])
@@ -144,7 +161,7 @@ async def generate_script_for_idea(
     await db.flush()
 
     # Reload with scenes
-    q = select(Script).where(Script.id == script.id).options(selectinload(Script.scenes))
+    q = select(Script).where(Script.id == script.id).options(selectinload(Script.scenes), selectinload(Script.videos))
     res = await db.execute(q)
     script = res.scalars().first()
 
@@ -157,7 +174,7 @@ async def get_script(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    q = select(Script).join(Idea).join(Channel).where(Channel.user_id == user.id, Script.id == script_id).options(selectinload(Script.scenes))
+    q = select(Script).join(Idea).join(Channel).where(Channel.user_id == user.id, Script.id == script_id).options(selectinload(Script.scenes), selectinload(Script.videos))
     res = await db.execute(q)
     s = res.scalars().first()
     if not s:
@@ -173,7 +190,7 @@ async def update_script(
     db: AsyncSession = Depends(get_db)
 ):
     """Inline editing of script text and individual scenes."""
-    q = select(Script).join(Idea).join(Channel).where(Channel.user_id == user.id, Script.id == script_id).options(selectinload(Script.scenes))
+    q = select(Script).join(Idea).join(Channel).where(Channel.user_id == user.id, Script.id == script_id).options(selectinload(Script.scenes), selectinload(Script.videos))
     res = await db.execute(q)
     s = res.scalars().first()
     if not s:
@@ -260,7 +277,7 @@ async def discard_script(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    q = select(Script).join(Idea).join(Channel).where(Channel.user_id == user.id, Script.id == script_id).options(selectinload(Script.scenes))
+    q = select(Script).join(Idea).join(Channel).where(Channel.user_id == user.id, Script.id == script_id).options(selectinload(Script.scenes), selectinload(Script.videos))
     res = await db.execute(q)
     s = res.scalars().first()
     if not s:
@@ -307,6 +324,10 @@ def _fmt(s: Script) -> dict:
                 "stock_query": spec_sc.get("stock_query", "")
             })
             
+    latest_vid = None
+    if hasattr(s, "videos") and s.videos:
+        latest_vid = sorted(s.videos, key=lambda v: v.created_at, reverse=True)[0]
+        
     return {
         "id":             s.id,
         "idea_id":        s.idea_id,
@@ -320,5 +341,7 @@ def _fmt(s: Script) -> dict:
         "created_at":     str(s.created_at),
         "language":       language,
         "locale":         locale,
-        "claims":         claims
+        "claims":         claims,
+        "latest_video_status": latest_vid.status.value if (latest_vid and hasattr(latest_vid.status, "value")) else (latest_vid.status if latest_vid else None),
+        "latest_video_error": latest_vid.notes if latest_vid else None
     }

@@ -81,7 +81,8 @@ class Settings(BaseSettings):
     SCRIPT_PROVIDER_ORDER: str = "ollama,gemini,groq,openrouter"
     
     OLLAMA_BASE_URL: str = "http://localhost:11434"
-    OLLAMA_MODEL: str = "llama3.2"
+    OLLAMA_MODEL: str = "qwen2.5-coder:7b"
+    OLLAMA_MODELS: str = "qwen2.5-coder:7b"  # comma-separated fallback list
     
     GEMINI_API_KEY: Optional[str] = None
     GROQ_API_KEY: Optional[str] = None
@@ -98,6 +99,16 @@ class Settings(BaseSettings):
     # Determines if API endpoints require authentication
     AUTH_DISABLED: bool = False
     AUTOTUBE_API_KEY: Optional[str] = None
+    JWT_SECRET: str = "autotube-super-secret-jwt-signing-key-2026"
+    JWT_ALGORITHM: str = "HS256"
+    
+    # ── Default Active AI Model ───────────────────────────────────────────────
+    DEFAULT_AI_PROVIDER: str = "ollama"
+    DEFAULT_AI_MODEL: str = "qwen2.5-coder:7b"
+    
+    # ── GitHub / Cloud Worker ─────────────────────────────────────────────────
+    GITHUB_TOKEN: Optional[str] = None
+    GITHUB_REPO: str = "Sagolsa78/AutoTube_AI"
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -108,6 +119,15 @@ class Settings(BaseSettings):
     @property
     def STORAGE_PROVIDER(self) -> str:
         return self.STORAGE_BACKEND
+
+    @property
+    def YOUTUBE_CLIENT_SECRETS(self):
+        """Path to the YouTube OAuth client secrets JSON file."""
+        import os
+        from pathlib import Path
+        base = Path(__file__).resolve().parent.parent.parent
+        secret_file = os.getenv("YOUTUBE_CLIENT_SECRETS", "client_secret.json")
+        return base / secret_file
 
     @property
     def parsed_cors_origins(self) -> list[str]:

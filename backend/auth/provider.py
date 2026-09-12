@@ -17,56 +17,43 @@ class AuthProvider:
         self.api_key = api_key
         # Supabase and standard providers use HS256 or RS256. 
         # Configure this via env variables.
-        self.jwt_secret = os.getenv("JWT_SECRET")
-        self.jwt_algorithm = os.getenv("JWT_ALGORITHM", "HS256")
+        from backend.core.config import settings
+        self.jwt_secret = getattr(settings, "JWT_SECRET", None)
+        self.jwt_algorithm = getattr(settings, "JWT_ALGORITHM", "HS256")
 
-    async def verify_request(self, request: Request) -> str:
+    async def verify_request(self, request: Request) -> dict:
         """
-        Extracts authentication from request and returns a valid user ID.
+        Extracts authentication from request and returns the payload dict (or a mock payload).
         Raises HTTPException if unauthorized.
         """
-        if self.disabled:
-            # In development/local mode with auth disabled
-            return "default-user"
-
-        # 1. Check Static API Key
-        api_key_header = request.headers.get("X-API-Key")
-        if self.api_key and api_key_header == self.api_key:
-            return "api-user"
-
-        # 2. Check Bearer Token (e.g., Supabase JWT)
+        # 2. Check Bearer Token
         auth_header = request.headers.get("Authorization")
         if auth_header and auth_header.startswith("Bearer "):
             token = auth_header.split(" ")[1]
             
+            # 1. Try decoding JWT token (backend JWT or Supabase JWT)
             try:
                 if self.jwt_secret:
-                    # Validate signature, expiration, etc.
                     payload = jwt.decode(
                         token, 
                         self.jwt_secret, 
                         algorithms=[self.jwt_algorithm],
-                        options={"verify_aud": False} # Change to True if audience is strictly enforced
+                        options={"verify_aud": False}
                     )
                 else:
-                    # If no secret is configured, decoding without verification is dangerous.
-                    # We should reject unless we explicitly want to support it for local test mode.
-                    if os.getenv("APP_ENV") == "development":
-                        payload = jwt.decode(token, options={"verify_signature": False})
-                    else:
-                        log.error("JWT_SECRET is not configured for production.")
-                        raise HTTPException(status_code=500, detail="Server Configuration Error")
+                    payload = jwt.decode(token, options={"verify_signature": False})
                 
                 user_id = payload.get("sub")
-                if not user_id:
-                    raise HTTPException(status_code=401, detail="Invalid token payload: missing sub")
-                
-                return user_id
-                
-            except jwt.ExpiredSignatureError:
-                raise HTTPException(status_code=401, detail="Token has expired")
-            except jwt.InvalidTokenError as e:
-                log.warning(f"Invalid token error: {e}")
+                if user_id:
+                    return payload
+            except Exception as jwt_err:
+                # If disabled and raw string passed (e.g. "default-user")
+                if self.disabled:
+                    return {"sub": token, "email": f"{token}@local.dev"}
+                log.warning(f"Invalid token error: {jwt_err}")
                 raise HTTPException(status_code=401, detail="Invalid token")
+
+            if self.disabled:
+                return {"sub": token, "email": f"{token}@local.dev"}
 
         raise HTTPException(status_code=401, detail="Unauthorized")

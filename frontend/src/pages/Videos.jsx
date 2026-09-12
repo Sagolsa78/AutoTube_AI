@@ -9,6 +9,7 @@ import Button from '../components/Button';
 import EmptyState from '../components/EmptyState';
 import Skeleton from '../components/Skeleton';
 import { toast } from 'sonner';
+import { useChannel } from '../contexts/ChannelContext';
 
 const CustomPlayer = ({ src }) => {
   const videoRef = useRef(null);
@@ -128,6 +129,8 @@ export default function Videos({ filter }) {
   const [scripts, setScripts] = useState([]);
   const [ideas, setIdeas] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const { activeChannelId } = useChannel();
   const [uploadModal, setUploadModal] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [activeVideoId, setActiveVideoId] = useState(null);
@@ -135,10 +138,11 @@ export default function Videos({ filter }) {
 
   const load = async () => {
     try {
+      setLoading(true);
       const [data, allScripts, allIdeas] = await Promise.all([
-        api.getVideos(),
-        api.getScripts(),
-        api.getIdeas()
+        api.getVideos(activeChannelId),
+        api.getScripts(activeChannelId),
+        api.getIdeas(activeChannelId)
       ]);
       
       let sorted = (data || []).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
@@ -162,12 +166,17 @@ export default function Videos({ filter }) {
   };
 
   useEffect(() => {
-    load();
+    if (activeChannelId) {
+      load();
+    } else {
+      setVideos([]);
+      setLoading(false);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter]);
+  }, [filter, activeChannelId]);
 
   useEffect(() => {
-    const isRendering = videos.some(v => v.status === 'rendering');
+    const isRendering = videos.some(v => v.status === 'rendering' || v.render_stage === 'done');
     const iv = setInterval(load, isRendering ? 3000 : 6000);
     return () => clearInterval(iv);
   }, [videos]);
@@ -347,7 +356,9 @@ export default function Videos({ filter }) {
                     <div className="w-full space-y-3 mb-6">
                       {['tts', 'visuals', 'assembly', 'metadata'].map((stageName, i) => {
                         const stages = ['tts', 'visuals', 'assembly', 'metadata'];
-                        const currentIdx = stages.indexOf(activeVideo.render_stage || 'tts');
+                        const renderStage = activeVideo.render_stage || 'tts';
+                        // 'done' means all stages completed
+                        const currentIdx = renderStage === 'done' ? stages.length : stages.indexOf(renderStage);
                         const isDone = i < currentIdx;
                         const isActive = i === currentIdx;
                         
@@ -396,7 +407,7 @@ export default function Videos({ filter }) {
             )}
 
             {/* Accessible Primary Action Buttons (§12 & §22) */}
-            <div className="flex gap-3 w-full">
+            <div className="flex gap-2.5 w-full">
               {activeVideo.status === 'ready' && (
                 <>
                   <button
@@ -408,10 +419,18 @@ export default function Videos({ filter }) {
                   </button>
                   <button
                     type="button"
-                    className="btn btn-danger flex-1 py-3 text-sm font-bold shadow-md"
-                    onClick={() => action(activeVideo.id, 'reject')}
+                    className="btn btn-primary flex-1 py-3 text-sm font-bold shadow-brand-glow"
+                    onClick={() => setUploadModal(activeVideo)}
                   >
-                    <Icon name="x" size={16} /> Reject <span className="text-[11px] opacity-60 ml-1 hidden sm:inline">[R]</span>
+                    <Icon name="upload" size={16} /> Publish <span className="text-[11px] opacity-75 ml-1 hidden sm:inline">to YouTube</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-danger py-3 px-3 text-sm font-bold shadow-md"
+                    onClick={() => action(activeVideo.id, 'reject')}
+                    title="Reject Short"
+                  >
+                    <Icon name="x" size={16} />
                   </button>
                 </>
               )}

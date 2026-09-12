@@ -1,119 +1,124 @@
 """
-Phase 3: YouTube API Integration & Analytics
-Fetches real view counts, subscriber growth, and retention metrics.
+Phase 3: YouTube API Integration & Real Analytics.
+Fetches real view counts, subscriber growth, and channel metrics via YouTube Data API v3.
+Eliminates mock data entirely.
 """
+from __future__ import annotations
 import logging
-import os
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
-from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
 log = logging.getLogger(__name__)
 
+
 class YouTubeAPIClient:
-    def __init__(self):
-        self.is_authenticated = False
-        self.youtube = None
-        self.credentials = None
-        log.info("[YouTubeAPI] Initialized YouTube API Client")
+    async def get_authenticated_service(self, user_id: str):
+        """Build an authenticated YouTube service using user's DB credentials."""
+        try:
+            from integrations.youtube.uploader import _get_credentials
+            creds = await _get_credentials(user_id)
+            return build("youtube", "v3", credentials=creds)
+        except Exception as e:
+            log.debug(f"[YouTubeAPI] No active credentials for user {user_id}: {e}")
+            return None
 
-    def _init_client(self):
-        if self.is_authenticated and self.youtube:
-            return self.youtube
-            
-        # In a real environment, load from db or secure storage
-        token = os.environ.get("YOUTUBE_OAUTH_TOKEN")
-        if token:
-            self.credentials = Credentials(token)
-            self.youtube = build("youtube", "v3", credentials=self.credentials)
-            self.is_authenticated = True
-            log.info("[YouTubeAPI] Successfully authenticated with YouTube API")
-            return self.youtube
-        return None
-
-    async def fetch_channel_analytics(self, channel_id: str) -> Dict[str, Any]:
+    async def fetch_channel_analytics(self, user_id: str) -> Dict[str, Any]:
         """
-        Fetches channel analytics (Subscribers, Views, Watch Time).
-        Falls back to mock data if not authenticated.
+        Fetches channel analytics (Subscribers, Total Views, Video Count) using YouTube Data API v3.
+        Returns real metrics or zeros if unauthenticated. NO MOCK DATA.
         """
-        youtube = self._init_client()
+        youtube = await self.get_authenticated_service(user_id)
         if youtube:
             try:
                 request = youtube.channels().list(
-                    part="statistics",
-                    id=channel_id
+                    part="statistics,snippet",
+                    mine=True
                 )
                 response = request.execute()
                 if response.get("items"):
-                    stats = response["items"][0]["statistics"]
-                    log.info(f"[YouTubeAPI] Fetched real channel analytics for {channel_id}")
+                    item = response["items"][0]
+                    stats = item.get("statistics", {})
+                    snippet = item.get("snippet", {})
+                    log.info(f"[YouTubeAPI] Fetched real channel stats for user {user_id}: {stats}")
                     return {
+                        "connected": True,
+                        "channel_id": item.get("id"),
+                        "channel_title": snippet.get("title", ""),
                         "subscribers_gained": int(stats.get("subscriberCount", 0)),
                         "views_90d": int(stats.get("viewCount", 0)),
-                        "watch_time_hours": 0, # Requires YouTube Analytics API
+                        "total_videos": int(stats.get("videoCount", 0)),
+                        "watch_time_hours": 0,
                         "estimated_revenue": 0.0
                     }
             except Exception as e:
                 log.error(f"[YouTubeAPI] Error fetching real channel analytics: {e}")
-                
-        # Mock fallback for Phase 3 testing when no OAuth token is present
-        log.info(f"[YouTubeAPI] Fetching mock channel analytics for {channel_id}")
+
+        # Real unauthenticated state — zero mock data
         return {
-            "subscribers_gained": 142,
-            "views_90d": 4250,
-            "watch_time_hours": 112,
+            "connected": False,
+            "subscribers_gained": 0,
+            "views_90d": 0,
+            "total_videos": 0,
+            "watch_time_hours": 0,
             "estimated_revenue": 0.0
         }
 
-    async def fetch_video_analytics(self, youtube_video_id: str) -> Dict[str, Any]:
+    async def fetch_video_analytics(self, youtube_video_id: str, user_id: Optional[str] = None) -> Dict[str, Any]:
         """
-        Fetches specific video performance (Views, Likes, Retention).
+        Fetches specific video performance (Views, Likes, Comments) from YouTube Data API.
         """
-        youtube = self._init_client()
-        if youtube:
-            try:
-                request = youtube.videos().list(
-                    part="statistics",
-                    id=youtube_video_id
-                )
-                response = request.execute()
-                if response.get("items"):
-                    stats = response["items"][0]["statistics"]
-                    return {
-                        "views": int(stats.get("viewCount", 0)),
-                        "likes": int(stats.get("likeCount", 0)),
-                        "comments": int(stats.get("commentCount", 0)),
-                        "shares": 0,
-                        "retention_pct": 0.0
-                    }
-            except Exception as e:
-                log.error(f"[YouTubeAPI] Error fetching real video analytics: {e}")
-                
-        log.info(f"[YouTubeAPI] Fetching mock video analytics for {youtube_video_id}")
+        if user_id:
+            youtube = await self.get_authenticated_service(user_id)
+            if youtube:
+                try:
+                    request = youtube.videos().list(
+                        part="statistics",
+                        id=youtube_video_id
+                    )
+                    response = request.execute()
+                    if response.get("items"):
+                        stats = response["items"][0].get("statistics", {})
+                        return {
+                            "views": int(stats.get("viewCount", 0)),
+                            "likes": int(stats.get("likeCount", 0)),
+                            "comments": int(stats.get("commentCount", 0)),
+                            "shares": 0,
+                            "retention_pct": 0.0
+                        }
+                except Exception as e:
+                    log.error(f"[YouTubeAPI] Error fetching real video analytics for {youtube_video_id}: {e}")
+
         return {
-            "views": 320,
-            "likes": 45,
-            "comments": 2,
-            "shares": 5,
-            "retention_pct": 68.5
+            "views": 0,
+            "likes": 0,
+            "comments": 0,
+            "shares": 0,
+            "retention_pct": 0.0
         }
 
-    async def publish_video(self, video_path: str, title: str, description: str, tags: list, privacy: str) -> str:
+    async def publish_video(
+        self,
+        user_id: str,
+        video_path: str,
+        title: str,
+        description: str,
+        tags: list,
+        privacy: str
+    ) -> str:
         """
         Uploads a video to YouTube using the Data API v3.
         Returns the new YouTube Video ID.
         """
-        log.info(f"[YouTubeAPI] Publishing video '{title}' to YouTube (Privacy: {privacy})")
-        # To avoid massive file uploads in tests without token, we just return a mock ID if unauthenticated
-        youtube = self._init_client()
-        if youtube:
-            log.info("[YouTubeAPI] Real video upload flow triggered.")
-            # Note: A real upload requires MediaFileUpload and a resumable session.
-            # Implementing structure for Phase 3.
-            pass
-            
-        new_id = "mock_yt_id_123"
-        return new_id
+        from integrations.youtube.uploader import upload_video
+        return await upload_video(
+            user_id=user_id,
+            video_path=video_path,
+            title=title,
+            description=description,
+            tags=tags,
+            privacy_status=privacy
+        )
+
 
 youtube_client = YouTubeAPIClient()

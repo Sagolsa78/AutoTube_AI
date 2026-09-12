@@ -15,9 +15,9 @@ class GitHubActionsJobExecutor(JobExecutor):
     
     def __init__(self):
         self.token = settings.GITHUB_TOKEN
-        self.repo = settings.GITHUB_REPOSITORY
+        self.repo = settings.GITHUB_REPO
         if not self.token or not self.repo:
-            log.warning("GitHubActionsJobExecutor initialized without GITHUB_TOKEN or GITHUB_REPOSITORY")
+            log.warning("GitHubActionsJobExecutor initialized without GITHUB_TOKEN or GITHUB_REPO")
 
     async def submit(self, job_id: str, payload: Dict[str, Any]) -> JobExecutionHandle:
         async with AsyncSessionLocal() as session:

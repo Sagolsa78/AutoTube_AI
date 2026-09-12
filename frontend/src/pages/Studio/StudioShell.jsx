@@ -6,15 +6,13 @@ import GridContainer from '../../components/layout/GridContainer';
 import { toast } from 'sonner';
 
 import BriefStage from './Stages/BriefStage';
-import ScriptStage from './Stages/ScriptStage';
-import StoryboardStage from './Stages/StoryboardStage';
+import EditorStage from './Stages/EditorStage';
 import RenderStage from './Stages/RenderStage';
 
 const STAGES = [
   { id: 'brief', step: 1, label: 'Concept & Brief', icon: 'lightbulb', desc: 'Select or brainstorm topic' },
-  { id: 'script', step: 2, label: 'Script Writing', icon: 'fileText', desc: 'AI scene & narration generation' },
-  { id: 'storyboard', step: 3, label: 'Storyboard', icon: 'image', desc: 'Visual curation & stock clips' },
-  { id: 'render', step: 4, label: 'Voice & Render', icon: 'film', desc: 'Audio engine & assembly' }
+  { id: 'editor', step: 2, label: 'Studio Editor', icon: 'edit', desc: 'Narrative & Visual Curation' },
+  { id: 'render', step: 3, label: 'Voice & Render', icon: 'film', desc: 'Audio engine & assembly' }
 ];
 
 export default function StudioShell() {
@@ -24,7 +22,7 @@ export default function StudioShell() {
   const initialIdeaId = searchParams.get('idea');
   const initialScriptId = searchParams.get('script');
 
-  const [stage, setStage] = useState(initialScriptId ? 'script' : 'brief');
+  const [stage, setStage] = useState(initialScriptId ? 'editor' : 'brief');
   const [loading, setLoading] = useState(true);
 
   // Global Production Context
@@ -142,6 +140,19 @@ export default function StudioShell() {
                 </button>
               );
             })}
+
+            {/* Active AI Model Pill */}
+            <Link 
+              to="/app/profile" 
+              title="Configure AI models in Settings"
+              className="hidden sm:flex items-center gap-2 py-1 px-2.5 rounded-lg bg-surface border border-border hover:border-brand-red text-xs transition-colors shrink-0 ml-auto select-none"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
+              <span className="text-[10px] uppercase font-bold text-text-muted">AI Model:</span>
+              <span className="font-mono text-[11px] text-text-primary font-semibold">
+                {profile?.preferred_ai_model || 'qwen2.5-coder:7b'}
+              </span>
+            </Link>
           </div>
         </GridContainer>
       </div>
@@ -153,29 +164,21 @@ export default function StudioShell() {
             <BriefStage 
               selectedIdea={selectedIdea} 
               setSelectedIdea={setSelectedIdea} 
-              onNext={() => setStage('script')} 
+              onNext={() => setStage('editor')} 
             />
           )}
 
-          {stage === 'script' && (
-            <ScriptStage 
+          {stage === 'editor' && (
+            <EditorStage 
               idea={selectedIdea}
               script={script}
               setScript={(s) => { 
                 setScript(s); 
                 setEditingScenes(s.scenes?.map(sc => ({ ...sc })) || []); 
               }}
-              onBack={() => setStage('brief')}
-              onNext={() => setStage('storyboard')}
-            />
-          )}
-
-          {stage === 'storyboard' && (
-            <StoryboardStage 
-              script={script}
               editingScenes={editingScenes}
               setEditingScenes={setEditingScenes}
-              onBack={() => setStage('script')}
+              onBack={() => setStage('brief')}
               onNext={() => setStage('render')}
             />
           )}

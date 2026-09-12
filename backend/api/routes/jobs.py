@@ -96,7 +96,8 @@ async def create_job(
     res_active = await db.execute(active_q)
     active_count = res_active.scalar() or 0
     
-    if active_count >= int(os.getenv("MAX_ACTIVE_JOBS_PER_USER", "2")):
+    from backend.core.config import settings
+    if active_count >= int(getattr(settings, "MAX_ACTIVE_JOBS_PER_USER", "2")):
         raise HTTPException(status_code=429, detail="Too many active jobs. Please wait for them to finish.")
         
     today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -107,7 +108,7 @@ async def create_job(
     res_daily = await db.execute(daily_q)
     daily_count = res_daily.scalar() or 0
     
-    if daily_count >= int(os.getenv("MAX_DAILY_JOBS_PER_USER", "20")):
+    if daily_count >= int(getattr(settings, "MAX_DAILY_JOBS_PER_USER", "20")):
         raise HTTPException(status_code=429, detail="Daily job limit reached.")
 
     job_id = str(uuid.uuid4())

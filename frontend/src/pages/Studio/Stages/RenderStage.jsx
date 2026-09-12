@@ -20,14 +20,25 @@ export default function RenderStage({
   const [videoId, setVideoId] = useState(null);
   const [error, setError] = useState(null);
 
+  const DONE_STATUSES = ['ready', 'approved', 'uploaded'];
+
   useEffect(() => {
     if (!videoId || !rendering) return;
     const iv = setInterval(async () => {
       try {
         const prog = await api.getVideoProgress(videoId);
         setRenderProgress(prog);
-        if (prog.status === 'ready' || prog.status === 'approved' || prog.status === 'uploaded') {
+        if (DONE_STATUSES.includes(prog.status) || prog.render_stage === 'done') {
           setRendering(false);
+          if (!DONE_STATUSES.includes(prog.status)) {
+            // stage=done but status hasn't refreshed yet — wait one more tick
+            setTimeout(async () => {
+              try {
+                const final = await api.getVideoProgress(videoId);
+                setRenderProgress(final);
+              } catch (_) {}
+            }, 1500);
+          }
           toast.success('Video rendered successfully!');
         } else if (prog.status === 'failed') {
           setRendering(false);
@@ -86,7 +97,12 @@ export default function RenderStage({
       );
     }
 
-    if (!rendering && (renderProgress?.status === 'ready' || renderProgress?.status === 'approved' || renderProgress?.status === 'uploaded')) {
+    const isDone = !rendering && (
+      DONE_STATUSES.includes(renderProgress?.status) ||
+      renderProgress?.render_stage === 'done'
+    );
+
+    if (isDone) {
       return (
         <Card variant="surface" className="max-w-md mx-auto text-center p-8 space-y-6 border-success/40">
           <div className="w-16 h-16 bg-success/15 text-success rounded-2xl flex items-center justify-center mx-auto shadow-md">

@@ -122,7 +122,7 @@ async def youtube_auth_callback(
             conn.channel_title = channel["snippet"]["title"]
 
         await db.commit()
-        return {"status": "success", "message": "YouTube connected successfully."}
+        return RedirectResponse(url="/app/channels?youtube=connected")
         
     except Exception as e:
         log.error(f"YouTube OAuth callback failed: {e}")

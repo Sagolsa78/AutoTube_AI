@@ -19,11 +19,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models.models import Job, JobStatus, DailyComputeSpend
 from backend.events import event_bus
+from backend.core.config import settings
+from backend.jobs.github_executor import GitHubActionsJobExecutor
 
 log = logging.getLogger(__name__)
 
-DAILY_GPU_BUDGET_CAP = float(os.getenv("DAILY_GPU_BUDGET_CAP", "2.00"))
-HEARTBEAT_TIMEOUT_SECONDS = int(os.getenv("WORKER_HEARTBEAT_TIMEOUT", "30"))
+DAILY_GPU_BUDGET_CAP = settings.DAILY_GPU_BUDGET_CAP
+HEARTBEAT_TIMEOUT_SECONDS = 30 # Default hardcoded or add to config if needed
 
 
 class WorkerCapability(str, Enum):
@@ -81,7 +83,7 @@ class WorkerRegistry:
                     WorkerCapability.VIDEO.value,
                     WorkerCapability.RENDER.value,
                 ],
-                "status": WorkerStatus.AVAILABLE.value if os.getenv("RUNPOD_API_KEY") else WorkerStatus.OFFLINE.value,
+                "status": WorkerStatus.AVAILABLE.value if getattr(settings, "RUNPOD_API_KEY", None) else WorkerStatus.OFFLINE.value,
                 "last_heartbeat": time.time(),
             }
         }
@@ -116,7 +118,7 @@ class WorkerRegistry:
             return False
         # Serverless is online if configured
         if worker_id == "runpod_serverless":
-            return bool(os.getenv("RUNPOD_API_KEY"))
+            return bool(getattr(settings, "RUNPOD_API_KEY", None))
         return (time.time() - worker["last_heartbeat"]) < HEARTBEAT_TIMEOUT_SECONDS
 
     def get_worker_status(self, worker_id: str) -> str:
@@ -189,8 +191,8 @@ async def dispatch_job(
                                     -> Over budget  -> Hold in queue for local worker
     """
     cap_str = capability.value if isinstance(capability, WorkerCapability) else capability
-    strategy = os.getenv("COMPUTE_STRATEGY", "local-first")
-    zero_laptop = os.getenv("ZERO_LAPTOP_MODE", "false").lower() in ("true", "1")
+    strategy = getattr(settings, "COMPUTE_STRATEGY", "local-first")
+    zero_laptop = getattr(settings, "ZERO_LAPTOP_MODE", "false").lower() in ("true", "1")
     local_online = router_registry.is_worker_online("local_pc")
 
     chosen_worker = None
@@ -214,7 +216,7 @@ async def dispatch_job(
             today_spent = spend_record.amount_spent_usd
             budget_cap = spend_record.budget_cap_usd
 
-        has_runpod = bool(os.getenv("RUNPOD_API_KEY"))
+        has_runpod = bool(getattr(settings, "RUNPOD_API_KEY", None))
         has_budget = (today_spent < budget_cap)
 
         if has_runpod and has_budget:
@@ -242,6 +244,12 @@ async def dispatch_job(
 
     # Queue for worker consumption
     router_registry.enqueue_job_for_worker(chosen_worker, job_data)
+    
+    if chosen_worker == "cloud_worker":
+        # Dispatch to GitHub Actions
+        import asyncio
+        github_executor = GitHubActionsJobExecutor()
+        asyncio.create_task(github_executor.submit(job_id, payload))
 
     # Publish to Redis event bus
     await event_bus.publish(f"job.{status}.{chosen_worker}", job_data)
@@ -260,7 +268,7 @@ async def get_compute_telemetry(db: Optional[AsyncSession] = None) -> Dict[str, 
     cloud_online = router_registry.is_worker_online("cloud_worker")
     cloud_meta = router_registry.workers.get("cloud_worker", {})
 
-    strategy = os.getenv("COMPUTE_STRATEGY", "local-first")
+    strategy = getattr(settings, "COMPUTE_STRATEGY", "local-first")
 
     today_spent = 0.0
     budget_cap = DAILY_GPU_BUDGET_CAP
@@ -275,7 +283,7 @@ async def get_compute_telemetry(db: Optional[AsyncSession] = None) -> Dict[str, 
         except Exception as e:
             log.warning(f"Could not load daily spend record: {e}")
 
-    runpod_configured = bool(os.getenv("RUNPOD_API_KEY"))
+    runpod_configured = bool(getattr(settings, "RUNPOD_API_KEY", None))
 
     return {
         "local_worker": {

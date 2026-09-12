@@ -20,7 +20,6 @@ def _uuid() -> str:
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
-DEFAULT_PROFILE_ID = "default-user"
 
 class Base(AsyncAttrs, DeclarativeBase):
     pass
@@ -66,21 +65,9 @@ class User(Base):
     display_name    = Column(String, nullable=False, default="Creator")
     channel_name    = Column(String, default="")
     logo_path       = Column(String)
-    default_cta     = Column(Text, default="Follow for more!")
-    default_niche   = Column(String, default="science_wow")
-    caption_style   = Column(String, default="bold_centered")
-    watermark_enabled = Column(Boolean, default=True)
-    watermark_opacity = Column(Float, default=0.4)
-    watermark_position = Column(String, default="bottom_right")
-    watermark_scale  = Column(Float, default=0.12)
-    
-    # Settings
-    default_voice_id = Column(String, default="en-US-ChristopherNeural")
-    content_tone     = Column(String, default="casual")
-    niche_keywords   = Column(JSON, default=list)
-    title_style_preference = Column(String, default="curiosity")
-    hashtag_set      = Column(JSON, default=lambda: ["shorts", "viral"])
-    auto_approve     = Column(Boolean, default=False)
+    password_hash   = Column(String, nullable=True)
+    preferred_ai_provider = Column(String, default="ollama")
+    preferred_ai_model    = Column(String, default="qwen2.5-coder:7b")
     
     created_at      = Column(DateTime(timezone=True), default=utc_now)
     updated_at      = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
@@ -118,6 +105,22 @@ class Channel(Base):
     name       = Column(String, nullable=False)
     niche      = Column(String, nullable=False)
     language   = Column(String, default="en")
+    
+    default_cta     = Column(Text, default="Follow for more!")
+    caption_style   = Column(String, default="bold_centered")
+    watermark_enabled = Column(Boolean, default=True)
+    watermark_opacity = Column(Float, default=0.4)
+    watermark_position = Column(String, default="bottom_right")
+    watermark_scale  = Column(Float, default=0.12)
+    
+    # Settings
+    default_voice_id = Column(String, default="en-US-ChristopherNeural")
+    content_tone     = Column(String, default="casual")
+    niche_keywords   = Column(JSON, default=list)
+    title_style_preference = Column(String, default="curiosity")
+    hashtag_set      = Column(JSON, default=lambda: ["shorts", "viral"])
+    auto_approve     = Column(Boolean, default=False)
+    
     created_at = Column(DateTime(timezone=True), default=utc_now)
 
     user  = relationship("User", back_populates="channels")

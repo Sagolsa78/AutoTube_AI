@@ -22,8 +22,8 @@ from backend.worker_router import (
     get_compute_telemetry
 )
 from backend.security import verify_control_plane_auth
-from backend.storage.local import LocalStorage
-from backend.storage.s3 import S3Storage
+from backend.storage.local import LocalStorageBackend
+from backend.storage.s3 import S3StorageBackend
 
 
 # ── 1. Model Schema Tests ─────────────────────────────────────────────────────
@@ -221,14 +221,17 @@ async def test_security_enforces_key_when_configured():
 # ── 6. Cloud Storage URL Resolution Tests ──────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_cloud_storage_public_url_resolution():
-    # Local fallback
-    local_storage = LocalStorage(root_path="storage")
+async def test_local_storage_backend_initialization(tmp_path):
+    local_storage = LocalStorageBackend(base_dir=str(tmp_path))
     assert await local_storage.get_public_url("videos/test.mp4") == "/static/videos/test.mp4"
 
     # Cloudflare R2 with custom public domain
     with patch.dict(os.environ, {"R2_PUBLIC_DOMAIN": "https://media.autotube.ai"}):
-        r2_storage = S3Storage()
+        r2_storage = S3StorageBackend(
+            endpoint_url="https://xxx.r2.cloudflarestorage.com",
+            public_domain="pub.example.com",
+            bucket="my-test-bucket",
+        )
         assert await r2_storage.get_public_url("videos/test.mp4") == "https://media.autotube.ai/videos/test.mp4"
 
 

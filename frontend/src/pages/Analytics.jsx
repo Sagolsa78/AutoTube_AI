@@ -101,6 +101,30 @@ export default function Analytics() {
           }
         />
 
+        {/* ── YouTube Live Connection Status ──────────────────────────────────── */}
+        {data?.youtube_connected ? (
+          <div className="p-3.5 bg-success/10 border border-success/30 rounded-xl flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2 text-success font-semibold">
+              <span className="w-2 h-2 rounded-full bg-success animate-pulse" />
+              <span>YouTube Channel Connected: <span className="font-bold text-text-primary">{data.youtube_channel_title || 'Active Channel'}</span></span>
+            </div>
+            <span className="text-[11px] font-mono text-text-muted">Live YouTube Data API v3 Active</span>
+          </div>
+        ) : (
+          <div className="p-3.5 bg-warning/10 border border-warning/30 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2 text-warning font-medium">
+              <Icon name="alert-triangle" size={16} className="shrink-0" />
+              <span>YouTube Channel is not connected. Telemetry currently reflects local project database metrics.</span>
+            </div>
+            <a
+              href="/app/channels"
+              className="btn btn-secondary btn-sm shrink-0 self-start sm:self-auto text-text-primary"
+            >
+              Connect YouTube Channel
+            </a>
+          </div>
+        )}
+
         {/* ── Key Metrics 4-Col Grid ────────────────────────────────────────── */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <Metric

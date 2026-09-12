@@ -21,7 +21,6 @@ from backend.auth.dependencies import get_current_user
 router = APIRouter()
 log = logging.getLogger(__name__)
 
-DEFAULT_PROFILE_ID = "default-user"
 
 # ── Render stage definitions ──────────────────────────────────────────────────
 RENDER_STAGES = {
@@ -104,11 +103,14 @@ async def _set_stage(db, video_id: str, stage: str, progress: float | None = Non
 
 @router.get("/", response_model=list[VideoOut])
 async def list_videos(
+    channel_id: str | None = None,
     status: str | None = None,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     q = select(Video).where(Video.user_id == user.id)
+    if channel_id:
+        q = q.join(Script, Video.script_id == Script.id).join(Idea, Script.idea_id == Idea.id).where(Idea.channel_id == channel_id)
     if status:
         q = q.where(Video.status == status)
     result = await db.execute(q)
@@ -156,15 +158,15 @@ async def render_video(
     if not script.full_text:
         raise HTTPException(400, "Script has no full_text — regenerate it")
 
-    # Load user profile for defaults
-    profile = user
-    caption_style = body.caption_style or (profile.caption_style if profile else "bold_centered")
-
-    # Get niche and language
+    # Get niche and language from channel
     idea    = await db.get(Idea, script.idea_id)
     channel = await db.get(Channel, idea.channel_id) if idea else None
-    niche   = channel.niche if channel else "science_wow"
-    language = channel.language if channel else "en"
+    if not channel:
+        raise HTTPException(404, "Channel not found for script")
+        
+    niche   = channel.niche
+    language = channel.language
+    caption_style = body.caption_style or (channel.caption_style if channel else "bold_centered")
     
     script.status = ScriptStatus.used_in_render
 
@@ -214,25 +216,41 @@ async def render_video(
         language=story_spec.language or language,
     )
     
-    if profile and profile.watermark_enabled and profile.logo_path:
+    if channel and channel.watermark_enabled and user.logo_path:
         from pathlib import Path
-        if Path(profile.logo_path).exists():
-            job.watermark_path = profile.logo_path
-            job.watermark_opacity = profile.watermark_opacity or 0.4
-            job.watermark_position = profile.watermark_position or "bottom_right"
-            job.watermark_scale = profile.watermark_scale or 0.12
+        if Path(user.logo_path).exists():
+            job.watermark_path = user.logo_path
+            job.watermark_opacity = channel.watermark_opacity or 0.4
+            job.watermark_position = channel.watermark_position or "bottom_right"
+            job.watermark_scale = channel.watermark_scale or 0.12
 
     # Create DB Job and dispatch via Worker Router
     import uuid
+    from dataclasses import fields as dc_fields
     from datetime import datetime
+    from pydantic import BaseModel as PydanticBaseModel
     from backend.models.models import Job as DBJob
     from backend.worker_router import dispatch_job, WorkerCapability
-    
+
+    def _serialize_render_job(rj):
+        """Serialize a RenderJob dataclass that contains nested Pydantic models."""
+        out = {}
+        for f in dc_fields(rj):
+            val = getattr(rj, f.name)
+            if isinstance(val, PydanticBaseModel):
+                out[f.name] = val.model_dump()
+            elif isinstance(val, list) and val and isinstance(val[0], PydanticBaseModel):
+                out[f.name] = [v.model_dump() for v in val]
+            else:
+                out[f.name] = val
+        return out
+
+    job_payload = _serialize_render_job(job)
     job_id = str(uuid.uuid4())
     route_meta = await dispatch_job(
         job_id=job_id, 
         capability=WorkerCapability.RENDER, 
-        payload=job.model_dump(), 
+        payload=job_payload, 
         db=db
     )
     
@@ -241,7 +259,7 @@ async def render_video(
         user_id=user.id,
         capability=WorkerCapability.RENDER.value,
         status=route_meta["status"],
-        payload=job.model_dump(),
+        payload=job_payload,
         worker_id=route_meta.get("worker_id"),
         worker_type=route_meta.get("worker_type", "local"),
         cost_usd=0.0,
@@ -249,6 +267,37 @@ async def render_video(
     )
     db.add(new_db_job)
     await db.commit()
+
+    # ── Inline fallback: if no worker daemon is running, execute the render
+    #    directly in a FastAPI background task so it doesn't block the response
+    #    but still actually runs the pipeline.
+    if route_meta["status"] == "waiting_for_local_worker":
+        from backend.services.rendering_service import run_job as run_render
+        log.info(f"[InlineRender] No worker daemon detected — running render for video {video.id} inline via BackgroundTasks.")
+        
+        async def _inline_render(vid_id, render_job, db_job_id):
+            from backend.db.database import AsyncSessionLocal as InlineSession
+            try:
+                await run_render(vid_id, render_job)
+                # Mark the Job record as completed
+                async with InlineSession() as sdb:
+                    j = await sdb.get(DBJob, db_job_id)
+                    if j:
+                        j.status = "completed"
+                        j.completed_at = datetime.utcnow()
+                        await sdb.commit()
+            except Exception as e:
+                log.exception(f"[InlineRender] Failed: {e}")
+                async with InlineSession() as sdb:
+                    j = await sdb.get(DBJob, db_job_id)
+                    if j:
+                        j.status = "failed"
+                        j.error_message = str(e)
+                        j.completed_at = datetime.utcnow()
+                        await sdb.commit()
+
+        import asyncio
+        asyncio.create_task(_inline_render(video.id, job, job_id))
 
     return _fmt(video)
 
@@ -295,26 +344,38 @@ async def preview_video(
     if not v or v.user_id != user.id or not v.path:
         raise HTTPException(404, "Video file not found")
     
-    # 1. If path is an HTTP(S) remote URL (e.g. R2 public CDN)
+    # 1. If path is a public HTTP(S) URL (e.g. R2 public CDN domain)
     if v.path.startswith("http://") or v.path.startswith("https://"):
         from fastapi.responses import RedirectResponse
         return RedirectResponse(url=v.path, status_code=307)
         
-    # 2. If storage provider is S3/R2 and file is a remote object key
-    if not os.path.exists(v.path):
-        from backend.storage import storage
-        from backend.core.config import settings
-        if settings.STORAGE_BACKEND in ["s3", "r2"]:
-            try:
-                signed_url = await storage.generate_signed_url(v.path)
-                from fastapi.responses import RedirectResponse
-                return RedirectResponse(url=signed_url, status_code=307)
-            except Exception as e:
-                log.error(f"Failed to generate presigned URL for {v.path}: {e}")
-        raise HTTPException(404, f"Video file not found: {v.path}")
-        
-    # 3. Local filesystem fallback
-    return FileResponse(v.path, media_type="video/mp4")
+    # 2. Local file exists — serve directly
+    if os.path.exists(v.path):
+        return FileResponse(v.path, media_type="video/mp4",
+                            headers={"Cache-Control": "no-store"})
+
+    # 3. Remote storage key (S3/R2) — stream directly to avoid CORS
+    from backend.core.config import settings
+    if settings.STORAGE_BACKEND in ["s3", "r2"]:
+        try:
+            from backend.storage import storage
+            import tempfile, asyncio
+            # Download to a temp file and stream — this avoids CORS issues
+            # because the content is served from the same origin as the API
+            tmp_path = tempfile.mktemp(suffix=".mp4")
+            await storage.get_file(v.path, tmp_path)
+            if os.path.exists(tmp_path) and os.path.getsize(tmp_path) > 0:
+                return FileResponse(
+                    tmp_path, 
+                    media_type="video/mp4",
+                    headers={"Cache-Control": "no-store", "Accept-Ranges": "bytes"}
+                )
+        except Exception as e:
+            log.error(f"Failed to stream video from storage {v.path}: {e}")
+            raise HTTPException(500, f"Video could not be retrieved from storage: {e}")
+
+    raise HTTPException(404, f"Video file not found: {v.path}")
+
 
 
 @router.patch("/{video_id}/approve", response_model=VideoOut)
@@ -395,19 +456,32 @@ async def upload_video(
 ):
     """Upload an approved video to YouTube as private."""
     v = await db.get(Video, video_id)
-    if not v or v.user_id != user.id:
-        raise HTTPException(404, "Video not found")
-    if v.status != VideoStatus.approved:
-        raise HTTPException(400, "Video must be approved before uploading")
-    if not v.path or not os.path.exists(v.path):
-        raise HTTPException(400, "Video file missing on disk")
+    if v.status not in (VideoStatus.approved, VideoStatus.ready):
+        raise HTTPException(400, f"Video must be in 'ready' or 'approved' status before uploading (current: {v.status})")
+
+    upload_file_path = v.path
+    temp_download_dir = None
+
+    # If file doesn't exist locally, check if it's in cloud storage (R2/S3)
+    if not upload_file_path or not os.path.exists(upload_file_path):
+        from backend.storage import get_storage
+        storage = get_storage()
+        try:
+            import tempfile
+            temp_download_dir = tempfile.mkdtemp()
+            local_target = os.path.join(temp_download_dir, f"{video_id}.mp4")
+            await storage.download(v.path, local_target)
+            upload_file_path = local_target
+        except Exception as dl_err:
+            log.error(f"Failed to fetch video from remote storage: {dl_err}")
+            raise HTTPException(400, f"Video file not found locally or in cloud storage: {dl_err}")
 
     from integrations.youtube.uploader import upload_video as yt_upload
     from backend.models.models import Publication
     try:
         yt_id = await yt_upload(
             user_id=user.id,
-            video_path=v.path,
+            video_path=upload_file_path,
             title=body.title,
             description=body.description,
             tags=body.tags,
@@ -416,6 +490,10 @@ async def upload_video(
         )
     except Exception as exc:
         raise HTTPException(500, f"YouTube upload failed: {exc}")
+    finally:
+        if temp_download_dir and os.path.exists(temp_download_dir):
+            import shutil
+            shutil.rmtree(temp_download_dir, ignore_errors=True)
 
     pub = Publication(
         user_id=user.id,
