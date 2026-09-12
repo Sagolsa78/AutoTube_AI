@@ -23,6 +23,7 @@ def get_dir_size(path: str) -> float:
 
 @router.get("/")
 async def get_dashboard_analytics(
+    channel_id: str | None = None,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -37,6 +38,8 @@ async def get_dashboard_analytics(
 
     # Total uploaded videos & publications for this tenant
     pub_q = select(Publication).where(Publication.status == "live", Publication.user_id == user_id)
+    if channel_id:
+        pub_q = pub_q.join(Video, Publication.video_id == Video.id).join(Script, Video.script_id == Script.id).join(Idea, Script.idea_id == Idea.id).where(Idea.channel_id == channel_id)
     pubs = (await db.execute(pub_q)).scalars().all()
     
     total_views = 0
@@ -52,7 +55,10 @@ async def get_dashboard_analytics(
             total_likes += an.likes
 
     # Video & Content counts for this tenant
-    total_videos_res = await db.execute(select(func.count(Video.id)).where(Video.user_id == user_id))
+    total_videos_q = select(func.count(Video.id)).where(Video.user_id == user_id)
+    if channel_id:
+        total_videos_q = total_videos_q.join(Script, Video.script_id == Script.id).join(Idea, Script.idea_id == Idea.id).where(Idea.channel_id == channel_id)
+    total_videos_res = await db.execute(total_videos_q)
     total_videos = total_videos_res.scalar() or 0
 
     total_ideas_res = await db.execute(select(func.count(Idea.id)).where(Idea.user_id == user_id))
@@ -68,22 +74,22 @@ async def get_dashboard_analytics(
     niche_counts = (await db.execute(topic_q)).all()
     niche_breakdown = [{"niche": n[0] or "General", "count": n[1]} for n in niche_counts]
 
-    # Baseline defaults if newly launched
-    if total_views == 0:
-        total_views = 4250
-        total_subs = 142
-        total_likes = 380
+    # Return real aggregate numbers (zero mock fallback)
+    real_views = total_views + yt_channel_data.get("views_90d", 0)
+    real_subs = total_subs + yt_channel_data.get("subscribers_gained", 0)
 
     return {
+        "youtube_connected": yt_channel_data.get("connected", False),
+        "youtube_channel_title": yt_channel_data.get("channel_title", ""),
         "monetization": {
-            "current_views": total_views + yt_channel_data.get("views_90d", 0),
+            "current_views": real_views,
             "views_target": 10000000,
-            "current_subs": total_subs + yt_channel_data.get("subscribers_gained", 0),
+            "current_subs": real_subs,
             "subs_target": 1000
         },
         "performance": {
-            "total_views": total_views + yt_channel_data.get("views_90d", 0),
-            "total_subs": total_subs + yt_channel_data.get("subscribers_gained", 0),
+            "total_views": real_views,
+            "total_subs": real_subs,
             "total_likes": total_likes,
             "total_videos": total_videos,
             "total_ideas": total_ideas
@@ -105,6 +111,35 @@ async def get_dashboard_analytics(
             {"day": "Sun", "views": round(total_views * 0.10)},
         ]
     }
+
+@router.get("/summary/top-videos")
+async def get_top_videos(
+    channel_id: str | None = None,
+    limit: int = 5,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Returns the top performing videos based on views/likes.
+    """
+    q = select(Analytics).where(Analytics.user_id == user.id)
+    if channel_id:
+        q = q.join(Video, Analytics.video_id == Video.id).join(Script, Video.script_id == Script.id).join(Idea, Script.idea_id == Idea.id).where(Idea.channel_id == channel_id)
+    q = q.order_by(Analytics.views.desc()).limit(limit).options(
+        selectinload(Analytics.video).selectinload(Video.publication)
+    )
+    results = await db.execute(q)
+    top_analytics = results.scalars().all()
+    
+    # Format the response to match what frontend expects
+    return [{
+        "id": a.video_id,
+        "title": a.video.selected_title or "Untitled Video",
+        "views": a.views,
+        "likes": a.likes,
+        "comments": a.comments,
+        "thumbnail": None
+    } for a in top_analytics]
 
 import shutil
 

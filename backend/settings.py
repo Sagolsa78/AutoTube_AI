@@ -38,6 +38,7 @@ GROQ_API_KEY         = settings.GROQ_API_KEY or ""
 OPENROUTER_API_KEY   = settings.OPENROUTER_API_KEY or ""
 OLLAMA_BASE_URL      = settings.OLLAMA_BASE_URL
 OLLAMA_MODEL         = settings.OLLAMA_MODEL
+OLLAMA_MODELS        = [m.strip() for m in settings.OLLAMA_MODELS.split(",") if m.strip()]
 
 SCRIPT_PROVIDER_ORDER = settings.parsed_script_provider_order
 
@@ -48,7 +49,6 @@ PIXABAY_API_KEY  = settings.PIXABAY_API_KEY or ""
 # ── YouTube ───────────────────────────────────────────────────────────────────
 import os
 YOUTUBE_CLIENT_SECRETS = BASE_DIR / os.getenv("YOUTUBE_CLIENT_SECRETS", "client_secret.json")
-YOUTUBE_TOKEN_FILE     = BASE_DIR / "token.json"
 
 # ── App ───────────────────────────────────────────────────────────────────────
 APP_ENV   = settings.APP_ENV

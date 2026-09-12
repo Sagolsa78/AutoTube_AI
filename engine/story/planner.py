@@ -24,7 +24,14 @@ class StoryPlanner:
             cleaned = cleaned[start_idx:end_idx+1]
         return json.loads(cleaned)
 
-    def generate_story(self, topic: str, prompt_template: str, **kwargs) -> Tuple[StorySpec, str]:
+    def generate_story(
+        self,
+        topic: str,
+        prompt_template: str,
+        preferred_provider: Optional[str] = None,
+        preferred_model: Optional[str] = None,
+        **kwargs
+    ) -> Tuple[StorySpec, str]:
         """
         Generates a validated StorySpec.
         Returns a tuple of (StorySpec, provider_used).
@@ -46,7 +53,11 @@ class StoryPlanner:
         for attempt in range(self.max_retries + 1):
             try:
                 log.info(f"Generating StorySpec (attempt {attempt + 1}/{self.max_retries + 1})")
-                raw_response, provider = generate_with_fallback(full_prompt)
+                raw_response, provider = generate_with_fallback(
+                    full_prompt,
+                    preferred_provider=preferred_provider,
+                    preferred_model=preferred_model
+                )
                 
                 parsed_data = self._extract_json(raw_response)
                 

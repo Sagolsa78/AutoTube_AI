@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 
 from backend.core.config import settings
 from backend.db.database import init_db
-from backend.api.routes import ideas, scripts, videos, channels, analytics, profile, assets, health, jobs, youtube
+from backend.api.routes import ideas, scripts, videos, channels, analytics, profile, assets, health, jobs, youtube, auth
 
 logging.basicConfig(
     level=logging.INFO,
@@ -52,6 +52,7 @@ app.add_middleware(
 app.mount("/static/logos", StaticFiles(directory="storage/logos", check_dir=False), name="logos")
 
 # ── Routers ───────────────────────────────────────────────────────────────────
+app.include_router(auth.router,      prefix="/api/auth",      tags=["auth"])
 app.include_router(profile.router,   prefix="/api/profile",   tags=["profile"])
 app.include_router(channels.router,  prefix="/api/channels",  tags=["channels"])
 app.include_router(ideas.router,     prefix="/api/ideas",     tags=["ideas"])

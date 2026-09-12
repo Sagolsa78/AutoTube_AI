@@ -9,10 +9,11 @@ from typing import Optional
 import os
 import uuid
 from backend.settings import BASE_DIR
+from backend.core.config import settings
 
 log = logging.getLogger(__name__)
 
-COMFYUI_URL = os.getenv("COMFYUI_URL", "http://127.0.0.1:8188")
+COMFYUI_URL = settings.COMFYUI_URL
 
 class ComfyUIClient:
     """Client for triggering workflows on a local ComfyUI server."""

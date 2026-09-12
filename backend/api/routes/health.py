@@ -22,7 +22,7 @@ async def get_system_health():
             "name": "Google Gemini",
             "type": "LLM",
             "status": "online",
-            "model": "gemini-2.0-flash",
+            "model": "gemini-3.5-flash-lite",
             "endpoint": "generativelanguage.googleapis.com",
             "tier": "Free",
             "quota": "15 RPM / 1M TPD",

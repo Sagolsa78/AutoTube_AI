@@ -8,21 +8,21 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from backend.db.database import AsyncSessionLocal
-from backend.models.models import Video, VideoStatus, Script, ScriptStatus, Idea, User, Asset, Publication, YouTubeConnection
+from backend.models.models import Video, VideoStatus, Script, ScriptStatus, Idea, User, Asset, Publication, YouTubeConnection, Channel
 from engine.models import RenderJob
 from engine.tts.voiceover import generate_voiceover
 from engine.visuals.fetcher import async_download_clip, async_fetch_clips
 from engine.visuals.router import VisualRouter
 from engine.rendering.assembler import async_assemble_job
-from backend.storage.local import LocalStorage
-from backend.storage.s3 import S3Storage
+from backend.storage.local import LocalStorageBackend
+from backend.storage.s3 import S3StorageBackend
 from backend.core.config import settings
 from integrations.providers.ai_providers import generate_with_fallback
 
 log = logging.getLogger(__name__)
 
 # Initialize storage based on config
-storage = S3Storage() if settings.STORAGE_BACKEND in ["s3", "r2"] else LocalStorage(settings.STORAGE_ROOT)
+storage = S3StorageBackend() if settings.STORAGE_BACKEND in ["s3", "r2"] else LocalStorageBackend(settings.STORAGE_ROOT)
 
 async def _check_cancel_pause(db, video):
     while True:
@@ -114,7 +114,7 @@ async def run_job(video_id: str, job: RenderJob):
                                 log.warning(f"Failed to re-download asset {asset.id}: {e}")
                     
                     if not asset_path:
-                        router = VisualRouter(str(visual_dir))
+                        router = VisualRouter(str(visual_dir), user_id=video.user_id)
                         scene_spec = job.story_spec.scenes[i]
                         scene_dict = scene_spec.model_dump()
                         
@@ -161,18 +161,21 @@ async def run_job(video_id: str, job: RenderJob):
                 log.warning(f"Failed to upload video to storage: {st_err}")
                 video.path = job.output_path # Fallback to local temp path (not recommended but keeps it working)
 
+            # ── Stage 4: Metadata ─────────────────────────────────────────
+            await _check_cancel_pause(db, video)
+            # Set status to ready NOW (after db.refresh in _check_cancel_pause)
+            # so it is not wiped before being committed
             video.duration = job.duration
             video.status = VideoStatus.ready
             video.ai_used = True
-
-            # ── Stage 4: Metadata ─────────────────────────────────────────
-            await _check_cancel_pause(db, video)
             video.render_stage = "metadata"
             video.render_progress = 80
             await db.commit()
             
-            title_style = profile.title_style_preference if profile else "curiosity"
-            default_tags = profile.hashtag_set if profile and profile.hashtag_set else ["shorts", "viral"]
+            # Get channel for metadata preferences
+            channel = await db.get(Channel, idea.channel_id) if idea else None
+            title_style = getattr(channel, 'title_style_preference', None) or "curiosity"
+            default_tags = getattr(channel, 'hashtag_set', None) or getattr(profile, 'hashtag_set', None) or ["shorts", "viral"]
             
             meta_prompt = f"""You are an expert YouTube Shorts SEO manager.
 Based on the following video script, generate metadata for the YouTube upload.
@@ -205,61 +208,9 @@ Respond ONLY with a JSON object in this exact format (no markdown):
             if video.title_candidates:
                 video.selected_title = video.title_candidates[0]
             
-            # Draft Upload to YouTube
-            from integrations.youtube.uploader import upload_video as yt_upload, _get_credentials
-            from googleapiclient.discovery import build
-            
-            yt_conn_q = select(YouTubeConnection).where(YouTubeConnection.user_id == video.user_id)
-            yt_conn_res = await db.execute(yt_conn_q)
-            yt_conn = yt_conn_res.scalars().first()
-            
-            if yt_conn and yt_conn.access_token:
-                try:
-                    # if video.path is a key, we need a local file for yt_upload.
-                    # if we uploaded it, job.output_path still exists.
-                    upload_path = job.output_path if os.path.exists(job.output_path) else video.path
-                    
-                    yt_id = await yt_upload(
-                        user_id=video.user_id,
-                        video_path=upload_path,
-                        title=video.selected_title or "Draft Short",
-                        description=f"{video.description}\n\n{' '.join(['#'+t for t in video.hashtags])}",
-                        tags=video.hashtags,
-                        privacy_status="private",
-                        made_for_kids=False,
-                    )
-                    pub = Publication(
-                        user_id=video.user_id,
-                        video_id=video.id,
-                        youtube_id=yt_id,
-                        url=f"https://youtu.be/{yt_id}",
-                        title=video.selected_title,
-                        description=video.description,
-                        tags=video.hashtags,
-                        privacy_status="private",
-                        status="draft",
-                    )
-                    db.add(pub)
-                    log.info("Draft video uploaded to YouTube: %s", yt_id)
-                    
-                    if profile.auto_approve and metadata_success:
-                        try:
-                            creds = await _get_credentials(video.user_id)
-                            youtube = build("youtube", "v3", credentials=creds)
-                            youtube.videos().update(part="status", body={
-                                "id": yt_id,
-                                "status": {"privacyStatus": "public"}
-                            }).execute()
-                            pub.privacy_status = "public"
-                            pub.status = "live"
-                            video.status = VideoStatus.uploaded
-                            log.info("Auto-approve enabled: Video %s made public immediately", yt_id)
-                        except Exception as publish_exc:
-                            video.status = VideoStatus.publish_failed
-                            video.notes = f"Auto-publish failed: {publish_exc}"
-                            log.error("Draft upload succeeded, but auto-publish failed: %s", publish_exc)
-                except Exception as upload_exc:
-                    log.warning("Draft YouTube upload failed: %s", upload_exc)
+            # Video is ready for user preview and approval.
+            # Explicit user approval is required before uploading to YouTube.
+            log.info(f"Render completed. Video {video_id} is READY for human review and approval.")
             
             # ── Stage 5: Done ─────────────────────────────────────────────
             await _check_cancel_pause(db, video)
@@ -269,12 +220,19 @@ Respond ONLY with a JSON object in this exact format (no markdown):
             await db.commit()
             log.info(f"Background render completed successfully for video {video_id}")
             
-            # Cleanup temp directory
+            # Cleanup temp directory — but only if video.path is NOT inside this workspace.
+            # If R2 upload failed, video.path is the local fallback path inside workspace;
+            # deleting it would destroy the only copy of the video.
             import shutil
             try:
-                shutil.rmtree(workspace)
+                path_is_remote = not str(video.path or "").startswith(str(workspace))
+                if path_is_remote:
+                    shutil.rmtree(workspace)
+                else:
+                    log.warning(f"Skipping workspace cleanup — video.path is local fallback: {video.path}")
             except Exception as e:
                 log.error(f"Failed to cleanup workspace {workspace}: {e}")
+
 
         except Exception as exc:
             log.exception(f"Background render failed for video {video_id}: {exc}")

@@ -67,11 +67,16 @@ Rules:
 
 _DEFAULT_PROMPT = _PROMPTS["science_wow"]
 
-def generate_script(topic: str, niche: str = "science_wow", language: str = "en") -> dict:
+def generate_script(
+    topic: str,
+    niche: str = "science_wow",
+    language: str = "en",
+    provider: str | None = None,
+    model: str | None = None
+) -> tuple:
     """
     Generate a structured script for the given topic.
-    Returns a dict with scenes/estimated_duration/provider_used/full_text.
-    This maintains backward compatibility while using the new StorySpec underneath.
+    Returns (story_spec, provider_used).
     """
     template = _PROMPTS.get(niche, _DEFAULT_PROMPT)
     if language != "en":
@@ -79,9 +84,11 @@ def generate_script(topic: str, niche: str = "science_wow", language: str = "en"
         
     planner = StoryPlanner(max_retries=2)
     
-    story_spec, provider = planner.generate_story(topic=topic, prompt_template=template)
+    story_spec, provider_used = planner.generate_story(
+        topic=topic,
+        prompt_template=template,
+        preferred_provider=provider,
+        preferred_model=model
+    )
     
-    # Calculate estimated duration based on full text length
-    full_text = " ".join([s.narration for s in story_spec.scenes if s.narration])
-    
-    return story_spec, provider
+    return story_spec, provider_used

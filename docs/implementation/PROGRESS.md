@@ -15,8 +15,8 @@
 | Phase | Name | Status | Completion |
 |---|---|---|---|
 | 0 | Full Codebase Audit | ✅ Complete | 100% |
-| 1 | Configuration System | ⬜ Not Started | 0% |
-| 2 | Database & Migrations | ⬜ Not Started | 0% |
+| 1 | Configuration & Backend Matrix | ✅ Complete | 100% |
+| 2 | Backend Security & Integrations | 🔄 In Progress | 80% |
 | 3 | Storage Abstraction | ⬜ Not Started | 0% |
 | 4 | Worker Separation | ⬜ Not Started | 0% |
 | 5 | Cloud Worker (GitHub Actions) | ⬜ Not Started | 0% |
@@ -87,11 +87,15 @@
 
 ---
 
-## Last Completed Task
-Full codebase audit and documentation creation
+## PHASE 1 & 2 — Backend Contract Matrix and Security Refactors (In Progress)
 
-## Current Task
-Awaiting user approval on `docs/implementation/PLAN.md` before proceeding to Phase 1
+### Completed
+- [x] Generated `docs/verification/FRONTEND_BACKEND_MATRIX.md` capability matrix
+- [x] Removed `DEFAULT_PROFILE_ID` hardcoding from models and routes
+- [x] Updated `backend/auth/provider.py` and `dependencies.py` to securely accept a mock token in local `AUTH_DISABLED` mode, removing the silent `default-user` flaw
+- [x] Removed legacy `token.json` usages for YouTube
+- [x] Removed `channels[0]` fallback assumption from `Ideas.jsx`
+- [x] Updated `frontend/src/services/api.js` with missing endpoints for Jobs and Channels
 
-## Next Task
-Phase 1 — Configuration System (`backend/core/config.py`)
+### Next Task
+Phase 3 — Channel/content-strategy data model

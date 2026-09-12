@@ -10,17 +10,19 @@ import Button from '../components/Button';
 import EmptyState from '../components/EmptyState';
 import Skeleton from '../components/Skeleton';
 import { toast } from 'sonner';
+import { useChannel } from '../contexts/ChannelContext';
 
 export default function Ideas() {
   const [ideas, setIdeas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const { activeChannelId, activeChannel } = useChannel();
   const [activeTab, setActiveTab] = useState('pending');
   const navigate = useNavigate();
-
-  const load = async () => {
+  const loadIdeas = async () => {
     try {
-      const data = await api.getIdeas();
+      setLoading(true);
+      const data = await api.getIdeas(activeChannelId);
       setIdeas((data || []).sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
     } catch (e) { 
       console.error(e); 
@@ -29,20 +31,25 @@ export default function Ideas() {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { 
+    if (activeChannelId) {
+      loadIdeas(); 
+    } else {
+      setIdeas([]);
+      setLoading(false);
+    }
+  }, [activeChannelId]);
 
   const generate = async () => {
+    if (!activeChannelId) {
+      toast.error('Please select a channel first');
+      return;
+    }
     setGenerating(true);
     try {
-      const channels = await api.getChannels();
-      const channelId = channels[0]?.id;
-      if (!channelId) {
-        toast.error('Please create a target channel first in Channels.');
-        return;
-      }
       const prof = await api.getProfile();
-      await api.generateIdeas(channelId, 5, prof?.default_niche || 'science_wow');
-      await load();
+      await api.generateIdeas(activeChannelId, 5, prof?.default_niche || 'science_wow');
+      await loadIdeas();
       toast.success('Generated 5 new video concepts!');
       setActiveTab('pending');
     } catch (e) { 
@@ -56,7 +63,7 @@ export default function Ideas() {
   const actionDiscard = async (id) => {
     try {
       await api.discardIdea(id);
-      await load();
+      await loadIdeas();
       toast.success('Concept discarded');
     } catch (e) { 
       console.error(e); 
@@ -155,15 +162,34 @@ export default function Ideas() {
                   className={`flex flex-col justify-between ${isDiscarded ? 'opacity-60' : ''}`}
                 >
                   <div className="space-y-3">
-                    <div className="flex justify-between items-start gap-2">
-                      <h3 className="font-bold text-base text-text-primary leading-snug line-clamp-2">
-                        {i.title}
-                      </h3>
+                    <div className="flex justify-between items-start gap-4">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="inline-flex items-center gap-1 bg-surface-hover text-text-secondary text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded border border-border">
+                            {i.topic}
+                          </span>
+                          {i.score >= 90 && (
+                            <span className="inline-flex items-center gap-1 bg-brand-red/10 text-brand-red text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded border border-brand-red/20">
+                              🔥 Trending
+                            </span>
+                          )}
+                          {i.score >= 80 && i.score < 90 && (
+                            <span className="inline-flex items-center gap-1 bg-brand-blue/10 text-brand-blue text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded border border-brand-blue/20">
+                              📈 High Potential
+                            </span>
+                          )}
+                        </div>
+                        <h3 className="font-bold text-base text-text-primary leading-tight group-hover:text-brand-red transition-colors">
+                          {i.title}
+                        </h3>
+                      </div>
+                      {/* Score Bubble */}
+                      {i.score > 0 && (
+                        <div className="flex flex-col items-center justify-center shrink-0 w-10 h-10 rounded-full bg-elevated border border-border shadow-inner">
+                          <span className="text-xs font-bold font-mono text-text-primary">{Math.round(i.score)}</span>
+                        </div>
+                      )}
                     </div>
-
-                    <p className="text-xs text-text-secondary line-clamp-3 leading-relaxed">
-                      {i.topic}
-                    </p>
 
                     {i.angle && (
                       <div className="bg-elevated/70 border border-border p-2.5 rounded-lg">

@@ -7,7 +7,8 @@ log = logging.getLogger(__name__)
 
 class EventBus:
     def __init__(self):
-        self.redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+        from backend.core.config import settings
+        self.redis_url = getattr(settings, "REDIS_URL", "redis://localhost:6379/0")
         self.redis = None
 
     async def _get_redis(self):

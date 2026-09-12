@@ -3,8 +3,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from backend.db.database import get_db
-from backend.models.models import Asset, Scene, Script
+from backend.models.models import Asset, Scene, Script, User
+from backend.auth.dependencies import get_current_user
 from engine.visuals.fetcher import async_search_clips
+from backend.worker_router import dispatch_job, WorkerCapability
+import uuid
 
 router = APIRouter(prefix="/api/assets", tags=["Assets"])
 
@@ -65,4 +68,54 @@ async def assign_asset_to_scene(
     scene.asset_id = asset.id
     await db.commit()
     
-    return {"status": "success", "asset_id": asset.id}
+    return {"status": "success", "message": "Asset cached and assigned", "asset_id": asset.id}
+
+@router.post("/generate")
+async def generate_asset(
+    prompt: str,
+    mode: str, # "IMAGE" or "VIDEO"
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user)
+):
+    """
+    Dispatches a job to the Local Worker to generate an AI Image or Video asset.
+    Returns the Job ID so the frontend can poll its status.
+    """
+    if mode not in ["IMAGE", "VIDEO"]:
+        raise HTTPException(status_code=400, detail="mode must be IMAGE or VIDEO")
+        
+    capability = WorkerCapability.IMAGE if mode == "IMAGE" else WorkerCapability.VIDEO
+    
+    job_id = str(uuid.uuid4())
+    payload = {
+        "prompt": prompt,
+        "mode": mode
+    }
+    
+    # Dispatch via Worker Router
+    route_meta = await dispatch_job(
+        job_id=job_id,
+        capability=capability,
+        payload=payload,
+        db=db
+    )
+    
+    # Store the DB Job
+    from backend.models.models import Job as DBJob
+    from datetime import datetime
+    
+    new_db_job = DBJob(
+        id=job_id,
+        user_id=user.id,
+        capability=capability.value,
+        status=route_meta["status"],
+        payload=payload,
+        worker_id=route_meta.get("worker_id"),
+        worker_type=route_meta.get("worker_type", "local"),
+        cost_usd=0.0,
+        created_at=datetime.utcnow()
+    )
+    db.add(new_db_job)
+    await db.commit()
+    
+    return {"status": "success", "job_id": job_id, "message": "Asset generation job dispatched"}

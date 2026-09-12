@@ -10,8 +10,11 @@ import Button from '../components/Button';
 import Metric from '../components/Metric';
 import EmptyState from '../components/EmptyState';
 import Skeleton from '../components/Skeleton';
+import { toast } from 'sonner';
+import { useChannel } from '../contexts/ChannelContext';
 
 export default function Dashboard() {
+  const { activeChannelId } = useChannel();
   const [stats, setStats] = useState({
     ideas: 0, pendingIdeas: 0,
     scripts: 0, approvedScripts: 0,
@@ -25,10 +28,19 @@ export default function Dashboard() {
 
   useEffect(() => {
     let isMounted = true;
+    if (!activeChannelId) {
+      if (isMounted) setLoading(false);
+      return;
+    }
     (async () => {
       try {
+        setLoading(true);
         const [ideas, scripts, videos, prof, dashAnalytics, compute] = await Promise.all([
-          api.getIdeas(), api.getScripts(), api.getVideos(), api.getProfile(), api.getDashboardAnalytics(),
+          api.getIdeas(activeChannelId),
+          api.getScripts(activeChannelId),
+          api.getVideos(activeChannelId),
+          api.getProfile(),
+          api.getDashboardAnalytics(activeChannelId),
           api.getComputeTelemetry().catch(() => null),
         ]);
         if (!isMounted) return;
@@ -55,7 +67,7 @@ export default function Dashboard() {
       }
     })();
     return () => { isMounted = false; };
-  }, []);
+  }, [activeChannelId]);
 
   const totalReview = stats.pendingIdeas + stats.approvedScripts + stats.ready;
   const readyVideos = recentVideos.filter(v => ['ready', 'approved'].includes(v.status));

@@ -1,6 +1,7 @@
-import React from 'react';
-import { useLocation, Link } from 'react-router-dom';
+import React, { useState, useRef, useEffect } from 'react';
+import { useLocation, Link, useNavigate } from 'react-router-dom';
 import Icon from '../Icon';
+import { useChannel } from '../../contexts/ChannelContext';
 
 /**
  * TopBar Component
@@ -28,6 +29,24 @@ export default function TopBar() {
     path === '/app' ? loc.pathname === '/app' : loc.pathname.startsWith(path)
   );
   const currentTitle = currentEntry ? currentEntry[1] : 'Studio';
+  
+  const { channels, activeChannel, setActiveChannelId, loadingChannels } = useChannel();
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef(null);
+  const navigate = useNavigate();
+
+  // Close dropdown on click outside
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   return (
     <header className="h-14 border-b border-border bg-canvas/90 backdrop-blur-md sticky top-0 z-30 flex items-center justify-between px-4 sm:px-6 lg:px-8">
@@ -54,6 +73,61 @@ export default function TopBar() {
 
       {/* Persistent Actions */}
       <div className="flex items-center gap-3 ml-auto">
+        
+        {/* Channel Switcher */}
+        {!loadingChannels && channels.length > 0 && (
+          <div className="relative" ref={dropdownRef}>
+            <button
+              onClick={() => setDropdownOpen(!dropdownOpen)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface hover:bg-surface-hover border border-border transition-colors text-sm font-medium select-none"
+            >
+              <div className="w-5 h-5 rounded bg-brand-red flex items-center justify-center text-white text-[10px] font-bold">
+                 {activeChannel?.name?.charAt(0).toUpperCase() || 'C'}
+              </div>
+              <span className="hidden sm:inline-block max-w-[120px] truncate">
+                {activeChannel?.name || 'Select Channel'}
+              </span>
+              <Icon name="chevron-down" size={14} className="text-text-muted" />
+            </button>
+            
+            {dropdownOpen && (
+              <div className="absolute right-0 mt-2 w-56 bg-elevated border border-border rounded-xl shadow-dropdown py-1 z-50">
+                <div className="px-3 py-2 text-xs font-bold text-text-muted uppercase tracking-wider border-b border-border mb-1">
+                  Your Channels
+                </div>
+                <div className="max-h-64 overflow-y-auto hide-scrollbar">
+                  {channels.map(c => (
+                    <button
+                      key={c.id}
+                      onClick={() => {
+                        setActiveChannelId(c.id);
+                        setDropdownOpen(false);
+                      }}
+                      className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-surface-hover transition-colors ${activeChannel?.id === c.id ? 'text-brand-red font-semibold' : 'text-text-primary'}`}
+                    >
+                       <div className="w-5 h-5 rounded bg-surface border border-border flex items-center justify-center text-[10px] font-bold flex-shrink-0">
+                         {c.name.charAt(0).toUpperCase()}
+                       </div>
+                       <span className="truncate">{c.name}</span>
+                       {activeChannel?.id === c.id && <Icon name="check" size={14} className="ml-auto" />}
+                    </button>
+                  ))}
+                </div>
+                <div className="border-t border-border mt-1 pt-1">
+                  <Link 
+                    to="/app/channels" 
+                    onClick={() => setDropdownOpen(false)}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-text-secondary hover:text-text-primary hover:bg-surface-hover transition-colors"
+                  >
+                    <Icon name="plus" size={14} />
+                    <span>Manage Channels</span>
+                  </Link>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* EXACTLY ONE Persistent Primary Action per §3.4 & §10 */}
         <Link 
           to="/app/create" 

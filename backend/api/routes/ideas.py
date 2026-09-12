@@ -39,6 +39,8 @@ class GenerateIdeasIn(BaseModel):
     channel_id: str
     count:      int = 5
     niche:      str | None = None
+    provider:   str | None = None
+    model:      str | None = None
 
 
 def _extract_json_list(raw: str) -> list:
@@ -89,8 +91,8 @@ async def generate_ideas(
     
     avoid_str = f"DO NOT use these recently covered topics: {', '.join(recent_topics)}" if recent_topics else ""
 
-    # Fetch trending topics using user profile niche keywords
-    kw_list = user.niche_keywords or [niche]
+    # Fetch trending topics using channel niche keywords
+    kw_list = channel.niche_keywords or [niche]
     try:
         trending = fetch_trending_topics(kw_list)
     except Exception as e:
@@ -104,9 +106,19 @@ async def generate_ideas(
     else:
         trend_notes = "Trend data unavailable (fetch failed or empty)."
 
+    # Channel specific tone & audience context
+    audience_str = f"Target Audience: {getattr(channel, 'target_audience', None) or 'General internet users'}"
+    tone_str = f"Content Tone: {channel.content_tone.capitalize()}" if channel.content_tone else "Content Tone: Casual and engaging"
+    style_str = f"Title Style: {channel.title_style_preference.capitalize()}" if channel.title_style_preference else "Title Style: Curiosity Gap"
+
     prompt = f"""You are a brilliant YouTube Shorts content strategist. 
 Generate {body.count} highly trending, viral, and wildly interesting topic ideas for a '{niche}' channel.
 These should be things people are currently fascinated by or bizarre/mind-blowing facts that hook attention immediately.
+
+Context:
+- {audience_str}
+- {tone_str}
+- {style_str}
 
 {trends_str}
 {avoid_str}
@@ -120,7 +132,13 @@ Example:
 ]"""
 
     try:
-        raw_response, provider = generate_with_fallback(prompt)
+        preferred_prov = body.provider or user.preferred_ai_provider or settings.DEFAULT_AI_PROVIDER
+        preferred_mod = body.model or user.preferred_ai_model or settings.DEFAULT_AI_MODEL
+        raw_response, provider = generate_with_fallback(
+            prompt,
+            preferred_provider=preferred_prov,
+            preferred_model=preferred_mod
+        )
         topics = _extract_json_list(raw_response)
         
         # Fallback if JSON parsing fails completely

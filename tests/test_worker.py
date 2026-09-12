@@ -1,7 +1,7 @@
 import pytest
 import asyncio
 from unittest.mock import patch, AsyncMock, MagicMock
-from backend.models.models import Video, VideoStatus, Script, Scene, Idea, Channel, UserProfile
+from backend.models.models import Video, VideoStatus, Script, Scene, Idea, Channel, User
 from engine.story.schemas import StorySpec, SceneSpec
 
 @pytest.mark.asyncio

@@ -13,8 +13,9 @@ class VisualRouter:
     Supported modes: STOCK, GENERATED_IMAGE, GENERATED_VIDEO, MOTION_GRAPHIC, SOURCE_FOOTAGE.
     """
     
-    def __init__(self, visual_dir: str):
+    def __init__(self, visual_dir: str, user_id: str):
         self.visual_dir = visual_dir
+        self.user_id = user_id
 
     async def resolve_asset(self, scene_data: dict, idea_topic: str = "", used_source_ids: set = None) -> Optional[str]:
         """
@@ -80,6 +81,7 @@ class VisualRouter:
             if local_path:
                 async with AsyncSessionLocal() as db:
                     new_asset = Asset(
+                        user_id=self.user_id,
                         asset_type="image",
                         source="comfyui",
                         path=local_path,
@@ -106,6 +108,7 @@ class VisualRouter:
             if local_path:
                 async with AsyncSessionLocal() as db:
                     new_asset = Asset(
+                        user_id=self.user_id,
                         asset_type="video_clip",
                         source="comfyui_wan22",
                         path=local_path,
@@ -164,6 +167,7 @@ class VisualRouter:
                     scene_data["asset_id"] = existing_asset.id
                 else:
                     new_asset = Asset(
+                        user_id=self.user_id,
                         script_id=None,
                         source_asset_id=source_id,
                         asset_type="video_clip",

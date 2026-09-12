@@ -30,37 +30,10 @@ class ProfileOut(BaseModel):
     display_name: str
     channel_name: str
     logo_path: str | None
-    default_cta: str
-    default_niche: str
-    caption_style: str
-    watermark_enabled: bool
-    watermark_opacity: float
-    watermark_position: str
-    watermark_scale: float
-    default_voice_id: str
-    content_tone: str
-    niche_keywords: list[str]
-    title_style_preference: str
-    hashtag_set: list[str]
-    auto_approve: bool
-
 
 class ProfileUpdate(BaseModel):
     display_name: str | None = None
     channel_name: str | None = None
-    default_cta: str | None = None
-    default_niche: str | None = None
-    caption_style: str | None = None
-    watermark_enabled: bool | None = None
-    watermark_opacity: float | None = None
-    watermark_position: str | None = None
-    watermark_scale: float | None = None
-    default_voice_id: str | None = None
-    content_tone: str | None = None
-    niche_keywords: list[str] | None = None
-    title_style_preference: str | None = None
-    hashtag_set: list[str] | None = None
-    auto_approve: bool | None = None
 
 
 @router.get("/", response_model=ProfileOut)
@@ -136,17 +109,4 @@ def _fmt(p: User) -> dict:
         "display_name":      p.display_name or "Creator",
         "channel_name":      p.channel_name or "",
         "logo_path":         p.logo_path,
-        "default_cta":       p.default_cta or "Follow for more!",
-        "default_niche":     p.default_niche or "science_wow",
-        "caption_style":     p.caption_style or "bold_centered",
-        "watermark_enabled": p.watermark_enabled if p.watermark_enabled is not None else True,
-        "watermark_opacity": p.watermark_opacity or 0.4,
-        "watermark_position": p.watermark_position or "bottom_right",
-        "watermark_scale":   p.watermark_scale or 0.12,
-        "default_voice_id":  p.default_voice_id or "en-US-ChristopherNeural",
-        "content_tone":      p.content_tone or "casual",
-        "niche_keywords":    p.niche_keywords or [],
-        "title_style_preference": p.title_style_preference or "curiosity",
-        "hashtag_set":       p.hashtag_set or ["shorts", "viral"],
-        "auto_approve":      p.auto_approve if p.auto_approve is not None else False,
     }

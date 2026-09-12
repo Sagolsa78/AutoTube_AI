@@ -1,7 +1,6 @@
 import pytest
 from unittest.mock import patch, AsyncMock, MagicMock
-from backend.models.models import Video, Idea, UserProfile, VideoStatus, Publication, IdeaStatus, Channel
-from backend.api.routes.videos import _run_render
+from backend.models.models import Video, Idea, User, VideoStatus, Publication, IdeaStatus, Channel
 
 class MockDB:
     def __init__(self):

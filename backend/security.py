@@ -19,9 +19,11 @@ log = logging.getLogger(__name__)
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 http_bearer = HTTPBearer(auto_error=False)
 
-API_KEY = os.getenv("AUTOTUBE_API_KEY") or os.getenv("API_KEY", "")
-AUTH_DISABLED = os.getenv("AUTH_DISABLED", "false").lower() in ("true", "1", "yes")
-APP_ENV = os.getenv("APP_ENV", "development")
+from backend.core.config import settings
+
+API_KEY = settings.AUTOTUBE_API_KEY
+AUTH_DISABLED = settings.AUTH_DISABLED
+APP_ENV = settings.APP_ENV
 
 
 async def verify_control_plane_auth(
@@ -66,7 +68,10 @@ async def verify_control_plane_auth(
 from cryptography.fernet import Fernet
 import base64
 
-ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
+ENCRYPTION_KEY = getattr(settings, "ENCRYPTION_KEY", None)
+if not ENCRYPTION_KEY:
+    # Use a dummy key for dev if missing
+    ENCRYPTION_KEY = "dummy-dev-key-replace-in-prod"
 
 def get_fernet() -> Optional[Fernet]:
     if not ENCRYPTION_KEY:
