@@ -60,3 +60,7 @@ class LocalStorageBackend(StorageBackend):
     async def generate_upload_url(self, remote_key: str, expires_in: int = 3600) -> str:
         # Local doesn't support direct upload URLs natively without an API endpoint
         raise NotImplementedError("Upload URLs not supported in LocalStorageBackend")
+
+# Backward-compatibility alias
+LocalStorage = LocalStorageBackend
+

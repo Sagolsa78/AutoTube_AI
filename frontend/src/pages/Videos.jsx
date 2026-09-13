@@ -345,7 +345,7 @@ export default function Videos({ filter }) {
           {/* LEFT/TOP: 9:16 Video Player Surface (5 Cols) */}
           <div className="lg:col-span-5 flex flex-col gap-4 w-full max-w-md mx-auto lg:max-w-none">
             {['ready', 'approved', 'uploaded'].includes(activeVideo.status) ? (
-              <CustomPlayer src={`/api/videos/${activeVideo.id}/preview`} />
+              <CustomPlayer src={api.getVideoPreviewUrl(activeVideo.id)} />
             ) : (
               <div className="w-full aspect-[9/16] max-h-[580px] bg-surface rounded-xl border border-border flex items-center justify-center p-6 shadow-card-subtle">
                 {['rendering', 'paused'].includes(activeVideo.status) ? (

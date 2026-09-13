@@ -52,4 +52,5 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           JOB_ID: ${{ inputs.job_id }}
+        run: |
           python -m backend.worker.main --job-id "$JOB_ID"

@@ -33,11 +33,15 @@ async def _check_cancel_pause(db, video):
             break
         await asyncio.sleep(2)
 
-async def run_job(video_id: str, job: RenderJob):
+async def run_job(video_id: str, job: RenderJob, job_id: str = None):
     """
     Background render task.
     Writes stage updates to the database so the frontend can poll progress.
     """
+    if isinstance(job.story_spec, dict):
+        from engine.story.schemas import StorySpec
+        job.story_spec = StorySpec.model_validate(job.story_spec)
+
     async with AsyncSessionLocal() as db:
         try:
             video = await db.get(Video, video_id)
@@ -48,8 +52,14 @@ async def run_job(video_id: str, job: RenderJob):
             log.info(f"Starting background render for video {video_id}")
             profile = await db.get(User, video.user_id)
 
+            import shutil
+            if not shutil.which("ffmpeg"):
+                raise RuntimeError("FFmpeg is not installed or not in PATH.")
+            if not shutil.which("ffprobe"):
+                raise RuntimeError("ffprobe is not installed or not in PATH.")
+                
             # ── Temp Workspace ──────────────────────────────────────────────
-            workspace = Path(f"/tmp/autotube/{video_id}")
+            workspace = Path(f"/tmp/autotube/{job_id or video_id}")
             workspace.mkdir(parents=True, exist_ok=True)
             audio_dir = workspace / "audio"
             visual_dir = workspace / "visuals"
@@ -158,13 +168,19 @@ async def run_job(video_id: str, job: RenderJob):
                 video.notes = f"Uploaded to {settings.STORAGE_BACKEND}"
                 log.info(f"Video {video.id} uploaded to {settings.STORAGE_BACKEND}: {remote_key}")
             except Exception as st_err:
-                log.warning(f"Failed to upload video to storage: {st_err}")
+                if settings.STORAGE_BACKEND != "local":
+                    raise RuntimeError(f"Storage upload failed ({settings.STORAGE_BACKEND}): {st_err}")
+                log.warning(f"Failed to upload video to local storage: {st_err}")
                 video.path = job.output_path # Fallback to local temp path (not recommended but keeps it working)
+
+            # Persist path immediately to prevent db.refresh in _check_cancel_pause wiping it
+            saved_path = video.path
+            await db.commit()
 
             # ── Stage 4: Metadata ─────────────────────────────────────────
             await _check_cancel_pause(db, video)
-            # Set status to ready NOW (after db.refresh in _check_cancel_pause)
-            # so it is not wiped before being committed
+            # Set status and path NOW (after db.refresh in _check_cancel_pause)
+            video.path = saved_path
             video.duration = job.duration
             video.status = VideoStatus.ready
             video.ai_used = True
@@ -214,6 +230,7 @@ Respond ONLY with a JSON object in this exact format (no markdown):
             
             # ── Stage 5: Done ─────────────────────────────────────────────
             await _check_cancel_pause(db, video)
+            video.path = saved_path
             video.render_stage = "done"
             video.render_progress = 100
             script.status = ScriptStatus.used_in_render

@@ -91,7 +91,7 @@ export default function Publications() {
                     {/* Video Poster */}
                     <div className="w-20 aspect-[9/16] bg-canvas rounded-lg border border-border overflow-hidden shrink-0 relative flex items-center justify-center">
                       <video 
-                        src={`/api/videos/${v.id}/preview`} 
+                        src={api.getVideoPreviewUrl(v.id)} 
                         className="w-full h-full object-cover" 
                         muted 
                         preload="metadata"

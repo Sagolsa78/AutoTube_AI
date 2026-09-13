@@ -2,6 +2,7 @@ import React from 'react';
 import { Link, useLocation, Outlet } from 'react-router-dom';
 import Icon from '../Icon';
 import TopBar from './TopBar';
+import JobCenterWidget from '../JobCenterWidget';
 
 const primaryNav = [
   { to: '/app', label: 'Home', icon: 'home' },
@@ -164,6 +165,9 @@ export default function AppShell() {
           );
         })}
       </nav>
+      
+      {/* Global Job Indicator Overlay */}
+      <JobCenterWidget />
     </div>
   );
 }

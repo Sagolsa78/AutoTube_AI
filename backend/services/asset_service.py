@@ -6,14 +6,10 @@ from datetime import datetime
 from backend.db.database import AsyncSessionLocal
 from backend.models.models import Job, JobStatus, Asset
 from engine.visuals.comfyui import ComfyUIClient
-from backend.storage.local import LocalStorage
-from backend.storage.s3 import S3Storage
+from backend.storage import storage
 from backend.core.config import settings
 
 log = logging.getLogger(__name__)
-
-# Initialize storage based on config
-storage = S3Storage() if settings.STORAGE_BACKEND in ["s3", "r2"] else LocalStorage(settings.STORAGE_ROOT)
 
 async def execute_asset_job(job_id: str):
     """

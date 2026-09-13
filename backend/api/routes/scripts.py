@@ -3,13 +3,14 @@ Scripts router — generate script from an approved idea, quality check, store.
 Now produces scene-based scripts with per-scene narration and visual descriptions.
 """
 from __future__ import annotations
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.db.database import get_db
+from backend.db.database import get_db, AsyncSessionLocal
 from backend.models.models import Script, Idea, IdeaStatus, Channel, ScriptStatus, Scene, User
 from backend.auth.dependencies import get_current_user
 
@@ -98,20 +99,30 @@ async def generate_script_for_idea(
     if idea.status not in (IdeaStatus.promoted, IdeaStatus.pending):
         raise HTTPException(400, f"Idea status is '{idea.status}' — promote it first")
 
-    # Get niche and language from channel
+    # Extract all necessary values before releasing DB session
+    idea_topic = idea.topic
+    idea_id_val = idea.id
+    user_id_val = user.id
     niche = channel.niche
     final_language = language or channel.language
     final_locale = locale or "US"
     preferred_prov = provider or user.preferred_ai_provider or settings.DEFAULT_AI_PROVIDER
     preferred_mod = model or user.preferred_ai_model or settings.DEFAULT_AI_MODEL
 
-    # Run generation pipeline
+    # Release DB transaction immediately so Neon/PgBouncer pooler doesn't close idle connection
+    try:
+        await db.commit()
+    except Exception:
+        pass
+
+    # Run generation pipeline in background thread so event loop and network remain unblocked
     from engine.script.generator import generate_script
     from engine.quality.checker import check_script
     from engine.research.verifier import FactVerifier
     try:
-        story_spec, provider_used = generate_script(
-            idea.topic,
+        story_spec, provider_used = await asyncio.to_thread(
+            generate_script,
+            idea_topic,
             niche=niche,
             language=final_language,
             provider=preferred_prov,
@@ -124,48 +135,52 @@ async def generate_script_for_idea(
         
         data = story_spec.model_dump()
         data["full_text"] = full_text
-        report  = check_script(data, niche)
+        report = await asyncio.to_thread(check_script, data, niche)
         
         # True fact checking
         verifier = FactVerifier()
-        fact_check_ok = verifier.verify_story(story_spec, final_language)
+        fact_check_ok = await asyncio.to_thread(verifier.verify_story, story_spec, final_language)
             
     except Exception as exc:
         raise HTTPException(500, f"Script generation failed: {exc}")
 
-    script = Script(
-        user_id        = user.id,
-        idea_id        = idea_id,
-        full_text      = full_text,
-        duration_est   = duration_est,
-        quality_score  = report.score,
-        fact_check_ok  = fact_check_ok,
-        provider_used  = provider_used,
-        body           = story_spec.model_dump()
-    )
-    db.add(script)
-    await db.flush()
-
-    # Create Scene rows from LLM output
-    for s_spec in story_spec.scenes:
-        scene_obj = Scene(
-            user_id=user.id,
-            script_id=script.id,
-            scene_number=s_spec.scene_number,
-            narration=s_spec.narration,
-            visual_description=s_spec.stock_query or s_spec.visual_intent,
+    # Use a fresh, verified session from the pool to save the generated script and scenes
+    async with AsyncSessionLocal() as save_db:
+        script = Script(
+            user_id        = user_id_val,
+            idea_id        = idea_id_val,
+            full_text      = full_text,
+            duration_est   = duration_est,
+            quality_score  = report.score,
+            fact_check_ok  = fact_check_ok,
+            provider_used  = provider_used,
+            body           = story_spec.model_dump()
         )
-        db.add(scene_obj)
+        save_db.add(script)
+        await save_db.flush()
 
-    idea.status = IdeaStatus.promoted
-    await db.flush()
+        # Create Scene rows from LLM output
+        for s_spec in story_spec.scenes:
+            scene_obj = Scene(
+                user_id=user_id_val,
+                script_id=script.id,
+                scene_number=s_spec.scene_number,
+                narration=s_spec.narration,
+                visual_description=s_spec.stock_query or s_spec.visual_intent,
+            )
+            save_db.add(scene_obj)
 
-    # Reload with scenes
-    q = select(Script).where(Script.id == script.id).options(selectinload(Script.scenes), selectinload(Script.videos))
-    res = await db.execute(q)
-    script = res.scalars().first()
+        current_idea = await save_db.get(Idea, idea_id_val)
+        if current_idea:
+            current_idea.status = IdeaStatus.promoted
+        await save_db.commit()
 
-    return _fmt(script)
+        # Reload with scenes
+        q = select(Script).where(Script.id == script.id).options(selectinload(Script.scenes), selectinload(Script.videos))
+        res = await save_db.execute(q)
+        saved_script = res.scalars().first()
+
+    return _fmt(saved_script)
 
 
 @router.get("/{script_id}", response_model=ScriptOut)

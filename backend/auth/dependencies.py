@@ -35,3 +35,25 @@ async def get_current_user(
         await db.commit()
         await db.refresh(user)
     return user
+
+async def get_optional_current_user(
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+) -> User | None:
+    """Optional authentication dependency. Returns User if authenticated, else None."""
+    payload = await auth_provider.try_verify_request(request)
+    if not payload:
+        return None
+    user_id = payload.get("sub")
+    if not user_id:
+        return None
+    user = await db.get(User, user_id)
+    if not user:
+        email = payload.get("email")
+        display_name = email.split('@')[0] if email else f"User {user_id[:6]}"
+        user = User(id=user_id, email=email, display_name=display_name)
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+    return user
+

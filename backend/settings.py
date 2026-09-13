@@ -39,7 +39,7 @@ OPENROUTER_API_KEY   = settings.OPENROUTER_API_KEY or ""
 OLLAMA_BASE_URL      = settings.OLLAMA_BASE_URL
 OLLAMA_MODEL         = settings.OLLAMA_MODEL
 OLLAMA_MODELS        = [m.strip() for m in settings.OLLAMA_MODELS.split(",") if m.strip()]
-
+OLLAMA_TIMEOUT       = settings.OLLAMA_TIMEOUT
 SCRIPT_PROVIDER_ORDER = settings.parsed_script_provider_order
 
 # ── Stock Footage ─────────────────────────────────────────────────────────────

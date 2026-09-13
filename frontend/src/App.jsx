@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import React, { useState, useEffect } from 'react';
 import { supabase } from './lib/supabase';
+import { setAuthToken } from './services/api';
 import { ChannelProvider } from './contexts/ChannelContext';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
@@ -10,6 +11,7 @@ import StudioShell from './pages/Studio/StudioShell';
 import Ideas from './pages/Ideas';
 import Scripts from './pages/Scripts';
 import Videos from './pages/Videos';
+import JobDetail from './pages/JobDetail';
 import Profile from './pages/Profile';
 import Channels from './pages/Channels';
 import Publications from './pages/Publications';
@@ -17,6 +19,7 @@ import Analytics from './pages/Analytics';
 import Logs from './pages/Logs';
 import Health from './pages/Health';
 import AppShell from './components/layout/AppShell';
+import ErrorBoundary from './components/ErrorBoundary';
 import { Toaster } from 'sonner';
 import './index.css';
 
@@ -38,11 +41,14 @@ function ProtectedRoute() {
     if (supabase) {
       supabase.auth.getSession().then(({ data: { session } }) => {
         setIsAuthenticated(!!session);
+        if (session?.access_token) setAuthToken(session.access_token);
         setLoading(false);
       });
 
       const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
         setIsAuthenticated(!!session);
+        if (session?.access_token) setAuthToken(session.access_token);
+        else setAuthToken(null);
       });
 
       return () => subscription.unsubscribe();
@@ -66,6 +72,7 @@ function ProtectedRoute() {
 export default function App() {
   return (
     <>
+    <ErrorBoundary>
       <Toaster position="bottom-right" richColors theme="dark" />
       <Routes>
         <Route path="/" element={<Landing />} />
@@ -80,6 +87,7 @@ export default function App() {
           <Route path="ideas" element={<Ideas />} />
           <Route path="scripts" element={<Scripts />} />
           <Route path="videos" element={<Videos />} />
+          <Route path="jobs/:id" element={<JobDetail />} />
           <Route path="best" element={<Videos filter="best" />} />
           <Route path="publications" element={<Publications />} />
           <Route path="analytics" element={<Analytics />} />
@@ -91,6 +99,7 @@ export default function App() {
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+    </ErrorBoundary>
     </>
   );
 }

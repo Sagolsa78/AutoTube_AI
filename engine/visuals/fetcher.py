@@ -4,11 +4,12 @@ then Pixabay (fallback).
 """
 from __future__ import annotations
 import logging
-import os
-import uuid
 import asyncio
+import tempfile
+import uuid
 from pathlib import Path
-
+import time
+import subprocess
 import requests
 
 from backend.settings import PEXELS_API_KEY, PIXABAY_API_KEY, VISUAL_DIR
@@ -98,13 +99,35 @@ async def async_search_clips(query: str, count: int = 5) -> list[dict]:
 
 
 def chunk_download(url: str, dest: Path, chunk_size: int = 1 << 20):
-    """Stream-download a file to avoid loading into memory."""
+    """Stream-download a file to avoid loading into memory, with retries and validation."""
     dest.parent.mkdir(parents=True, exist_ok=True)
-    with requests.get(url, stream=True, timeout=60) as r:
-        r.raise_for_status()
-        with open(dest, "wb") as f:
-            for chunk in r.iter_content(chunk_size=chunk_size):
-                f.write(chunk)
+    tmp_dest = dest.with_suffix('.tmp')
+    
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            with requests.get(url, stream=True, timeout=(15, 30)) as r:
+                r.raise_for_status()
+                with open(tmp_dest, "wb") as f:
+                    for chunk in r.iter_content(chunk_size=chunk_size):
+                        f.write(chunk)
+                        
+            if not tmp_dest.exists() or tmp_dest.stat().st_size == 0:
+                raise ValueError("Downloaded file is empty")
+                
+            cmd = ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", str(tmp_dest)]
+            out = subprocess.check_output(cmd, stderr=subprocess.STDOUT).decode().strip()
+            if not out or float(out) <= 0:
+                raise ValueError(f"Invalid media duration: {out}")
+                
+            tmp_dest.rename(dest)
+            return
+        except Exception as e:
+            if tmp_dest.exists():
+                tmp_dest.unlink()
+            if attempt == max_retries - 1:
+                raise RuntimeError(f"Download failed after {max_retries} attempts: {e}")
+            time.sleep(2 * (attempt + 1))
 
 
 async def async_download_clip(url: str, out_dir: str | Path, source: str = "asset") -> str:

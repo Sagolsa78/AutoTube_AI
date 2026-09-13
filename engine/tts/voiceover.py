@@ -5,7 +5,10 @@ per-word timing in one pass.
 """
 from __future__ import annotations
 import logging
+import asyncio
+import json
 from pathlib import Path
+import subprocess
 
 # pyrefly: ignore [missing-import]
 import edge_tts
@@ -59,10 +62,19 @@ async def _generate_tts(
                 })
 
     if not word_boundaries:
-        raise RuntimeError(
+        log.warning(
             "edge-tts produced zero WordBoundary events — cannot generate "
-            "timed captions.  Check edge-tts version and voice availability."
+            "timed captions. Continuing without word boundaries."
         )
+        if audio_path and Path(audio_path).exists():
+            import subprocess
+            try:
+                cmd = ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", audio_path]
+                dur_out = subprocess.check_output(cmd).decode().strip()
+                return float(dur_out), []
+            except Exception:
+                pass
+        return 0.0, []
 
     last = word_boundaries[-1]
     duration = last["offset"] + last["duration"]
@@ -131,11 +143,56 @@ async def generate_voiceover(
 
     log.info("Generating TTS with voice=%s for language=%s", selected_voice, language)
 
-    duration, word_boundaries = await _generate_tts(
-        text, selected_voice, audio_path,
-    )
+    # Check for existing assets (Idempotency)
+    wb_path = str(Path(audio_path).with_suffix(".json"))
+    if Path(audio_path).exists() and Path(audio_path).stat().st_size > 0:
+        if Path(wb_path).exists():
+            try:
+                cmd = ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", audio_path]
+                dur_out = subprocess.check_output(cmd).decode().strip()
+                existing_dur = float(dur_out)
+                
+                with open(wb_path, "r") as f:
+                    cached_boundaries = json.load(f)
+                    
+                log.info("Bypassing TTS generation: Valid audio and word boundaries already exist.")
+                return {
+                    "audio_path":      audio_path,
+                    "sub_path":        sub_path,
+                    "srt_path":        sub_path,
+                    "duration":        existing_dur,
+                    "voice":           selected_voice,
+                    "word_boundaries": cached_boundaries,
+                }
+            except Exception as e:
+                log.warning("Existing TTS assets invalid, regenerating. %s", e)
+
+    max_retries = 3
+    duration, word_boundaries = 0.0, []
+    
+    for attempt in range(max_retries):
+        try:
+            duration, word_boundaries = await asyncio.wait_for(
+                _generate_tts(text, selected_voice, audio_path),
+                timeout=60.0
+            )
+            if duration > 0:
+                break
+        except (asyncio.TimeoutError, Exception) as e:
+            log.warning(f"TTS attempt {attempt+1} failed: {e}")
+            if attempt == max_retries - 1:
+                raise RuntimeError(f"TTS generation failed after {max_retries} attempts.")
+            await asyncio.sleep(2 * (attempt + 1))
 
     log.info("TTS complete: %.1fs audio → %s", duration, audio_path)
+    
+    # Cache word boundaries for retry idempotency
+    try:
+        with open(wb_path, "w") as f:
+            json.dump(word_boundaries, f)
+    except Exception as e:
+        log.warning("Failed to cache word boundaries: %s", e)
+
     return {
         "audio_path":      audio_path,
         "sub_path":        sub_path,

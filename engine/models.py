@@ -29,3 +29,8 @@ class RenderJob:
     watermark_opacity: float = 0.4
     watermark_position: str = "bottom_right"
     watermark_scale: float = 0.12
+
+    def __post_init__(self):
+        if isinstance(self.story_spec, dict):
+            self.story_spec = StorySpec.model_validate(self.story_spec)
+

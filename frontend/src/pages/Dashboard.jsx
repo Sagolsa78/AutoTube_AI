@@ -36,11 +36,11 @@ export default function Dashboard() {
       try {
         setLoading(true);
         const [ideas, scripts, videos, prof, dashAnalytics, compute] = await Promise.all([
-          api.getIdeas(activeChannelId),
-          api.getScripts(activeChannelId),
-          api.getVideos(activeChannelId),
-          api.getProfile(),
-          api.getDashboardAnalytics(activeChannelId),
+          api.getIdeas(activeChannelId).catch(() => []),
+          api.getScripts(activeChannelId).catch(() => []),
+          api.getVideos(activeChannelId).catch(() => []),
+          api.getProfile().catch(() => null),
+          api.getDashboardAnalytics(activeChannelId).catch(() => null),
           api.getComputeTelemetry().catch(() => null),
         ]);
         if (!isMounted) return;
