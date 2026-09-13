@@ -24,6 +24,23 @@ export default function EditorStage({ idea, script, setScript, editingScenes, se
   const [searching, setSearching] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Auto-fetch existing script for the selected idea if not already loaded
+  useEffect(() => {
+    if (idea && !script) {
+      let isMounted = true;
+      api.getScripts({ idea_id: idea.id }).then(scripts => {
+        if (isMounted && scripts && scripts.length > 0) {
+          const activeScript = scripts.find(s => s.status !== 'discarded') || scripts[0];
+          setScript(activeScript);
+          toast.success('Loaded existing script from database');
+        }
+      }).catch(err => {
+        console.error('Error fetching existing script:', err);
+      });
+      return () => { isMounted = false; };
+    }
+  }, [idea, script, setScript]);
+
   // 1. Script Generation Logic
   const generateScript = async () => {
     if (!idea) {
@@ -36,7 +53,27 @@ export default function EditorStage({ idea, script, setScript, editingScenes, se
       setScript(result);
       toast.success('Script drafted successfully!');
     } catch (e) {
-      toast.error(`Script generation failed: ${e.message}`);
+      console.warn(`Initial generation call ended: ${e.message}. Checking server for created script...`);
+      // Retry checking DB in case backend finished saving despite timeout
+      let recovered = false;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        await new Promise(r => setTimeout(r, 2000));
+        try {
+          const existing = await api.getScripts({ idea_id: idea.id });
+          if (existing && existing.length > 0) {
+            const activeScript = existing.find(s => s.status !== 'discarded') || existing[0];
+            setScript(activeScript);
+            toast.success('Script recovered from server!');
+            recovered = true;
+            break;
+          }
+        } catch (checkErr) {
+          console.error('Failed checking existing script:', checkErr);
+        }
+      }
+      if (!recovered) {
+        toast.error(`Script generation failed: ${e.message}`);
+      }
     } finally {
       setGenerating(false);
     }

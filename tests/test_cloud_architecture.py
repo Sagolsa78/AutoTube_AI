@@ -113,7 +113,7 @@ async def test_router_burst_to_cloud_when_local_offline_and_budget_available():
 
     mock_db.execute.return_value = MockResult()
 
-    with patch.dict(os.environ, {"RUNPOD_API_KEY": "rpa_test_key_123"}):
+    with patch("backend.worker_router.settings.RUNPOD_API_KEY", "rpa_test_key_123"):
         job_data = await dispatch_job(
             job_id="job-cloud-burst-test",
             capability=WorkerCapability.RENDER,
@@ -226,12 +226,12 @@ async def test_local_storage_backend_initialization(tmp_path):
     assert await local_storage.get_public_url("videos/test.mp4") == "/static/videos/test.mp4"
 
     # Cloudflare R2 with custom public domain
-    with patch.dict(os.environ, {"R2_PUBLIC_DOMAIN": "https://media.autotube.ai"}):
-        r2_storage = S3StorageBackend(
-            endpoint_url="https://xxx.r2.cloudflarestorage.com",
-            public_domain="pub.example.com",
-            bucket="my-test-bucket",
-        )
+    with patch("backend.storage.s3.settings.R2_PUBLIC_DOMAIN", "https://media.autotube.ai"), \
+         patch("backend.storage.s3.settings.S3_ENDPOINT_URL", "https://xxx.r2.cloudflarestorage.com"), \
+         patch("backend.storage.s3.settings.S3_BUCKET_NAME", "my-test-bucket"), \
+         patch("backend.storage.s3.settings.S3_ACCESS_KEY_ID", "test"), \
+         patch("backend.storage.s3.settings.S3_SECRET_ACCESS_KEY", "test"):
+        r2_storage = S3StorageBackend()
         assert await r2_storage.get_public_url("videos/test.mp4") == "https://media.autotube.ai/videos/test.mp4"
 
 
@@ -244,7 +244,9 @@ async def test_router_zero_laptop_cloud_native_mode():
     # Force local worker offline
     router_registry.workers["local_pc"]["last_heartbeat"] = 0.0
 
-    with patch.dict(os.environ, {"COMPUTE_STRATEGY": "cloud-native", "ZERO_LAPTOP_MODE": "true"}):
+    with patch("backend.worker_router.settings.COMPUTE_STRATEGY", "cloud-native"), \
+         patch("backend.worker_router.settings.ZERO_LAPTOP_MODE", True), \
+         patch("backend.worker_router.GitHubActionsJobExecutor.submit", new_callable=AsyncMock) as mock_submit:
         job_data = await dispatch_job(
             job_id="job-zero-laptop-1",
             capability=WorkerCapability.RENDER,
@@ -254,3 +256,4 @@ async def test_router_zero_laptop_cloud_native_mode():
         assert job_data["worker_id"] == "cloud_worker"
         assert job_data["worker_type"] == "cloud_container"
         assert job_data["status"] == JobStatus.dispatched.value
+        mock_submit.assert_called_once_with("job-zero-laptop-1", {"topic": "Black Holes"})

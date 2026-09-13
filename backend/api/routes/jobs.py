@@ -16,7 +16,7 @@ import logging
 from datetime import datetime
 from typing import Dict, Any, Optional, List
 
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query, Header
 from pydantic import BaseModel
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,6 +25,7 @@ import os
 from backend.db.database import get_db
 from backend.models.models import Job, JobStatus, User
 from backend.auth.dependencies import get_current_user
+from backend.core.config import settings
 from backend.worker_router import (
     dispatch_job,
     router_registry,
@@ -37,6 +38,29 @@ from backend.events import event_bus
 
 router = APIRouter()
 log = logging.getLogger(__name__)
+
+
+# ── Worker Authentication Dependency ──────────────────────────────────────────
+
+async def verify_worker_auth(
+    x_worker_secret: Optional[str] = Header(None, alias="X-Worker-Secret")
+):
+    """
+    Dependency for worker-only endpoints.
+    Workers must present the WORKER_SECRET in the X-Worker-Secret header.
+    If WORKER_SECRET is not configured, worker endpoints are accessible from localhost only
+    (acceptable for local dev where only the local worker calls them).
+    """
+    worker_secret = settings.WORKER_SECRET
+    if worker_secret:
+        if not x_worker_secret or x_worker_secret != worker_secret:
+            raise HTTPException(
+                status_code=403,
+                detail="Invalid or missing X-Worker-Secret header"
+            )
+    # If no WORKER_SECRET configured, allow (local dev mode)
+    return True
+
 
 
 # ── Request / Response Schemas ────────────────────────────────────────────────
@@ -113,22 +137,32 @@ async def create_job(
 
     job_id = str(uuid.uuid4())
 
-    # 1. Route via Worker Router
-    route_meta = await dispatch_job(job_id, request.capability, request.payload, db=db)
-
-    # 2. Persist canonical record into PostgreSQL (single source of truth)
+    # 1. Persist canonical record FIRST — executor must find it in DB
     new_job = Job(
         id=job_id,
         user_id=user.id,
         capability=request.capability.value,
-        status=route_meta["status"],
+        status="dispatching",
         payload=request.payload,
-        worker_id=route_meta.get("worker_id"),
-        worker_type=route_meta.get("worker_type", "local"),
+        worker_type="local",
         cost_usd=0.0,
         created_at=datetime.utcnow()
     )
     db.add(new_job)
+    await db.commit()
+    await db.refresh(new_job)
+
+    # 2. Route via Worker Router (Job is now committed and readable)
+    try:
+        route_meta = await dispatch_job(job_id, request.capability, request.payload, db=db)
+        new_job.status = route_meta["status"]
+        new_job.worker_id = route_meta.get("worker_id")
+        new_job.worker_type = route_meta.get("worker_type", "local")
+    except Exception as e:
+        log.exception(f"Failed to dispatch job {job_id}")
+        new_job.status = "failed"
+        new_job.error_message = f"Dispatch failed: {str(e)}"
+
     await db.commit()
     await db.refresh(new_job)
 
@@ -180,7 +214,10 @@ async def cancel_job(
 # ── Worker Agent Endpoints ────────────────────────────────────────────────────
 
 @router.post("/worker/heartbeat")
-async def worker_heartbeat(heartbeat: WorkerHeartbeat):
+async def worker_heartbeat(
+    heartbeat: WorkerHeartbeat,
+    _auth: bool = Depends(verify_worker_auth)
+):
     """Worker agents ping this endpoint every 10s to signal availability."""
     router_registry.record_heartbeat(
         worker_id=heartbeat.worker_id,
@@ -198,7 +235,8 @@ async def worker_heartbeat(heartbeat: WorkerHeartbeat):
 async def worker_poll(
     worker_id: str = Query(..., description="ID of the polling worker"),
     capabilities: Optional[str] = Query(None, description="Comma-separated capabilities supported"),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _auth: bool = Depends(verify_worker_auth)
 ):
     """
     Worker daemon polls this endpoint to pull the next pending task.
@@ -259,7 +297,8 @@ async def worker_poll(
 async def complete_job(
     job_id: str,
     req: JobCompleteRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _auth: bool = Depends(verify_worker_auth)
 ):
     """Worker daemon notifies Control Plane that job has completed with artifacts."""
     stmt = select(Job).where(Job.id == job_id)
@@ -293,7 +332,8 @@ async def complete_job(
 async def fail_job(
     job_id: str,
     req: JobFailRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _auth: bool = Depends(verify_worker_auth)
 ):
     """Worker daemon notifies Control Plane of a task failure."""
     stmt = select(Job).where(Job.id == job_id)

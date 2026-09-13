@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     
     # Allowed origins for CORS (comma-separated string parsed to list in main.py)
     CORS_ORIGINS: str = "*"
+    FRONTEND_URL: str = "http://localhost:5173"
 
     # ── Database ──────────────────────────────────────────────────────────────
     DATABASE_URL: str = "sqlite+aiosqlite:///./storage/autoshorts.db"
@@ -71,10 +72,15 @@ class Settings(BaseSettings):
     # ── Workers & Compute ─────────────────────────────────────────────────────
     WORKER_BACKEND: Literal["local", "github_actions"] = "local"
     DAILY_GPU_BUDGET_CAP: float = 2.00
+    COMPUTE_STRATEGY: str = "local-first"
+    ZERO_LAPTOP_MODE: bool = False
+    RUNPOD_API_KEY: Optional[str] = None
     
     # GitHub Actions (for cloud worker)
     GITHUB_TOKEN: Optional[str] = None
     GITHUB_REPOSITORY: Optional[str] = None
+    WORKER_GIT_REF: str = "main"  # git ref used by GitHub Actions worker
+    WORKER_SECRET: Optional[str] = None  # shared secret for worker-API authentication
     
     # ── AI Providers ──────────────────────────────────────────────────────────
     # Ordered list of providers for fallback chain
@@ -102,14 +108,16 @@ class Settings(BaseSettings):
     AUTOTUBE_API_KEY: Optional[str] = None
     JWT_SECRET: str = "autotube-super-secret-jwt-signing-key-2026"
     JWT_ALGORITHM: str = "HS256"
+    # Fernet key for encrypting OAuth tokens at rest (32 url-safe base64 bytes).
+    # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    ENCRYPTION_KEY: Optional[str] = None
     
     # ── Default Active AI Model ───────────────────────────────────────────────
     DEFAULT_AI_PROVIDER: str = "gemini"
     DEFAULT_AI_MODEL: str = "gemini-3.5-flash-lite"
     
     # ── GitHub / Cloud Worker ─────────────────────────────────────────────────
-    GITHUB_TOKEN: Optional[str] = None
-    GITHUB_REPO: str = "Sagolsa78/AutoTube_AI"
+    GITHUB_REPO: str = "Sagolsa78/AutoTube_AI"  # owner/repo for dispatch
 
     model_config = SettingsConfigDict(
         env_file=".env",

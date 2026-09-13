@@ -54,8 +54,11 @@ async def test_update_script_saves_advanced_fields():
         ]
     )
     
+    from backend.models.models import User
+    user = User(id="default-user")
+    
     # Run API
-    result = await update_script("script1", payload, db=db)
+    result = await update_script("script1", payload, user=user, db=db)
     
     # Assert Scene model updated
     assert scene.narration == "new narration"

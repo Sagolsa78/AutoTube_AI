@@ -17,6 +17,7 @@ from backend.db.database import get_db, AsyncSessionLocal
 from backend.models.models import Video, VideoStatus, Script, Channel, Idea, User, ScriptStatus, Scene
 from engine.models import RenderJob
 from backend.auth.dependencies import get_current_user, get_optional_current_user
+from backend.services.rendering_service import run_job as _run_render
 
 router = APIRouter()
 log = logging.getLogger(__name__)
@@ -224,13 +225,13 @@ async def render_video(
             job.watermark_position = channel.watermark_position or "bottom_right"
             job.watermark_scale = channel.watermark_scale or 0.12
 
-    # Create DB Job and dispatch via Worker Router
+    # Create DB Job and dispatch via JobExecutor (based on WORKER_BACKEND setting)
     import uuid
     from dataclasses import fields as dc_fields
     from datetime import datetime
     from pydantic import BaseModel as PydanticBaseModel
     from backend.models.models import Job as DBJob
-    from backend.worker_router import dispatch_job, WorkerCapability
+    from backend.core.config import settings as _settings
 
     def _serialize_render_job(rj):
         """Serialize a RenderJob dataclass that contains nested Pydantic models."""
@@ -250,32 +251,34 @@ async def render_video(
     new_db_job = DBJob(
         id=job_id,
         user_id=user.id,
-        capability=WorkerCapability.RENDER.value,
+        capability="RENDER",
         status="dispatching",
         payload=job_payload,
-        worker_type="local",
+        worker_type=_settings.WORKER_BACKEND,
         cost_usd=0.0,
         created_at=datetime.utcnow()
     )
     db.add(new_db_job)
+    # CRITICAL: Commit Job BEFORE dispatching so executor can read it from DB
     await db.commit()
+    await db.refresh(new_db_job)
 
     try:
-        route_meta = await dispatch_job(
-            job_id=job_id, 
-            capability=WorkerCapability.RENDER, 
-            payload=job_payload, 
-            db=db
-        )
-        new_db_job.status = route_meta["status"]
-        new_db_job.worker_id = route_meta.get("worker_id")
-        new_db_job.worker_type = route_meta.get("worker_type", "local")
+        # Select executor based on WORKER_BACKEND setting
+        if _settings.WORKER_BACKEND == "github_actions":
+            from backend.jobs.github_executor import GitHubActionsJobExecutor
+            executor = GitHubActionsJobExecutor()
+        else:
+            from backend.jobs.local_executor import LocalJobExecutor
+            executor = LocalJobExecutor()
+        
+        await executor.submit(job_id, job_payload)
+        await db.refresh(new_db_job)
     except Exception as e:
         log.exception(f"Failed to dispatch job {job_id}")
         new_db_job.status = "failed"
         new_db_job.error_message = f"Dispatch failed: {str(e)}"
-    
-    await db.commit()
+        await db.commit()
 
     return _fmt(video)
 
@@ -308,6 +311,22 @@ async def update_video(
     if body.hashtags is not None:
         v.hashtags = body.hashtags
     await db.commit()
+    await db.refresh(v)
+    return _fmt(v)
+
+
+@router.post("/{video_id}/generate-metadata", response_model=VideoOut)
+async def generate_metadata_endpoint(
+    video_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    v = await db.get(Video, video_id)
+    if not v or (user and v.user_id and v.user_id != user.id):
+        raise HTTPException(404, "Video not found")
+    
+    from backend.services.rendering_service import generate_video_metadata
+    await generate_video_metadata(video_id)
     await db.refresh(v)
     return _fmt(v)
 
@@ -375,7 +394,9 @@ async def preview_video(
         try:
             from backend.storage import storage
             import tempfile
-            tmp_path = tempfile.mktemp(suffix=".mp4")
+            tmp_fd, tmp_path = tempfile.mkstemp(suffix=".mp4")
+            import os as _os
+            _os.close(tmp_fd)
             await storage.get_file(v.path, tmp_path)
             if os.path.exists(tmp_path) and os.path.getsize(tmp_path) > 0:
                 return FileResponse(
@@ -473,19 +494,31 @@ async def upload_video(
     if v.status not in (VideoStatus.approved, VideoStatus.ready):
         raise HTTPException(400, f"Video must be in 'ready' or 'approved' status before uploading (current: {v.status})")
 
-    upload_file_path = v.path
+    upload_file_path = None
     temp_download_dir = None
+    from backend.core.config import settings
+    from pathlib import Path
 
-    # If file doesn't exist locally, check if it's in cloud storage (R2/S3)
-    if not upload_file_path or not os.path.exists(upload_file_path):
+    # 1. Direct path check
+    if v.path and os.path.exists(v.path) and os.path.getsize(v.path) > 0:
+        upload_file_path = v.path
+    # 2. Storage root relative path check
+    elif v.path and (Path(settings.STORAGE_ROOT) / v.path.lstrip("/")).exists():
+        upload_file_path = str(Path(settings.STORAGE_ROOT) / v.path.lstrip("/"))
+    # 3. Fallback to storage engine get_file download
+    else:
         from backend.storage import get_storage
         storage = get_storage()
         try:
             import tempfile
             temp_download_dir = tempfile.mkdtemp()
             local_target = os.path.join(temp_download_dir, f"{video_id}.mp4")
-            await storage.download(v.path, local_target)
-            upload_file_path = local_target
+            remote_key = v.path or f"users/{user.id}/videos/{video_id}.mp4"
+            await storage.get_file(remote_key, local_target)
+            if os.path.exists(local_target) and os.path.getsize(local_target) > 0:
+                upload_file_path = local_target
+            else:
+                raise FileNotFoundError(f"Downloaded file at {local_target} is missing or empty")
         except Exception as dl_err:
             log.error(f"Failed to fetch video from remote storage: {dl_err}")
             raise HTTPException(400, f"Video file not found locally or in cloud storage: {dl_err}")

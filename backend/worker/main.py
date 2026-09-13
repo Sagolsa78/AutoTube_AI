@@ -35,14 +35,15 @@ async def execute_job(job_id: str):
             log.error(f"[Worker] Job {job_id} not found.")
             return False
 
-        if job_record.status not in [JobStatus.queued.value, JobStatus.waiting_for_local_worker.value, JobStatus.dispatched.value]:
+        if job_record.status not in [JobStatus.queued.value, JobStatus.waiting_for_local_worker.value, JobStatus.dispatched.value, JobStatus.running.value]:
             log.warning(f"[Worker] Job {job_id} is in status {job_record.status}, not ready to run.")
             return False
 
-        # Mark as running
-        job_record.status = JobStatus.running.value
-        job_record.started_at = datetime.now(timezone.utc)
-        await db.commit()
+        # Mark as running only if not already claimed as running
+        if job_record.status != JobStatus.running.value:
+            job_record.status = JobStatus.running.value
+            job_record.started_at = datetime.now(timezone.utc)
+            await db.commit()
         
         try:
             if job_record.capability == "RENDER":
@@ -94,19 +95,49 @@ async def poll_jobs():
         try:
             job_id_to_run = None
             async with AsyncSessionLocal() as db:
-                # Find oldest queued job
-                q = select(Job).where(
-                    Job.status.in_([JobStatus.queued.value, JobStatus.waiting_for_local_worker.value, JobStatus.dispatched.value]),
-                    Job.capability.in_(["RENDER", "IMAGE", "VIDEO"])
-                ).order_by(Job.created_at.asc()).limit(1)
-                
-                res = await db.execute(q)
-                job = res.scalars().first()
-                if job:
-                    job_id_to_run = job.id
+                # Atomic job claim: find and claim in a single transaction
+                try:
+                    from sqlalchemy import text
+                    # PostgreSQL: use SELECT FOR UPDATE SKIP LOCKED for true atomicity
+                    # This prevents multiple workers from claiming the same job
+                    result = await db.execute(
+                        text("""
+                            SELECT id FROM jobs
+                            WHERE status IN ('queued', 'waiting_for_local_worker', 'dispatched')
+                            AND capability IN ('RENDER', 'IMAGE', 'VIDEO')
+                            ORDER BY created_at ASC
+                            LIMIT 1
+                            FOR UPDATE SKIP LOCKED
+                        """)
+                    )
+                    row = result.first()
+                    if row:
+                        job_id_to_run = row[0]
+                        # Atomically claim it
+                        await db.execute(
+                            text("UPDATE jobs SET status = 'running', started_at = NOW() WHERE id = :job_id"),
+                            {"job_id": job_id_to_run}
+                        )
+                        await db.commit()
+                except Exception as pg_err:
+                    # SQLite doesn't support FOR UPDATE SKIP LOCKED — fall back to simple query
+                    log.debug(f"[Worker] FOR UPDATE SKIP LOCKED not supported (SQLite?), falling back: {pg_err}")
+                    await db.rollback()
+                    q = select(Job).where(
+                        Job.status.in_([JobStatus.queued.value, JobStatus.waiting_for_local_worker.value, JobStatus.dispatched.value]),
+                        Job.capability.in_(["RENDER", "IMAGE", "VIDEO"])
+                    ).order_by(Job.created_at.asc()).limit(1)
+                    
+                    res = await db.execute(q)
+                    job = res.scalars().first()
+                    if job:
+                        job_id_to_run = job.id
+                        job.status = JobStatus.running.value
+                        job.started_at = datetime.now(timezone.utc)
+                        await db.commit()
 
             if job_id_to_run:
-                log.info(f"[Worker] Found pending job: {job_id_to_run}")
+                log.info(f"[Worker] Claimed and running job: {job_id_to_run}")
                 await execute_job(job_id_to_run)
             else:
                 await asyncio.sleep(5)

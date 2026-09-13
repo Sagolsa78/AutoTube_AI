@@ -39,7 +39,7 @@ class GitHubActionsJobExecutor(JobExecutor):
             "Authorization": f"token {self.token}"
         }
         data = {
-            "ref": "main",
+            "ref": settings.WORKER_GIT_REF,
             "inputs": {
                 "job_id": job_id
             }

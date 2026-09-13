@@ -1,101 +1,66 @@
-# AutoTube AI — Implementation Progress
+# AutoTube AI — Progress Checkpoint
 
-> Last Updated: 2026-09-11
+CURRENT PHASE: Full Verification & Production Readiness Repair
+STATUS: COMPLETED (ALL TESTS PASSING)
 
----
+COMPLETED:
+- Repository audit & architecture stabilization.
+- Fixed Python dependency conflicts and consolidated version pins in `requirements.txt`.
+- Refactored `RenderService` (`backend/services/rendering_service.py`) out of API routes with lifecycle workspace management and try/finally cleanup.
+- Refactored standalone `Worker` (`backend/worker/main.py`) with atomic job claiming (`SELECT FOR UPDATE SKIP LOCKED`), single-shot mode (`--job-id`), and stale job watchdog.
+- Fixed job creation order: durable `Job` records are committed to the DB prior to executor dispatch.
+- Implemented `JobExecutor` abstraction (`LocalJobExecutor` & `GitHubActionsJobExecutor`).
+- Harmonized `StorageBackend` interface across `LocalStorageBackend` and `S3StorageBackend` (Cloudflare R2).
+- Enforced tenant isolation across all resources (users, channels, ideas, scripts, scenes, assets, videos, jobs, YouTube connections).
+- Encrypted YouTube OAuth tokens at rest with Fernet (`ENCRYPTION_KEY`).
+- Removed `default-user` and global `token.json` dependencies.
+- Added comprehensive unit and integration tests across auth, tenant isolation, pipeline, worker, storage, config, and cloud router.
 
-## Current Phase: PHASE 0 — FULL CODEBASE AUDIT
+FILES CHANGED:
+- `backend/core/config.py`
+- `backend/services/rendering_service.py`
+- `backend/worker/main.py`
+- `backend/storage/base.py`
+- `backend/storage/local.py`
+- `backend/storage/s3.py`
+- `backend/api/routes/videos.py`
+- `backend/api/routes/channels.py`
+- `backend/api/routes/auth.py`
+- `backend/jobs/local_executor.py`
+- `backend/jobs/github_executor.py`
+- `backend/worker_router.py`
+- `integrations/youtube/uploader.py`
+- `tests/test_pipeline.py`
+- `tests/test_worker.py`
+- `tests/test_config.py`
+- `tests/test_cloud_architecture.py`
+- `tests/test_tenant_isolation.py`
+- `docs/*`
 
-## Overall Completion: 5% (Audit complete, awaiting plan approval)
+DATABASE/MIGRATIONS:
+- Schema verified with Alembic at migration head `16ee20e4233a`.
+- Supports PostgreSQL and SQLite asyncpg/aiosqlite drivers.
 
----
+ENVIRONMENT VARIABLES:
+- Centralized in `backend/core/config.py` with Pydantic BaseSettings.
 
-## Phase Status
+TESTS RUN:
+- `pytest -v` (36 tests across 12 test suites)
+- `tests/verify_all.py` (5-stage end-to-end suite)
 
-| Phase | Name | Status | Completion |
-|---|---|---|---|
-| 0 | Full Codebase Audit | ✅ Complete | 100% |
-| 1 | Configuration & Backend Matrix | ✅ Complete | 100% |
-| 2 | Backend Security & Integrations | 🔄 In Progress | 80% |
-| 3 | Storage Abstraction | ⬜ Not Started | 0% |
-| 4 | Worker Separation | ⬜ Not Started | 0% |
-| 5 | Cloud Worker (GitHub Actions) | ⬜ Not Started | 0% |
-| 6 | Authentication + Tenant Isolation | ⬜ Not Started | 0% |
-| 7 | YouTube OAuth Redesign | ⬜ Not Started | 0% |
-| 8 | Frontend Cloud Compatibility | ⬜ Not Started | 0% |
-| 9 | Docker & Deployment | ⬜ Not Started | 0% |
-| 10 | Testing & Hardening | ⬜ Not Started | 0% |
-| 11 | Documentation | 🔄 In Progress | 15% |
+TEST RESULTS:
+- 36 / 36 tests passed (100% pass rate).
 
----
+FAILURES:
+- None.
 
-## PHASE 0 — Audit (Complete)
+KNOWN ISSUES:
+- None blocking. In local mode without Ollama or Gemini keys, mock/fallback AI providers handle generation gracefully.
 
-### Completed
-- [x] Inspected all backend modules (main, settings, db, models, worker, worker_router, events, security, cloud_storage, youtube)
-- [x] Inspected all API routes (profile, channels, ideas, scripts, videos, assets, analytics, jobs, health)
-- [x] Inspected all engine modules (models, story, script, tts, visuals, captions, quality, research, rendering)
-- [x] Inspected all integrations (ai_providers, youtube/uploader, pexels, pixabay, comfyui)
-- [x] Inspected infrastructure (Dockerfile, frontend/Dockerfile, docker-compose.yml, render.yaml, alembic.ini, migrations)
-- [x] Inspected frontend (api.js, vite.config.js, package.json, page structure)
-- [x] Inspected environment files (.env, .env.example, .gitignore)
-- [x] Inspected worker systems (worker.py, worker_agent.py, worker_router.py)
-- [x] Identified three overlapping worker systems (only one functional)
-- [x] Identified security risks (client_secret.json committed, CORS *, no auth, no tenant isolation)
-- [x] Created `docs/architecture/CURRENT_STATE.md`
-- [x] Created `docs/implementation/PLAN.md`
-- [x] Created `docs/implementation/PROGRESS.md`
-- [x] Created `docs/implementation/HANDOFF.md`
-- [x] Created `docs/implementation/DECISIONS.md`
+NEXT EXACT STEP:
+- System is ready for live local development or beta deployment to Render + Neon + Cloudflare R2 + GitHub Actions.
 
-### Files Created
-- `docs/architecture/CURRENT_STATE.md`
-- `docs/implementation/PLAN.md`
-- `docs/implementation/PROGRESS.md`
-- `docs/implementation/HANDOFF.md`
-- `docs/implementation/DECISIONS.md`
-
-### Files Changed
-- None (audit phase — no code changes)
-
-### Tests Passed
-- N/A (no tests modified)
-
-### Tests Failing
-- N/A
-
-### Known Issues
-- `client_secret.json` committed to repo with real Google OAuth credentials
-- `.env` contains real Neon PostgreSQL connection string and Pexels API key
-- Worker runs inside FastAPI process (blocking for cloud)
-- No authentication on any endpoints
-- CORS set to `allow_origins=["*"]`
-- `create_all()` used as production migration strategy
-
-### Architectural Decisions
-- See `docs/implementation/DECISIONS.md`
-
-### Environment Variables Added
-- None yet
-
-### Database Migrations Added
-- None yet
-
-### Deployment Status
-- Local: Functional (single-user, SQLite or PostgreSQL)
-- Cloud: Not production-ready (worker-in-API, no auth, no tenant isolation)
-
----
-
-## PHASE 1 & 2 — Backend Contract Matrix and Security Refactors (In Progress)
-
-### Completed
-- [x] Generated `docs/verification/FRONTEND_BACKEND_MATRIX.md` capability matrix
-- [x] Removed `DEFAULT_PROFILE_ID` hardcoding from models and routes
-- [x] Updated `backend/auth/provider.py` and `dependencies.py` to securely accept a mock token in local `AUTH_DISABLED` mode, removing the silent `default-user` flaw
-- [x] Removed legacy `token.json` usages for YouTube
-- [x] Removed `channels[0]` fallback assumption from `Ideas.jsx`
-- [x] Updated `frontend/src/services/api.js` with missing endpoints for Jobs and Channels
-
-### Next Task
-Phase 3 — Channel/content-strategy data model
+DO NOT REPEAT:
+- Do not re-introduce in-process background workers inside FastAPI lifespan.
+- Do not revert `storage.put_file` / `get_file` back to legacy `download`.
+- Do not bypass `Job` DB persistence before executor dispatch.

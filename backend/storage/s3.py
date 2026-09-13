@@ -41,6 +41,9 @@ class S3StorageBackend(StorageBackend):
             log.info(f"Downloaded s3://{self.bucket}/{remote_key} to {local_path}")
         return str(local_path)
 
+    # Alias for get_file
+    download = get_file
+
     async def delete_file(self, remote_key: str) -> bool:
         try:
             async with self.session.client('s3', endpoint_url=self.endpoint_url) as s3:

@@ -18,19 +18,8 @@ for d in (AUDIO_DIR, VISUAL_DIR, RENDER_DIR, PROJECT_DIR):
     d.mkdir(parents=True, exist_ok=True)
 
 # ── Database ──────────────────────────────────────────────────────────────────
-# Connection string conversions and cleanups are now handled externally or in config
+# URL normalization is handled in config.py's field_validator — do not re-apply here.
 DATABASE_URL = settings.DATABASE_URL
-if DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+asyncpg://", 1)
-elif DATABASE_URL.startswith("postgresql://") and not DATABASE_URL.startswith("postgresql+asyncpg://"):
-    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
-
-if "sslmode=" in DATABASE_URL:
-    DATABASE_URL = DATABASE_URL.replace("sslmode=", "ssl=")
-
-import re
-DATABASE_URL = re.sub(r"&?channel_binding=[^&]+", "", DATABASE_URL)
-DATABASE_URL = re.sub(r"\?$", "", DATABASE_URL)
 
 # ── AI Providers ──────────────────────────────────────────────────────────────
 GEMINI_API_KEY       = settings.GEMINI_API_KEY or ""

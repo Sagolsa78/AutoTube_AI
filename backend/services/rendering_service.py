@@ -37,10 +37,18 @@ async def run_job(video_id: str, job: RenderJob, job_id: str = None):
     """
     Background render task.
     Writes stage updates to the database so the frontend can poll progress.
+    Always cleans up the temporary workspace, whether the job succeeds or fails.
     """
     if isinstance(job.story_spec, dict):
         from engine.story.schemas import StorySpec
         job.story_spec = StorySpec.model_validate(job.story_spec)
+
+    workspace = Path(f"/tmp/autotube/{job_id or video_id}")
+    workspace.mkdir(parents=True, exist_ok=True)
+    audio_dir = workspace / "audio"
+    visual_dir = workspace / "visuals"
+    audio_dir.mkdir(exist_ok=True)
+    visual_dir.mkdir(exist_ok=True)
 
     async with AsyncSessionLocal() as db:
         try:
@@ -57,14 +65,12 @@ async def run_job(video_id: str, job: RenderJob, job_id: str = None):
                 raise RuntimeError("FFmpeg is not installed or not in PATH.")
             if not shutil.which("ffprobe"):
                 raise RuntimeError("ffprobe is not installed or not in PATH.")
-                
-            # ── Temp Workspace ──────────────────────────────────────────────
-            workspace = Path(f"/tmp/autotube/{job_id or video_id}")
-            workspace.mkdir(parents=True, exist_ok=True)
-            audio_dir = workspace / "audio"
-            visual_dir = workspace / "visuals"
-            audio_dir.mkdir(exist_ok=True)
-            visual_dir.mkdir(exist_ok=True)
+
+            q = select(Script).where(Script.id == video.script_id).options(selectinload(Script.scenes))
+            res = await db.execute(q)
+            script = res.scalars().first()
+            idea = await db.get(Idea, script.idea_id) if script else None
+            channel = await db.get(Channel, idea.channel_id) if idea else None
 
             # ── Stage 1: TTS ──────────────────────────────────────────────
             await _check_cancel_pause(db, video)
@@ -72,7 +78,7 @@ async def run_job(video_id: str, job: RenderJob, job_id: str = None):
             video.render_progress = 10
             await db.commit()
             
-            voice_id = video.voice_override or (profile.default_voice_id if profile else "en-US-ChristopherNeural")
+            voice_id = video.voice_override or (channel.default_voice_id if channel else "en-US-ChristopherNeural")
             
             tts = await generate_voiceover(
                 job.story_spec.get_full_text(), niche=job.niche,
@@ -92,11 +98,6 @@ async def run_job(video_id: str, job: RenderJob, job_id: str = None):
             video.render_stage = "visuals"
             video.render_progress = 30
             await db.commit()
-            
-            q = select(Script).where(Script.id == video.script_id).options(selectinload(Script.scenes))
-            res = await db.execute(q)
-            script = res.scalars().first()
-            idea = await db.get(Idea, script.idea_id) if script else None
             
             valid_clip_paths = []
             used_source_ids = set()
@@ -224,32 +225,85 @@ Respond ONLY with a JSON object in this exact format (no markdown):
             if video.title_candidates:
                 video.selected_title = video.title_candidates[0]
             
+            # Commit metadata fields immediately before _check_cancel_pause refreshes DB
+            await db.commit()
+            
             # Video is ready for user preview and approval.
-            # Explicit user approval is required before uploading to YouTube.
-            log.info(f"Render completed. Video {video_id} is READY for human review and approval.")
+            log.info(f"Render completed. Video {video_id} metadata generated successfully.")
             
             # ── Stage 5: Done ─────────────────────────────────────────────
             await _check_cancel_pause(db, video)
             video.path = saved_path
+            
+            channel = await db.get(Channel, idea.channel_id) if idea else None
+            auto_approve = channel.auto_approve if channel else False
+            
+            from backend.models.models import Publication
+            
+            if auto_approve:
+                if metadata_success:
+                    log.info(f"Auto-publishing video {video_id} because channel.auto_approve is True")
+                    from integrations.youtube.uploader import upload_video as yt_upload
+                    try:
+                        yt_id = await yt_upload(
+                            user_id=video.user_id,
+                            video_path=saved_path,
+                            title=video.selected_title,
+                            description=video.description,
+                            tags=video.hashtags,
+                            privacy_status="private",
+                            made_for_kids=False,
+                        )
+                        pub = Publication(
+                            user_id=video.user_id,
+                            video_id=video_id,
+                            youtube_id=yt_id,
+                            url=f"https://youtu.be/{yt_id}",
+                            title=video.selected_title,
+                            description=video.description,
+                            status="live",
+                            privacy_status="public",
+                        )
+                        db.add(pub)
+                        video.status = VideoStatus.uploaded
+                    except Exception as upload_exc:
+                        log.error(f"Auto-publish failed for {video_id}: {upload_exc}")
+                        video.status = VideoStatus.publish_failed
+                        video.notes = (video.notes or "") + f"\nAuto-publish failed: {upload_exc}"
+                        pub = Publication(
+                            user_id=video.user_id,
+                            video_id=video_id,
+                            youtube_id="",
+                            url="",
+                            title=video.selected_title,
+                            description=video.description,
+                            status="draft",
+                            privacy_status="private",
+                        )
+                        db.add(pub)
+                else:
+                    log.info(f"Skipping auto-publish for {video_id} because metadata failed.")
+                    video.status = VideoStatus.ready
+                    pub = Publication(
+                        user_id=video.user_id,
+                        video_id=video_id,
+                        youtube_id="",
+                        url="",
+                        title=video.selected_title,
+                        description=video.description,
+                        status="draft",
+                        privacy_status="private",
+                    )
+                    db.add(pub)
+            else:
+                video.status = VideoStatus.ready
+
             video.render_stage = "done"
             video.render_progress = 100
             script.status = ScriptStatus.used_in_render
             await db.commit()
             log.info(f"Background render completed successfully for video {video_id}")
-            
-            # Cleanup temp directory — but only if video.path is NOT inside this workspace.
-            # If R2 upload failed, video.path is the local fallback path inside workspace;
-            # deleting it would destroy the only copy of the video.
-            import shutil
-            try:
-                path_is_remote = not str(video.path or "").startswith(str(workspace))
-                if path_is_remote:
-                    shutil.rmtree(workspace)
-                else:
-                    log.warning(f"Skipping workspace cleanup — video.path is local fallback: {video.path}")
-            except Exception as e:
-                log.error(f"Failed to cleanup workspace {workspace}: {e}")
-
+            # Workspace cleanup is now handled in the finally block below
 
         except Exception as exc:
             log.exception(f"Background render failed for video {video_id}: {exc}")
@@ -260,3 +314,73 @@ Respond ONLY with a JSON object in this exact format (no markdown):
                 video.render_progress = 0
                 video.notes = str(exc)
                 await db.commit()
+        finally:
+            # Always clean up temp workspace — success, failure, or cancellation
+            import shutil as _shutil
+            video_final_path = None
+            try:
+                # Check if video.path is inside the workspace (local fallback)
+                v_check = await db.get(Video, video_id)
+                if v_check:
+                    video_final_path = v_check.path
+            except Exception:
+                pass
+            
+            try:
+                path_is_remote = not str(video_final_path or "").startswith(str(workspace))
+                if path_is_remote and workspace.exists():
+                    _shutil.rmtree(workspace, ignore_errors=True)
+                    log.info(f"Cleaned up workspace {workspace}")
+                elif not path_is_remote:
+                    log.warning(
+                        f"Skipping workspace cleanup — video.path is local fallback inside workspace: {video_final_path}. "
+                        f"Workspace at {workspace} will persist until manually cleaned."
+                    )
+            except Exception as cleanup_err:
+                log.error(f"Failed to cleanup workspace {workspace}: {cleanup_err}")
+
+async def generate_video_metadata(video_id: str) -> bool:
+    """Generates SEO metadata (titles, description, hashtags) for a video on demand."""
+    async with AsyncSessionLocal() as db:
+        video = await db.get(Video, video_id)
+        if not video:
+            return False
+        script = await db.get(Script, video.script_id) if video.script_id else None
+        idea = await db.get(Idea, script.idea_id) if script else None
+        profile = await db.get(User, video.user_id) if video.user_id else None
+        channel = await db.get(Channel, idea.channel_id) if idea else None
+        
+        title_style = getattr(channel, 'title_style_preference', None) or "curiosity"
+        default_tags = getattr(channel, 'hashtag_set', None) or getattr(profile, 'hashtag_set', None) or ["shorts", "viral"]
+        script_text = script.full_text if script and script.full_text else (idea.topic if idea else "YouTube Short")
+        
+        meta_prompt = f"""You are an expert YouTube Shorts SEO manager.
+Based on the following video script, generate metadata for the YouTube upload.
+Title Style: {title_style}
+Topics: {idea.topic if idea else ''}
+Script: {script_text}
+
+Respond ONLY with a JSON object in this exact format (no markdown):
+{{
+  "title_candidates": ["Title 1", "Title 2", "Title 3", "Title 4", "Title 5"],
+  "description": "A 2-line keyword-rich description of the video.",
+  "hashtags": ["tag1", "tag2", "tag3"]
+}}"""
+        try:
+            meta_res, _ = generate_with_fallback(meta_prompt)
+            cleaned_meta = re.sub(r"```(?:json)?", "", meta_res).strip().rstrip("```").strip()
+            meta_json = json.loads(cleaned_meta)
+            video.title_candidates = meta_json.get("title_candidates", [])
+            video.description = meta_json.get("description", "")
+            video.hashtags = list(set(default_tags + meta_json.get("hashtags", [])))
+        except Exception as meta_exc:
+            log.error("Metadata generation failed for %s: %s", video_id, meta_exc)
+            video.title_candidates = [idea.title] if idea else ["Untitled Short"]
+            video.description = "Auto-generated YouTube Short."
+            video.hashtags = default_tags
+
+        if video.title_candidates:
+            video.selected_title = video.title_candidates[0]
+            
+        await db.commit()
+        return True

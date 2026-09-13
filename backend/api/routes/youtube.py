@@ -5,7 +5,7 @@ Stores credentials securely in the database per-user.
 from __future__ import annotations
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy import select
@@ -42,63 +42,79 @@ def get_oauth_flow(redirect_uri: str) -> Flow:
 
 
 @router.get("/auth")
-async def start_youtube_auth(
+async def youtube_auth_url(
     request: Request,
     user: User = Depends(get_current_user)
 ):
-    """Start the OAuth flow. Returns a URL to redirect the user to Google."""
-    # The frontend should pass its origin or we determine it
-    redirect_uri = f"{request.base_url.scheme}://{request.base_url.netloc}/api/youtube/callback"
-    flow = get_oauth_flow(redirect_uri)
-    
-    # We use a signed JWT as state to prevent CSRF
-    import jwt
-    from backend.auth.provider import AuthProvider
-    auth_provider = AuthProvider()
-    secret = auth_provider.jwt_secret or "dev-secret"
-    
-    secure_state = jwt.encode({"sub": user.id, "exp": datetime.utcnow().timestamp() + 600}, secret, algorithm="HS256")
-    
-    auth_url, state = flow.authorization_url(
-        access_type="offline",
-        include_granted_scopes="true",
-        prompt="consent",
-        state=secure_state
-    )
-    
-    return {"auth_url": auth_url}
+    """Generate YouTube OAuth authorization URL."""
+    try:
+        # Use incoming request host for callback URL
+        host = request.headers.get("host", "localhost:8000")
+        scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
+        redirect_uri = f"{scheme}://{host}/api/youtube/callback"
+        
+        flow = get_oauth_flow(redirect_uri)
+        
+        # State encoding including user_id, timestamp, and PKCE code_verifier
+        import jwt, time
+        payload = {
+            "sub": str(user.id),
+            "cv": flow.code_verifier,
+            "exp": int(time.time()) + 3600
+        }
+        state = jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
+        
+        authorization_url, _ = flow.authorization_url(
+            access_type="offline",
+            include_granted_scopes="true",
+            prompt="consent",
+            state=state
+        )
+        return {"authorization_url": authorization_url}
+    except Exception as e:
+        log.error(f"Failed to generate YouTube auth URL: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/callback")
 async def youtube_auth_callback(
     request: Request,
     state: str,
-    code: str,
+    code: str | None = None,
+    error: str | None = None,
     db: AsyncSession = Depends(get_db)
 ):
-    """Handle the OAuth callback from Google and store the credentials."""
-    redirect_uri = f"{request.base_url.scheme}://{request.base_url.netloc}/api/youtube/callback"
-    
-    import jwt
-    from backend.auth.provider import AuthProvider
-    auth_provider = AuthProvider()
-    secret = auth_provider.jwt_secret or "dev-secret"
-    
-    try:
-        payload = jwt.decode(state, secret, algorithms=["HS256"])
-        user_id = payload.get("sub")
-        if not user_id:
-            raise ValueError("Missing sub in state")
-    except Exception as state_err:
-        log.warning(f"Invalid state parameter: {state_err}")
-        raise HTTPException(status_code=400, detail="Invalid OAuth state parameter")
+    """Handle OAuth callback from Google."""
+    if error:
+        log.error(f"YouTube OAuth error: {error}")
+        raise HTTPException(status_code=400, detail=f"OAuth error: {error}")
+        
+    if not code:
+        raise HTTPException(status_code=400, detail="Missing authorization code")
         
     try:
+        import jwt
+        payload = jwt.decode(state, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
+        user_id = payload.get("sub")
+        code_verifier = payload.get("cv")
+        if not user_id:
+            raise ValueError("Invalid payload in state")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid OAuth state parameter: {exc}")
+        
+    try:
+        host = request.headers.get("host", "localhost:8000")
+        scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
+        redirect_uri = f"{scheme}://{host}/api/youtube/callback"
+        
         flow = get_oauth_flow(redirect_uri)
+        if code_verifier:
+            flow.code_verifier = code_verifier
         flow.fetch_token(code=code)
+        
         credentials = flow.credentials
         
-        # Check if a connection already exists
+        # Save to database
         q = select(YouTubeConnection).where(YouTubeConnection.user_id == user_id)
         result = await db.execute(q)
         conn = result.scalars().first()
@@ -122,7 +138,8 @@ async def youtube_auth_callback(
             conn.channel_title = channel["snippet"]["title"]
 
         await db.commit()
-        return RedirectResponse(url="/app/channels?youtube=connected")
+        frontend_url = settings.FRONTEND_URL or "http://localhost:5173"
+        return RedirectResponse(url=f"{frontend_url.rstrip('/')}/app/channels?youtube=connected")
         
     except Exception as e:
         log.error(f"YouTube OAuth callback failed: {e}")
@@ -142,8 +159,12 @@ async def youtube_status(
     if not conn:
         return {"connected": False}
         
-    # Check if expired and needs refresh (handled lazily in uploader usually, but good to know)
-    is_expired = conn.expires_at and conn.expires_at < datetime.utcnow()
+    # Check if expired and needs refresh safely comparing timezone-aware/naive datetimes
+    is_expired = False
+    if conn.expires_at:
+        now = datetime.now(timezone.utc)
+        expires = conn.expires_at if conn.expires_at.tzinfo is not None else conn.expires_at.replace(tzinfo=timezone.utc)
+        is_expired = expires < now
     
     return {
         "connected": True,

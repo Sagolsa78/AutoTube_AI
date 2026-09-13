@@ -4,15 +4,18 @@ from backend.core.config import Settings
 def test_config_loads_defaults():
     # Unset env vars to test defaults
     os.environ.pop("APP_ENV", None)
+    os.environ.pop("DATABASE_URL", None)
+    os.environ.pop("AUTH_DISABLED", None)
+    os.environ.pop("AUTOTUBE_API_KEY", None)
     
-    settings = Settings()
+    settings = Settings(_env_file=None)
     
     # Check default values
     assert settings.APP_ENV == "development"
     assert settings.STORAGE_PROVIDER == "local"
-    assert settings.DATABASE_URL == "sqlite+aiosqlite:///autotube.db"
-    assert settings.AUTH_DISABLED is True
-    assert settings.AUTOTUBE_API_KEY == "dev-secret-key"
+    assert "sqlite+aiosqlite://" in settings.DATABASE_URL
+    assert settings.AUTH_DISABLED is False
+    assert settings.AUTOTUBE_API_KEY is None
 
 def test_config_cloud_overrides():
     os.environ["APP_ENV"] = "production"

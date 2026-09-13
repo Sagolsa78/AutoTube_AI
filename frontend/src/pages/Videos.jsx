@@ -135,6 +135,26 @@ export default function Videos({ filter }) {
   const [uploading, setUploading] = useState(false);
   const [activeVideoId, setActiveVideoId] = useState(null);
   const [metaEdit, setMetaEdit] = useState(null);
+  const [generatingMeta, setGeneratingMeta] = useState(false);
+
+  const handleGenerateMeta = async (videoId) => {
+    try {
+      setGeneratingMeta(true);
+      const updatedVid = await api.generateVideoMetadata(videoId);
+      setMetaEdit({
+        id: updatedVid.id,
+        selected_title: updatedVid.selected_title || (updatedVid.title_candidates || [])[0] || '',
+        description: updatedVid.description || '',
+        hashtags: (updatedVid.hashtags || []).join(', ')
+      });
+      setVideos(prev => prev.map(v => v.id === videoId ? updatedVid : v));
+      toast.success('YouTube metadata generated successfully!');
+    } catch (e) {
+      toast.error(`Metadata generation failed: ${e.message}`);
+    } finally {
+      setGeneratingMeta(false);
+    }
+  };
 
   const load = async () => {
     try {
@@ -493,9 +513,20 @@ export default function Videos({ filter }) {
                 {/* Editable Metadata when in Ready state */}
                 {activeVideo.status === 'ready' && metaEdit && metaEdit.id === activeVideo.id && (
                   <div className="bg-elevated/70 p-4 rounded-xl border border-border space-y-3">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted block">
-                      Editable YouTube Metadata
-                    </span>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted block">
+                        Editable YouTube Metadata
+                      </span>
+                      <button
+                        type="button"
+                        className="text-xs text-brand-red hover:underline flex items-center gap-1 font-medium disabled:opacity-50"
+                        disabled={generatingMeta}
+                        onClick={() => handleGenerateMeta(activeVideo.id)}
+                      >
+                        <Icon name="sparkles" size={14} />
+                        {generatingMeta ? 'Generating AI Metadata...' : 'Auto-Fill with AI'}
+                      </button>
+                    </div>
                     <div>
                       <label className="block text-xs font-medium text-text-secondary mb-1">Title</label>
                       <input 

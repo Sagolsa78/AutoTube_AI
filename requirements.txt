@@ -40,4 +40,3 @@ redis>=5.0.0
 pydantic-settings>=2.0.0
 PyJWT>=2.8.0
 cryptography>=42.0.0
-aioboto3==12.3.0

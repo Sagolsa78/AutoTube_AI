@@ -4,6 +4,7 @@ Now produces scene-based scripts with per-scene narration and visual description
 """
 from __future__ import annotations
 import asyncio
+from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -13,8 +14,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.db.database import get_db, AsyncSessionLocal
 from backend.models.models import Script, Idea, IdeaStatus, Channel, ScriptStatus, Scene, User
 from backend.auth.dependencies import get_current_user
+from backend.core.config import settings
 
 router = APIRouter()
+
+
 
 
 # ── Pydantic models ───────────────────────────────────────────────────────────
@@ -62,7 +66,8 @@ async def list_scripts(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    q = select(Script).join(Idea).join(Channel).where(Channel.user_id == user.id).options(
+    user_id_val = user.id
+    q = select(Script).join(Idea).join(Channel).where(Channel.user_id == user_id_val).options(
         selectinload(Script.scenes),
         selectinload(Script.videos)
     )
@@ -88,12 +93,13 @@ async def generate_script_for_idea(
     Generate a script for an approved idea.
     Runs LLM + quality check synchronously (fine for manual test phase).
     """
+    user_id_val = user.id
     idea = await db.get(Idea, idea_id)
     if not idea:
         raise HTTPException(404, "Idea not found")
         
     channel = await db.get(Channel, idea.channel_id)
-    if not channel or channel.user_id != user.id:
+    if not channel or channel.user_id != user_id_val:
         raise HTTPException(404, "Idea not found")
 
     if idea.status not in (IdeaStatus.promoted, IdeaStatus.pending):
@@ -102,12 +108,11 @@ async def generate_script_for_idea(
     # Extract all necessary values before releasing DB session
     idea_topic = idea.topic
     idea_id_val = idea.id
-    user_id_val = user.id
     niche = channel.niche
     final_language = language or channel.language
     final_locale = locale or "US"
-    preferred_prov = provider or user.preferred_ai_provider or settings.DEFAULT_AI_PROVIDER
-    preferred_mod = model or user.preferred_ai_model or settings.DEFAULT_AI_MODEL
+    preferred_prov = provider or getattr(user, "preferred_ai_provider", None) or settings.DEFAULT_AI_PROVIDER
+    preferred_mod = model or getattr(user, "preferred_ai_model", None) or settings.DEFAULT_AI_MODEL
 
     # Release DB transaction immediately so Neon/PgBouncer pooler doesn't close idle connection
     try:
@@ -189,7 +194,8 @@ async def get_script(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    q = select(Script).join(Idea).join(Channel).where(Channel.user_id == user.id, Script.id == script_id).options(selectinload(Script.scenes), selectinload(Script.videos))
+    user_id_val = user.id
+    q = select(Script).join(Idea).join(Channel).where(Channel.user_id == user_id_val, Script.id == script_id).options(selectinload(Script.scenes), selectinload(Script.videos))
     res = await db.execute(q)
     s = res.scalars().first()
     if not s:
@@ -205,7 +211,8 @@ async def update_script(
     db: AsyncSession = Depends(get_db)
 ):
     """Inline editing of script text and individual scenes."""
-    q = select(Script).join(Idea).join(Channel).where(Channel.user_id == user.id, Script.id == script_id).options(selectinload(Script.scenes), selectinload(Script.videos))
+    user_id_val = user.id
+    q = select(Script).join(Idea).join(Channel).where(Channel.user_id == user_id_val, Script.id == script_id).options(selectinload(Script.scenes), selectinload(Script.videos))
     res = await db.execute(q)
     s = res.scalars().first()
     if not s:
@@ -283,7 +290,7 @@ async def regenerate_script(
     old_script.status = ScriptStatus.discarded
     await db.flush()
 
-    return await generate_script_for_idea(old_script.idea_id, None, None, user, db)
+    return await generate_script_for_idea(old_script.idea_id, user=user, db=db)
 
 
 @router.post("/{script_id}/discard", response_model=ScriptOut)
@@ -292,7 +299,8 @@ async def discard_script(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    q = select(Script).join(Idea).join(Channel).where(Channel.user_id == user.id, Script.id == script_id).options(selectinload(Script.scenes), selectinload(Script.videos))
+    user_id_val = user.id
+    q = select(Script).join(Idea).join(Channel).where(Channel.user_id == user_id_val, Script.id == script_id).options(selectinload(Script.scenes), selectinload(Script.videos))
     res = await db.execute(q)
     s = res.scalars().first()
     if not s:
@@ -303,6 +311,7 @@ async def discard_script(
     s.status = ScriptStatus.discarded
     await db.flush()
     return _fmt(s)
+
 
 
 def _fmt(s: Script) -> dict:
