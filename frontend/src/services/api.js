@@ -31,8 +31,8 @@ async function request(endpoint, options = {}) {
     headers['Content-Type'] = 'application/json';
   }
 
-  // Setup timeout (default 15s)
-  const timeoutMs = options.timeout || 15000;
+  // Setup timeout (default 60s)
+  const timeoutMs = options.timeout || 60000;
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -86,20 +86,22 @@ export const api = {
 
   // ── Ideas ────────────────────────────────────────
   getIdeas:       (channelId) => request(`/ideas/${channelId ? '?channel_id=' + channelId : ''}`),
-  generateIdeas:  (channelId, count, niche) => request('/ideas/generate', { method: 'POST', body: JSON.stringify({ channel_id: channelId, count, niche }) }),
+  generateIdeas:  (channelId, count, niche) => request('/ideas/generate', { method: 'POST', body: JSON.stringify({ channel_id: channelId, count, niche }), timeout: 120000 }),
   discardIdea:    (id) => request(`/ideas/${id}/discard`, { method: 'POST' }),
 
   // ── Scripts ──────────────────────────────────────
-  getScripts:     (channelId, ideaId) => {
+  getScripts:     (param1, param2) => {
+      let channelId = typeof param1 === 'string' ? param1 : (param1?.channelId || param1?.channel_id);
+      let ideaId = typeof param1 === 'object' ? (param1?.idea_id || param1?.ideaId) : param2;
       const params = new URLSearchParams();
       if (channelId) params.append('channel_id', channelId);
       if (ideaId) params.append('idea_id', ideaId);
       const qs = params.toString();
       return request(`/scripts/${qs ? '?' + qs : ''}`);
   },
-  getScript:      (id) => request(`/scripts/${id}`),
-  generateScript: (ideaId, language = 'en', locale = 'US') => request(`/scripts/generate/${ideaId}?language=${language}&locale=${locale}`, { method: 'POST' }),
-  regenerateScript: (id) => request(`/scripts/${id}/regenerate`, { method: 'POST' }),
+  getScript:        (id) => request(`/scripts/${id}`),
+  generateScript:   (ideaId, language = 'en', locale = 'US') => request(`/scripts/generate/${ideaId}?language=${language}&locale=${locale}`, { method: 'POST', timeout: 120000 }),
+  regenerateScript: (id) => request(`/scripts/${id}/regenerate`, { method: 'POST', timeout: 120000 }),
   updateScript:   (id, data) => request(`/scripts/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   discardScript:  (id) => request(`/scripts/${id}/discard`, { method: 'POST' }),
 
@@ -117,6 +119,7 @@ export const api = {
     body: JSON.stringify({ script_id: scriptId, style, caption_style: captionStyle, custom_cta: customCta, voice_override: voiceOverride }),
   }),
   updateVideo:    (id, data) => request(`/videos/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  generateVideoMetadata: (id) => request(`/videos/${id}/generate-metadata`, { method: 'POST', timeout: 120000 }),
   approveVideo:   (id, data = null) => {
     const opts = { method: 'PATCH' };
     if (data) opts.body = JSON.stringify(data);

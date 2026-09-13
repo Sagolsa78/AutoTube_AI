@@ -36,23 +36,15 @@ async def init_db():
     """
     Initialize database connection.
     Schema migrations are handled strictly by Alembic, NOT by create_all().
+    Run: alembic upgrade head
     """
-    log.info("Checking database connectivity and schema...")
+    log.info("Checking database connectivity...")
     try:
         from sqlalchemy import text
         async with engine.begin() as conn:
-            # Check connection
-            await conn.run_sync(lambda sync_conn: None)
-            
-            # Ensure users table has new auth & AI preference columns
-            try:
-                await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR;"))
-                await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS preferred_ai_provider VARCHAR DEFAULT 'gemini';"))
-                await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS preferred_ai_model VARCHAR DEFAULT 'gemini-3.5-flash-lite';"))
-            except Exception as col_err:
-                log.warning("Notice on schema column checks: %s", col_err)
-            
-            log.info("Database connectivity and schema verified.")
+            # Verify connection is alive
+            await conn.execute(text("SELECT 1"))
+            log.info("Database connectivity verified.")
     except Exception as e:
         log.error(f"Failed to connect to database: {e}")
         raise

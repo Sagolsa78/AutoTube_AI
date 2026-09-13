@@ -83,7 +83,14 @@ class AuthProvider:
                         options={"verify_aud": False}
                     )
                 else:
-                    payload = jwt.decode(token, options={"verify_signature": False})
+                    # No jwt_secret configured: cannot verify signature.
+                    # Reject the token rather than accepting it unverified.
+                    log.warning(
+                        "JWT_SECRET is not configured. Cannot verify token signature. "
+                        "Set JWT_SECRET to enable JWT authentication. "
+                        "Rejecting token."
+                    )
+                    return None
                 
                 user_id = payload.get("sub")
                 if user_id:

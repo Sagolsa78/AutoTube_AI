@@ -12,10 +12,7 @@ def test_get_storage_local(monkeypatch):
     assert isinstance(storage, LocalStorageBackend)
 
 def test_get_storage_backend_r2():
-    os.environ["STORAGE_PROVIDER"] = "r2"
-    with patch("backend.storage.s3.S3StorageBackend.__init__", return_value=None):
-        backend = get_storage_backend()
+    with patch("backend.core.config.settings.STORAGE_BACKEND", "r2"), \
+         patch("backend.storage.s3.S3StorageBackend.__init__", return_value=None):
+        backend = get_storage()
         assert isinstance(backend, S3StorageBackend)
-    
-    # Cleanup
-    os.environ.pop("STORAGE_PROVIDER", None)

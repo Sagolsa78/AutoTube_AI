@@ -13,7 +13,7 @@ class VisualRouter:
     Supported modes: STOCK, GENERATED_IMAGE, GENERATED_VIDEO, MOTION_GRAPHIC, SOURCE_FOOTAGE.
     """
     
-    def __init__(self, visual_dir: str, user_id: str):
+    def __init__(self, visual_dir: str, user_id: str = "default-user"):
         self.visual_dir = visual_dir
         self.user_id = user_id
 

@@ -15,6 +15,7 @@ from backend.db.database import get_db, AsyncSessionLocal
 from backend.models.models import Idea, IdeaStatus, Channel, User
 from integrations.providers.ai_providers import generate_with_fallback
 from backend.auth.dependencies import get_current_user
+from backend.core.config import settings
 from engine.script.trends import fetch_trending_topics
 
 log = logging.getLogger(__name__)
@@ -159,24 +160,23 @@ Example:
         log.error("Idea generation failed: %s", e)
         raise HTTPException(500, f"Idea generation failed: {e}")
 
-    async with AsyncSessionLocal() as save_db:
-        created = []
-        for topic in topics:
-            idea = Idea(
-                user_id=user.id,
-                channel_id=body.channel_id,
-                title=topic,
-                topic=topic,
-                angle="Viral/Trending hook",
-                status=IdeaStatus.pending,
-                notes=trend_notes,
-            )
-            save_db.add(idea)
-            created.append(idea)
-            
-        await save_db.commit()
-        # Format outputs from the newly persisted objects
-        formatted = [_fmt(i) for i in created]
+    created = []
+    for topic in topics:
+        idea = Idea(
+            user_id=user.id,
+            channel_id=body.channel_id,
+            title=topic,
+            topic=topic,
+            angle="Viral/Trending hook",
+            status=IdeaStatus.pending,
+            notes=trend_notes,
+        )
+        db.add(idea)
+        created.append(idea)
+        
+    await db.commit()
+    # Format outputs from the newly persisted objects
+    formatted = [_fmt(i) for i in created]
     return formatted
 
 

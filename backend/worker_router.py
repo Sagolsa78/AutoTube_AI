@@ -192,7 +192,8 @@ async def dispatch_job(
     """
     cap_str = capability.value if isinstance(capability, WorkerCapability) else capability
     strategy = getattr(settings, "COMPUTE_STRATEGY", "local-first")
-    zero_laptop = getattr(settings, "ZERO_LAPTOP_MODE", "false").lower() in ("true", "1")
+    zero_laptop_val = getattr(settings, "ZERO_LAPTOP_MODE", False)
+    zero_laptop = zero_laptop_val is True or str(zero_laptop_val).lower() in ("true", "1")
     local_online = router_registry.is_worker_online("local_pc")
 
     chosen_worker = None
@@ -246,10 +247,9 @@ async def dispatch_job(
     router_registry.enqueue_job_for_worker(chosen_worker, job_data)
     
     if chosen_worker == "cloud_worker":
-        # Dispatch to GitHub Actions
-        import asyncio
+        # Dispatch to GitHub Actions — await directly so errors surface
         github_executor = GitHubActionsJobExecutor()
-        asyncio.create_task(github_executor.submit(job_id, payload))
+        await github_executor.submit(job_id, payload)
 
     # Publish to Redis event bus
     await event_bus.publish(f"job.{status}.{chosen_worker}", job_data)

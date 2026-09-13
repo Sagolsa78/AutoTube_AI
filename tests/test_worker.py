@@ -1,73 +1,93 @@
 import pytest
 import asyncio
 from unittest.mock import patch, AsyncMock, MagicMock
-from backend.models.models import Video, VideoStatus, Script, Scene, Idea, Channel, User
-from engine.story.schemas import StorySpec, SceneSpec
+from backend.models.models import Video, VideoStatus, Job, JobStatus
+from engine.story.schemas import StorySpec
+
+class MockAsyncSession:
+    def __init__(self, db):
+        self.db = db
+    async def __aenter__(self):
+        return self.db
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        pass
 
 @pytest.mark.asyncio
-async def test_worker_reconstructs_render_job():
-    video = Video(id="vid_test_1", script_id="script_test_1", status=VideoStatus.rendering, caption_style="bold_centered", style="fast_facts")
-    script = Script(id="script_test_1", idea_id="idea_test_1", full_text="Full narration text", body={"topic": "Test Topic"})
-    scene1 = Scene(id="sc1", scene_number=1, narration="Scene 1 narration", visual_description="Scene 1 visual")
-    script.scenes = [scene1]
-    idea = Idea(id="idea_test_1", topic="Test Topic", channel_id="ch_test_1")
-    channel = Channel(id="ch_test_1", niche="science_wow", language="en")
-    profile = UserProfile(id="default-user")
-
-    # Mock DB execute and get
-    class MockResult:
-        def __init__(self, item):
-            self.item = item
-        def scalars(self):
-            class Scalars:
-                def __init__(self, it): self.it = it
-                def first(self): return self.it
-            return Scalars(self.item)
+async def test_worker_execute_job_success():
+    video = Video(id="vid_test_1", script_id="script_test_1", status=VideoStatus.ready, caption_style="bold_centered", style="fast_facts")
+    story_spec_data = {
+        "topic": "Test Topic",
+        "scenes": [{"scene_number": 1, "narration": "Scene 1 narration", "visual_intent": "Scene 1 visual"}]
+    }
+    payload = {
+        "video_id": "vid_test_1",
+        "story_spec": story_spec_data,
+        "niche": "science_wow",
+        "caption_style": "bold_centered",
+        "style": "fast_facts",
+        "language": "en"
+    }
+    job_rec = Job(id="job_1", capability="RENDER", status=JobStatus.queued.value, payload=payload)
 
     mock_db = AsyncMock()
-    # First execute returns video, subsequent can return None to cancel loop
-    execute_calls = 0
-    async def mock_execute(stmt):
-        nonlocal execute_calls
-        execute_calls += 1
-        if execute_calls == 1:
-            return MockResult(video)
-        elif execute_calls == 2:
-            return MockResult(script)
-        return MockResult(None)
-
     async def mock_get(model, id):
-        if model == Idea: return idea
-        if model == Channel: return channel
-        if model == UserProfile: return profile
         if model == Video: return video
+        if model == Job: return job_rec
         return None
 
-    mock_db.execute = mock_execute
     mock_db.get = mock_get
     mock_db.commit = AsyncMock()
-
-    mock_session_ctx = MagicMock()
-    mock_session_ctx.__aenter__.return_value = mock_db
-    mock_session_ctx.__aexit__.return_value = AsyncMock()
+    mock_db.refresh = AsyncMock()
 
     rendered_job = None
-    async def mock_run_render(video_id, job):
+    async def mock_run_render(video_id, job, job_id=None):
         nonlocal rendered_job
         rendered_job = job
-        raise asyncio.CancelledError() # Stop polling loop cleanly
 
-    with patch("backend.worker.AsyncSessionLocal", return_value=mock_session_ctx), \
-         patch("backend.api.routes.videos._run_render", side_effect=mock_run_render):
-        from backend.worker import poll_jobs
-        try:
-            await poll_jobs()
-        except asyncio.CancelledError:
-            pass
+    with patch("backend.worker.main.AsyncSessionLocal", side_effect=lambda: MockAsyncSession(mock_db)), \
+         patch("backend.services.rendering_service.run_job", side_effect=mock_run_render):
+        from backend.worker.main import execute_job
+        success = await execute_job("job_1")
 
+    assert success is True
+    assert job_rec.status == JobStatus.completed.value
     assert rendered_job is not None
     assert rendered_job.video_id == "vid_test_1"
     assert isinstance(rendered_job.story_spec, StorySpec)
     assert rendered_job.niche == "science_wow"
     assert len(rendered_job.story_spec.scenes) == 1
     assert rendered_job.story_spec.scenes[0].narration == "Scene 1 narration"
+
+@pytest.mark.asyncio
+async def test_worker_execute_job_failure():
+    video = Video(id="vid_test_fail", script_id="script_test_1", status=VideoStatus.failed, notes="FFmpeg error")
+    payload = {
+        "video_id": "vid_test_fail",
+        "story_spec": {"topic": "T", "scenes": []},
+        "niche": "science_wow"
+    }
+    job_rec = Job(id="job_fail_1", capability="RENDER", status=JobStatus.queued.value, payload=payload)
+
+    mock_db = AsyncMock()
+    async def mock_get(model, id):
+        if model == Video: return video
+        if model == Job: return job_rec
+        return None
+
+    mock_db.get = mock_get
+    mock_db.commit = AsyncMock()
+    mock_db.refresh = AsyncMock()
+
+    async def mock_run_render(video_id, job, job_id=None):
+        raise RuntimeError("FFmpeg crashed")
+
+    with patch("backend.worker.main.AsyncSessionLocal", side_effect=lambda: MockAsyncSession(mock_db)), \
+         patch("backend.services.rendering_service.run_job", side_effect=mock_run_render):
+        from backend.worker.main import execute_job
+        success = await execute_job("job_fail_1")
+
+    assert success is False
+    assert job_rec.status == JobStatus.failed.value
+    assert "FFmpeg crashed" in (job_rec.error_message or "")
+
+

@@ -39,6 +39,9 @@ class LocalStorageBackend(StorageBackend):
         shutil.copy2(source, local_path)
         return str(local_path)
 
+    # Alias for get_file
+    download = get_file
+
     async def delete_file(self, remote_key: str) -> bool:
         target = self._get_abs_path(remote_key)
         if target.exists():

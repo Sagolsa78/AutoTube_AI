@@ -67,30 +67,81 @@ async def verify_control_plane_auth(
 
 from cryptography.fernet import Fernet
 import base64
+import hashlib
 
-ENCRYPTION_KEY = getattr(settings, "ENCRYPTION_KEY", None)
-if not ENCRYPTION_KEY:
-    # Use a dummy key for dev if missing
-    ENCRYPTION_KEY = "dummy-dev-key-replace-in-prod"
+
+def _derive_dev_key() -> str:
+    """
+    Derive a valid Fernet key from a fixed dev seed.
+    This is ONLY used when ENCRYPTION_KEY is not configured (local dev).
+    NEVER use this in production.
+    """
+    seed = b"autotube-local-dev-encryption-key-do-not-use-in-prod"
+    raw = hashlib.sha256(seed).digest()  # 32 bytes
+    return base64.urlsafe_b64encode(raw).decode('utf-8')
+
+
+def _load_encryption_key() -> Optional[str]:
+    """Load and validate the encryption key from settings."""
+    key = getattr(settings, "ENCRYPTION_KEY", None)
+    if key:
+        # Validate the provided key is proper Fernet format
+        try:
+            Fernet(key.encode('utf-8'))
+            return key
+        except (ValueError, Exception):
+            log.error(
+                "ENCRYPTION_KEY is set but is NOT a valid Fernet key. "
+                "Generate one with: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+            )
+            # In cloud/production mode, fail hard if key is invalid
+            if APP_ENV == "production":
+                raise RuntimeError("Invalid ENCRYPTION_KEY in production mode. Cannot proceed without proper token encryption.")
+            return None
+
+    # No key configured — use derived dev key with warning
+    if APP_ENV == "production":
+        log.error(
+            "ENCRYPTION_KEY is not set in production mode! "
+            "YouTube OAuth tokens will NOT be encrypted. "
+            "Set ENCRYPTION_KEY to a valid Fernet key immediately."
+        )
+        return None
+    else:
+        log.warning(
+            "ENCRYPTION_KEY not configured. Using derived dev key. "
+            "This is ONLY acceptable in local development."
+        )
+        return _derive_dev_key()
+
+
+_ENCRYPTION_KEY = _load_encryption_key()
+
 
 def get_fernet() -> Optional[Fernet]:
-    if not ENCRYPTION_KEY:
+    """Return a configured Fernet instance, or None if encryption is unavailable."""
+    if not _ENCRYPTION_KEY:
         return None
     try:
-        return Fernet(ENCRYPTION_KEY.encode('utf-8'))
-    except ValueError:
-        log.error("Invalid ENCRYPTION_KEY format. Must be 32 url-safe base64-encoded bytes.")
+        return Fernet(_ENCRYPTION_KEY.encode('utf-8'))
+    except Exception as e:
+        log.error(f"Failed to create Fernet instance: {e}")
         return None
 
+
 def encrypt_value(value: str) -> str:
+    """Encrypt a string value. Returns plaintext if encryption is not configured."""
     if not value:
         return value
     f = get_fernet()
     if not f:
+        log.warning("encrypt_value called but Fernet is not available — returning plaintext (insecure!)")
         return value
     return f.encrypt(value.encode('utf-8')).decode('utf-8')
 
+
 def decrypt_value(encrypted_value: str) -> str:
+    """Decrypt a Fernet-encrypted value. Returns the input unchanged if decryption fails or is unavailable."""
     if not encrypted_value:
         return encrypted_value
     f = get_fernet()
@@ -99,5 +150,5 @@ def decrypt_value(encrypted_value: str) -> str:
     try:
         return f.decrypt(encrypted_value.encode('utf-8')).decode('utf-8')
     except Exception as e:
-        log.warning(f"Decryption failed, assuming plain text: {e}")
+        log.warning(f"Decryption failed (may be stored as plaintext): {e}")
         return encrypted_value
