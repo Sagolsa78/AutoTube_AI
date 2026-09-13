@@ -9,7 +9,7 @@ import logging
 from abc import ABC, abstractmethod
 from backend.settings import (
     GEMINI_API_KEY, GROQ_API_KEY, OPENROUTER_API_KEY,
-    OLLAMA_BASE_URL, OLLAMA_MODEL, OLLAMA_MODELS, SCRIPT_PROVIDER_ORDER
+    OLLAMA_BASE_URL, OLLAMA_MODEL, OLLAMA_MODELS, OLLAMA_TIMEOUT, SCRIPT_PROVIDER_ORDER
 )
 
 log = logging.getLogger(__name__)
@@ -82,7 +82,7 @@ class OllamaProvider(BaseProvider):
         # Remove duplicates while preserving order
         seen = set()
         deduped_candidates = [x for x in candidates if not (x in seen or seen.add(x))]
-        ollama_timeout = int(os.getenv("OLLAMA_TIMEOUT", "300"))
+        ollama_timeout = int(OLLAMA_TIMEOUT or os.getenv("OLLAMA_TIMEOUT", "45"))
 
         for cand in deduped_candidates:
             try:
@@ -112,11 +112,8 @@ class GeminiProvider(BaseProvider):
     # 3.5-flash-lite has massive rate limits / free quotas; 3.5-flash is ultra-fast; flash-lite-latest is resilient
     FALLBACK_MODELS = [
         "gemini-3.5-flash-lite",
-        "gemini-3.5-flash",
-        "gemini-flash-lite-latest",
-        "gemini-flash-latest",
-        "gemini-3.7-flash",
         "gemini-3.6-flash",
+        "gemini-3.5-flash",
     ]
 
     def is_available(self) -> bool:
@@ -236,10 +233,8 @@ def get_available_models() -> dict:
             "available": bool(GEMINI_API_KEY),
             "models": [
                 "gemini-3.5-flash-lite",
+                "gemini-3.6-flash",
                 "gemini-3.5-flash",
-                "gemini-flash-lite-latest",
-                "gemini-flash-latest",
-                "gemini-3.7-flash",
             ],
             "selected_model": "gemini-3.5-flash-lite"
         },
@@ -271,7 +266,8 @@ def generate_with_fallback(
     then falling back to the configured provider order.
     Returns (generated_text, provider_name_used).
     """
-    order = list(SCRIPT_PROVIDER_ORDER)
+    seen = set()
+    order = [p for p in SCRIPT_PROVIDER_ORDER if p in _PROVIDER_MAP and not (p in seen or seen.add(p))]
     if preferred_provider and preferred_provider in _PROVIDER_MAP:
         if preferred_provider in order:
             order.remove(preferred_provider)

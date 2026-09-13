@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.db.database import get_db, AsyncSessionLocal
 from backend.models.models import Video, VideoStatus, Script, Channel, Idea, User, ScriptStatus, Scene
 from engine.models import RenderJob
-from backend.auth.dependencies import get_current_user
+from backend.auth.dependencies import get_current_user, get_optional_current_user
 
 router = APIRouter()
 log = logging.getLogger(__name__)
@@ -247,57 +247,35 @@ async def render_video(
 
     job_payload = _serialize_render_job(job)
     job_id = str(uuid.uuid4())
-    route_meta = await dispatch_job(
-        job_id=job_id, 
-        capability=WorkerCapability.RENDER, 
-        payload=job_payload, 
-        db=db
-    )
-    
     new_db_job = DBJob(
         id=job_id,
         user_id=user.id,
         capability=WorkerCapability.RENDER.value,
-        status=route_meta["status"],
+        status="dispatching",
         payload=job_payload,
-        worker_id=route_meta.get("worker_id"),
-        worker_type=route_meta.get("worker_type", "local"),
+        worker_type="local",
         cost_usd=0.0,
         created_at=datetime.utcnow()
     )
     db.add(new_db_job)
     await db.commit()
 
-    # ── Inline fallback: if no worker daemon is running, execute the render
-    #    directly in a FastAPI background task so it doesn't block the response
-    #    but still actually runs the pipeline.
-    if route_meta["status"] == "waiting_for_local_worker":
-        from backend.services.rendering_service import run_job as run_render
-        log.info(f"[InlineRender] No worker daemon detected — running render for video {video.id} inline via BackgroundTasks.")
-        
-        async def _inline_render(vid_id, render_job, db_job_id):
-            from backend.db.database import AsyncSessionLocal as InlineSession
-            try:
-                await run_render(vid_id, render_job)
-                # Mark the Job record as completed
-                async with InlineSession() as sdb:
-                    j = await sdb.get(DBJob, db_job_id)
-                    if j:
-                        j.status = "completed"
-                        j.completed_at = datetime.utcnow()
-                        await sdb.commit()
-            except Exception as e:
-                log.exception(f"[InlineRender] Failed: {e}")
-                async with InlineSession() as sdb:
-                    j = await sdb.get(DBJob, db_job_id)
-                    if j:
-                        j.status = "failed"
-                        j.error_message = str(e)
-                        j.completed_at = datetime.utcnow()
-                        await sdb.commit()
-
-        import asyncio
-        asyncio.create_task(_inline_render(video.id, job, job_id))
+    try:
+        route_meta = await dispatch_job(
+            job_id=job_id, 
+            capability=WorkerCapability.RENDER, 
+            payload=job_payload, 
+            db=db
+        )
+        new_db_job.status = route_meta["status"]
+        new_db_job.worker_id = route_meta.get("worker_id")
+        new_db_job.worker_type = route_meta.get("worker_type", "local")
+    except Exception as e:
+        log.exception(f"Failed to dispatch job {job_id}")
+        new_db_job.status = "failed"
+        new_db_job.error_message = f"Dispatch failed: {str(e)}"
+    
+    await db.commit()
 
     return _fmt(video)
 
@@ -337,31 +315,66 @@ async def update_video(
 @router.get("/{video_id}/preview")
 async def preview_video(
     video_id: str, 
-    user: User = Depends(get_current_user),
+    user: User | None = Depends(get_optional_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     v = await db.get(Video, video_id)
-    if not v or v.user_id != user.id or not v.path:
-        raise HTTPException(404, "Video file not found")
-    
+    if not v:
+        raise HTTPException(404, "Video not found")
+
+    # If authenticated, ensure user cannot view other users' private videos
+    if user and v.user_id and v.user_id != user.id:
+        raise HTTPException(403, "Forbidden")
+
+    from backend.core.config import settings
+    from pathlib import Path
+
     # 1. If path is a public HTTP(S) URL (e.g. R2 public CDN domain)
-    if v.path.startswith("http://") or v.path.startswith("https://"):
+    if v.path and (v.path.startswith("http://") or v.path.startswith("https://")):
         from fastapi.responses import RedirectResponse
         return RedirectResponse(url=v.path, status_code=307)
-        
-    # 2. Local file exists — serve directly
-    if os.path.exists(v.path):
-        return FileResponse(v.path, media_type="video/mp4",
-                            headers={"Cache-Control": "no-store"})
+
+    # 2. Local file exists or storage file resolution
+    resolved_path = None
+
+    # Check direct path if present
+    if v.path and os.path.exists(v.path):
+        resolved_path = v.path
+
+    # Check storage root relative path
+    if not resolved_path and v.path:
+        storage_rel = Path(settings.STORAGE_ROOT) / v.path.lstrip("/")
+        if storage_rel.exists():
+            resolved_path = str(storage_rel)
+
+    # Auto-healing: if v.path is missing or wrong, discover where it was stored
+    if not resolved_path:
+        candidate_paths = [
+            Path(settings.STORAGE_ROOT) / "users" / str(v.user_id) / "videos" / f"{v.id}.mp4",
+            Path(settings.STORAGE_ROOT) / "renders" / f"{v.id}.mp4",
+            Path(settings.STORAGE_ROOT) / "renders" / f"short_{v.id[:8]}.mp4",
+        ]
+        for cp in candidate_paths:
+            if cp.exists() and cp.stat().st_size > 0:
+                resolved_path = str(cp)
+                # Self-heal video.path in database
+                v.path = f"users/{v.user_id}/videos/{v.id}.mp4" if "users" in str(cp) else str(cp)
+                await db.commit()
+                log.info(f"Self-healed video {v.id} path in DB: {v.path}")
+                break
+
+    if resolved_path and os.path.exists(resolved_path):
+        return FileResponse(
+            resolved_path, 
+            media_type="video/mp4",
+            headers={"Cache-Control": "no-store", "Accept-Ranges": "bytes"}
+        )
 
     # 3. Remote storage key (S3/R2) — stream directly to avoid CORS
-    from backend.core.config import settings
-    if settings.STORAGE_BACKEND in ["s3", "r2"]:
+    if settings.STORAGE_BACKEND in ["s3", "r2"] and v.path:
         try:
             from backend.storage import storage
-            import tempfile, asyncio
-            # Download to a temp file and stream — this avoids CORS issues
-            # because the content is served from the same origin as the API
+            import tempfile
             tmp_path = tempfile.mktemp(suffix=".mp4")
             await storage.get_file(v.path, tmp_path)
             if os.path.exists(tmp_path) and os.path.getsize(tmp_path) > 0:
@@ -374,7 +387,8 @@ async def preview_video(
             log.error(f"Failed to stream video from storage {v.path}: {e}")
             raise HTTPException(500, f"Video could not be retrieved from storage: {e}")
 
-    raise HTTPException(404, f"Video file not found: {v.path}")
+    raise HTTPException(404, f"Video file not found: {v.path or video_id}")
+
 
 
 

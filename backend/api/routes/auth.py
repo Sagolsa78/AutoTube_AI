@@ -66,8 +66,8 @@ class UserOut(BaseModel):
     email: Optional[str] = None
     display_name: str
     channel_name: Optional[str] = None
-    preferred_ai_provider: Optional[str] = "ollama"
-    preferred_ai_model: Optional[str] = "qwen2.5-coder:7b"
+    preferred_ai_provider: Optional[str] = "gemini"
+    preferred_ai_model: Optional[str] = "gemini-3.5-flash-lite"
 
 class AuthResponse(BaseModel):
     access_token: str
@@ -127,8 +127,8 @@ async def register(body: RegisterIn, db: AsyncSession = Depends(get_db)):
             email=new_user.email,
             display_name=new_user.display_name,
             channel_name=new_user.channel_name,
-            preferred_ai_provider=new_user.preferred_ai_provider or "ollama",
-            preferred_ai_model=new_user.preferred_ai_model or "qwen2.5-coder:7b",
+            preferred_ai_provider=new_user.preferred_ai_provider or settings.DEFAULT_AI_PROVIDER,
+            preferred_ai_model=new_user.preferred_ai_model or settings.DEFAULT_AI_MODEL,
         )
     )
 
@@ -171,8 +171,8 @@ async def login(body: LoginIn, db: AsyncSession = Depends(get_db)):
             email=user.email,
             display_name=user.display_name,
             channel_name=user.channel_name,
-            preferred_ai_provider=user.preferred_ai_provider or "ollama",
-            preferred_ai_model=user.preferred_ai_model or "qwen2.5-coder:7b",
+            preferred_ai_provider=user.preferred_ai_provider or settings.DEFAULT_AI_PROVIDER,
+            preferred_ai_model=user.preferred_ai_model or settings.DEFAULT_AI_MODEL,
         )
     )
 
@@ -185,8 +185,8 @@ async def get_me(user: User = Depends(get_current_user)):
         email=user.email,
         display_name=user.display_name,
         channel_name=user.channel_name,
-        preferred_ai_provider=user.preferred_ai_provider or "ollama",
-        preferred_ai_model=user.preferred_ai_model or "qwen2.5-coder:7b",
+        preferred_ai_provider=user.preferred_ai_provider or settings.DEFAULT_AI_PROVIDER,
+        preferred_ai_model=user.preferred_ai_model or settings.DEFAULT_AI_MODEL,
     )
 
 

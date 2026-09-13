@@ -26,12 +26,54 @@ class AuthProvider:
         Extracts authentication from request and returns the payload dict (or a mock payload).
         Raises HTTPException if unauthorized.
         """
-        # 2. Check Bearer Token
+        payload = await self.try_verify_request(request)
+        if payload is not None:
+            return payload
+
+        # Check for invalid token error logging
         auth_header = request.headers.get("Authorization")
+        token = None
         if auth_header and auth_header.startswith("Bearer "):
             token = auth_header.split(" ")[1]
-            
-            # 1. Try decoding JWT token (backend JWT or Supabase JWT)
+        elif request.query_params.get("token"):
+            token = request.query_params.get("token")
+
+        if token:
+            raise HTTPException(status_code=401, detail="Invalid token")
+
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    async def try_verify_request(self, request: Request) -> Optional[dict]:
+        """
+        Tries to extract and verify authentication without raising exceptions.
+        Returns payload dict if authenticated, otherwise None.
+        """
+        # 1. If auth is disabled, allow requests with default-user
+        if self.disabled:
+            token = None
+            auth_header = request.headers.get("Authorization")
+            if auth_header and auth_header.startswith("Bearer "):
+                token = auth_header.split(" ")[1]
+            elif request.query_params.get("token"):
+                token = request.query_params.get("token")
+            sub = token if token else "default-user"
+            return {"sub": sub, "email": f"{sub}@local.dev"}
+
+        # 2. Check Bearer Token (header or query param)
+        auth_header = request.headers.get("Authorization")
+        token = None
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header.split(" ")[1]
+        elif request.query_params.get("token"):
+            token = request.query_params.get("token")
+
+        # 3. Check X-API-Key if configured
+        if self.api_key:
+            api_key_header = request.headers.get("X-API-Key")
+            if api_key_header and api_key_header == self.api_key:
+                return {"sub": "api-key-user", "email": "api@local.dev"}
+
+        if token:
             try:
                 if self.jwt_secret:
                     payload = jwt.decode(
@@ -47,13 +89,8 @@ class AuthProvider:
                 if user_id:
                     return payload
             except Exception as jwt_err:
-                # If disabled and raw string passed (e.g. "default-user")
-                if self.disabled:
-                    return {"sub": token, "email": f"{token}@local.dev"}
-                log.warning(f"Invalid token error: {jwt_err}")
-                raise HTTPException(status_code=401, detail="Invalid token")
+                log.debug(f"Optional token verification failed: {jwt_err}")
+                return None
 
-            if self.disabled:
-                return {"sub": token, "email": f"{token}@local.dev"}
+        return None
 
-        raise HTTPException(status_code=401, detail="Unauthorized")

@@ -78,11 +78,12 @@ class Settings(BaseSettings):
     
     # ── AI Providers ──────────────────────────────────────────────────────────
     # Ordered list of providers for fallback chain
-    SCRIPT_PROVIDER_ORDER: str = "ollama,gemini,groq,openrouter"
+    SCRIPT_PROVIDER_ORDER: str = "gemini,groq,openrouter,ollama"
     
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "qwen2.5-coder:7b"
     OLLAMA_MODELS: str = "qwen2.5-coder:7b"  # comma-separated fallback list
+    OLLAMA_TIMEOUT: int = Field(default=60, validation_alias=AliasChoices("OLLAMA_TIMEOUT"))
     
     GEMINI_API_KEY: Optional[str] = None
     GROQ_API_KEY: Optional[str] = None
@@ -103,8 +104,8 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     
     # ── Default Active AI Model ───────────────────────────────────────────────
-    DEFAULT_AI_PROVIDER: str = "ollama"
-    DEFAULT_AI_MODEL: str = "qwen2.5-coder:7b"
+    DEFAULT_AI_PROVIDER: str = "gemini"
+    DEFAULT_AI_MODEL: str = "gemini-3.5-flash-lite"
     
     # ── GitHub / Cloud Worker ─────────────────────────────────────────────────
     GITHUB_TOKEN: Optional[str] = None
@@ -137,7 +138,14 @@ class Settings(BaseSettings):
 
     @property
     def parsed_script_provider_order(self) -> list[str]:
-        return [p.strip() for p in self.SCRIPT_PROVIDER_ORDER.split(",") if p.strip()]
+        seen = set()
+        order = []
+        for p in self.SCRIPT_PROVIDER_ORDER.split(","):
+            cleaned = p.strip()
+            if cleaned and cleaned not in seen:
+                seen.add(cleaned)
+                order.append(cleaned)
+        return order
 
 
 # Global settings instance

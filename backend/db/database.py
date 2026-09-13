@@ -22,7 +22,7 @@ if "postgresql" in settings.DATABASE_URL:
         "pool_size": settings.DB_POOL_SIZE,
         "max_overflow": settings.DB_MAX_OVERFLOW,
         "pool_pre_ping": True,           # verify connections before use
-        "pool_recycle": 300,             # recycle connections every 5 min (Neon sleeps)
+        "pool_recycle": 180,             # recycle connections every 3 min (Neon sleeps)
         "pool_timeout": 30,              # wait up to 30s for a pool connection
     })
     if "-pooler" in settings.DATABASE_URL or "pooler" in settings.DATABASE_URL:
@@ -47,8 +47,8 @@ async def init_db():
             # Ensure users table has new auth & AI preference columns
             try:
                 await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR;"))
-                await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS preferred_ai_provider VARCHAR DEFAULT 'ollama';"))
-                await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS preferred_ai_model VARCHAR DEFAULT 'qwen2.5-coder:7b';"))
+                await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS preferred_ai_provider VARCHAR DEFAULT 'gemini';"))
+                await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS preferred_ai_model VARCHAR DEFAULT 'gemini-3.5-flash-lite';"))
             except Exception as col_err:
                 log.warning("Notice on schema column checks: %s", col_err)
             

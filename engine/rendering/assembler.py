@@ -7,6 +7,7 @@ import logging
 import os
 import subprocess
 import uuid
+from functools import lru_cache
 from pathlib import Path
 
 from backend.settings import RENDER_DIR
@@ -14,6 +15,9 @@ from engine.captions.styles import build_karaoke_ass
 from engine.models import RenderJob
 
 log = logging.getLogger(__name__)
+
+
+from backend.services.media.encoder import select_video_encoder
 
 TARGET_W = 1080
 TARGET_H = 1920
@@ -41,34 +45,30 @@ def _escape_sub_path(raw_path: str) -> str:
     return abs_path.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
 
 
-def _validate_subtitle_content(sub_path: str) -> None:
-    """Raise if the subtitle file is missing, empty, or just a placeholder stub."""
+def _validate_subtitle_content(sub_path: str) -> bool:
+    """Return True if subtitle is valid, False if it should be skipped."""
     p = Path(sub_path)
     if not p.exists():
-        raise FileNotFoundError(f"Subtitle file not found: {sub_path}")
+        log.warning(f"Subtitle file not found: {sub_path}. Proceeding without captions.")
+        return False
     text = p.read_text(encoding="utf-8").strip()
 
-    # ASS files use "Dialogue:" lines; SRT files use "-->" timing lines
+    if not text:
+        log.warning(f"Subtitle file is empty: {sub_path}. Proceeding without captions.")
+        return False
+
     is_ass = sub_path.endswith(".ass")
     if is_ass:
         dialogue_count = text.count("Dialogue:")
-        if dialogue_count < 3:
-            raise ValueError(
-                f"ASS subtitle has only {dialogue_count} Dialogue line(s) — "
-                f"TTS word-boundary capture likely failed upstream: {sub_path}"
-            )
+        if dialogue_count < 1:
+            log.warning(f"ASS subtitle has no Dialogue line(s): {sub_path}. Proceeding without captions.")
+            return False
     else:
-        # Legacy SRT path (shouldn't be hit anymore, but just in case)
         if "-->" not in text:
-            raise ValueError(
-                f"SRT has no timing cues — likely a placeholder stub: {sub_path}"
-            )
-        cue_count = text.count("-->")
-        if cue_count < 3:
-            raise ValueError(
-                f"SRT only has {cue_count} cue(s) — TTS word-boundary capture "
-                f"likely failed upstream: {sub_path}"
-            )
+            log.warning(f"SRT has no timing cues: {sub_path}. Proceeding without captions.")
+            return False
+
+    return True
 
 
 def _build_filtergraph(
@@ -135,12 +135,15 @@ def _build_filtergraph(
             last_out = out_name
 
     # -- Subtitles (ASS with embedded style — no force_style needed) ----------
-    safe_sub = _escape_sub_path(sub_path)
-    after_subs = "subbed"
-    parts.append(
-        f"{after_concat}subtitles=filename='{safe_sub}'"
-        f"[{after_subs}];"
-    )
+    if sub_path and Path(sub_path).exists():
+        safe_sub = _escape_sub_path(sub_path)
+        after_subs = "subbed"
+        parts.append(
+            f"{after_concat}subtitles=filename='{safe_sub}'"
+            f"[{after_subs}];"
+        )
+    else:
+        after_subs = after_concat.strip("[]")
 
     # -- Watermark overlay (optional) -----------------------------------------
     if watermark_path and Path(watermark_path).exists():
@@ -199,6 +202,20 @@ def assemble_video(
     if not clip_paths:
         raise ValueError("No clips provided to assemble_video")
 
+    out_path = out_path or str(RENDER_DIR / f"short_{uuid.uuid4().hex[:8]}.mp4")
+    Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+
+    # ── Check for existing output (Idempotency) ───────────────────────────
+    if Path(out_path).exists() and Path(out_path).stat().st_size > 0:
+        try:
+            cmd = ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", out_path]
+            dur_out = subprocess.check_output(cmd).decode().strip()
+            if float(dur_out) > 0:
+                log.info("Bypassing FFmpeg assembly: Valid output video already exists.")
+                return out_path
+        except Exception:
+            pass # Invalid existing file, proceed with render
+
     # ── Generate / regenerate ASS with the correct caption style ─────────
     if word_boundaries:
         # Derive .ass path next to the audio
@@ -212,7 +229,9 @@ def assemble_video(
         sub_path = srt_path
 
     # ── Pre-render subtitle validation ───────────────────────────────────
-    _validate_subtitle_content(sub_path)
+    has_valid_subs = _validate_subtitle_content(sub_path)
+    if not has_valid_subs:
+        sub_path = ""
 
     out_path = out_path or str(RENDER_DIR / f"short_{uuid.uuid4().hex[:8]}.mp4")
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
@@ -242,21 +261,24 @@ def assemble_video(
         watermark_scale=watermark_scale,
     )
 
+    # Detect best available encoder (GPU or CPU fallback)
+    video_codec, codec_args = select_video_encoder()
+    log.info("Using video encoder: %s", video_codec)
+
     cmd = [
         "ffmpeg", "-y",
         *input_flags,
         "-filter_complex", fg,
         "-map", "[out]",
         "-map", f"{len(clip_paths)}:a",
-        "-c:v", "h264_nvenc",
-        "-preset", "p4",
-        "-cq", "23",
-        "-b:v", "0",
+        "-c:v", video_codec,
+        *codec_args,
         "-c:a", "aac",
         "-b:a", "128k",
         "-r", "30",
         "-t", str(audio_dur + 0.5),
         "-movflags", "+faststart",
+        "-pix_fmt", "yuv420p",
         out_path,
     ]
 

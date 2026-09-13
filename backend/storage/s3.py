@@ -83,3 +83,7 @@ class S3StorageBackend(StorageBackend):
                 ExpiresIn=expires_in
             )
             return url
+
+# Backward-compatibility alias
+S3Storage = S3StorageBackend
+

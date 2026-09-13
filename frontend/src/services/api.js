@@ -18,14 +18,9 @@ async function request(endpoint, options = {}) {
   const url = `${BASE}${endpoint}`;
   const headers = { ...options.headers };
 
+  // We rely on App.jsx onAuthStateChange to keep authToken up to date
+  // so we don't block the network request on getSession() every time.
   let activeToken = authToken;
-  
-  if (supabase) {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.access_token) {
-          activeToken = session.access_token;
-      }
-  }
 
   if (activeToken) {
     headers['Authorization'] = `Bearer ${activeToken}`;
@@ -36,22 +31,35 @@ async function request(endpoint, options = {}) {
     headers['Content-Type'] = 'application/json';
   }
 
-  const res = await fetch(url, { ...options, headers });
+  // Setup timeout (default 15s)
+  const timeoutMs = options.timeout || 15000;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-  if (!res.ok) {
-    if (res.status === 401) {
-      if (supabase) {
-          await supabase.auth.signOut();
+  try {
+    const res = await fetch(url, { ...options, headers, signal: controller.signal });
+    clearTimeout(timeoutId);
+
+    if (!res.ok) {
+      if (res.status === 401) {
+        if (supabase) {
+            await supabase.auth.signOut();
+        }
+        setAuthToken(null);
+        window.location.href = '/login';
+        return;
       }
-      setAuthToken(null);
-      window.location.href = '/login';
-      return;
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `API ${res.status}: ${res.statusText}`);
     }
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || `API ${res.status}: ${res.statusText}`);
+    if (res.status === 204) return null;
+    return res.json();
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      throw new Error(`Request timed out after ${timeoutMs}ms`);
+    }
+    throw error;
   }
-  if (res.status === 204) return null;
-  return res.json();
 }
 
 export const api = {
@@ -98,6 +106,10 @@ export const api = {
   // ── Videos ───────────────────────────────────────
   getVideos:      (channelId) => request(`/videos/${channelId ? '?channel_id=' + channelId : ''}`),
   getVideo:       (id) => request(`/videos/${id}`),
+  getVideoPreviewUrl: (id) => {
+    const token = authToken || localStorage.getItem('autotube_auth_token');
+    return token ? `${BASE}/videos/${id}/preview?token=${encodeURIComponent(token)}` : `${BASE}/videos/${id}/preview`;
+  },
   previewVideo:   (id) => request(`/videos/${id}/preview`),
   getVideoProgress: (id) => request(`/videos/${id}/progress`),
   renderVideo:    (scriptId, style, captionStyle, customCta, voiceOverride) => request('/videos/render', {

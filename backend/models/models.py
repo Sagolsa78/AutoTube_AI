@@ -66,8 +66,8 @@ class User(Base):
     channel_name    = Column(String, default="")
     logo_path       = Column(String)
     password_hash   = Column(String, nullable=True)
-    preferred_ai_provider = Column(String, default="ollama")
-    preferred_ai_model    = Column(String, default="qwen2.5-coder:7b")
+    preferred_ai_provider = Column(String, default="gemini")
+    preferred_ai_model    = Column(String, default="gemini-3.5-flash-lite")
     
     created_at      = Column(DateTime(timezone=True), default=utc_now)
     updated_at      = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
