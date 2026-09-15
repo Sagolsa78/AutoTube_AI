@@ -14,11 +14,14 @@ permissions:
 jobs:
   render_video:
     runs-on: ubuntu-latest
+    environment: Production
     timeout-minutes: 15
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          submodules: false
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -67,7 +70,7 @@ jobs:
           print(f"Database scheme: {parsed.scheme or '<missing>'}")
           print(f"Database host: {'configured' if parsed.hostname else '<missing>'}")
 
-          if parsed.scheme not in ("postgresql", "postgresql+asyncpg"):
+          if parsed.scheme not in ("postgres", "postgresql", "postgresql+asyncpg"):
               raise SystemExit(
                   f"Invalid DATABASE_URL scheme: {parsed.scheme!r}"
               )
