@@ -33,3 +33,9 @@ storage/projects/
 *.log
 .vscode/
 .idea/
+
+ComfyUI
+*.mp4
+.github
+.claude
+
