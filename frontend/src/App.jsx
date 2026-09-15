@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from './lib/supabase';
 import { setAuthToken } from './services/api';
 import { ChannelProvider } from './contexts/ChannelContext';
+import { JobsProvider } from './hooks/useJobs';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -64,7 +65,9 @@ function ProtectedRoute() {
 
   return isAuthenticated ? (
       <ChannelProvider>
+        <JobsProvider>
           <Outlet />
+        </JobsProvider>
       </ChannelProvider>
   ) : <Navigate to="/login" replace />;
 }

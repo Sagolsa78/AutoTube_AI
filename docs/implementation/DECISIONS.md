@@ -1,25 +1,16 @@
-# AutoTube AI — Architectural Decisions
+# Architecture & Product Decisions
 
-## 1. Local vs Cloud Configuration
-- **Decision**: Single centralized `Settings` class in `backend/core/config.py` using Pydantic Settings with validated aliases.
-- **Rationale**: Eliminates configuration drift between local `.env` and production environment variables on Render and GitHub Actions.
+## ADR-001: Implement Phases 1–3 First Before Creation Studio Overhaul
+- **Context**: The user and product roadmap require creating a solid creator operating system without breaking existing local/cloud backend integrations.
+- **Decision**: Deliver Application Shell, persistent Channel Switcher, Global Header Job Center, and Dashboard Command Center (Phases 1–3) first. Stop for verification before touching the multi-stage Creation Studio.
+- **Rationale**: Validates the shell, data fetching, multi-channel state, and live compute polling against real backend endpoints early, preventing large regressive rewrites.
 
-## 2. Storage Abstraction
-- **Decision**: Formal `StorageBackend` abstract protocol in `backend/storage/base.py` with `LocalStorageBackend` and `S3StorageBackend` (Cloudflare R2).
-- **Rationale**: Enables zero-code-change switching between local filesystem and S3/R2 cloud storage while strictly enforcing user-partitioned keys (`users/<user_id>/...`).
+## ADR-002: Centralized Job State Hook vs Component-Level Polling
+- **Context**: Multiple components (TopBar, JobCenterWidget, Dashboard, JobDetail, Videos) previously polled independently or lacked real job list endpoints.
+- **Decision**: Create a single shared `useJobs` hook with tab visibility throttling (`document.hidden`), automatic cancellation when idle, and notification dispatching upon completion.
+- **Rationale**: Dramatically reduces backend load, ensures persistent synchronization across header and dashboard, and guarantees seamless browser refresh recovery.
 
-## 3. PostgreSQL as Durable Job Source
-- **Decision**: All compute requests are written to the `jobs` table in PostgreSQL before dispatching to any executor.
-- **Rationale**: Eliminates race conditions, allows frontend progress polling, enables crash recovery, and provides persistent audit trails.
-
-## 4. GitHub Actions as $0 Cloud Execution Layer
-- **Decision**: Use GitHub-hosted runners via `workflow_dispatch` instead of paid GPU VMs or Render background workers for the beta release.
-- **Rationale**: Render's free tier has a 30-second request timeout and no background worker instances on the free plan. GitHub Actions provides 2,000 free minutes/month on ephemeral runners with full FFmpeg support.
-
-## 5. Standalone Local Worker Process
-- **Decision**: Local rendering runs in a separate process (`python -m backend.worker.main`) rather than inside FastAPI's event loop.
-- **Rationale**: Prevents CPU-bound FFmpeg / TTS execution from blocking API request handling.
-
-## 6. Authentication & Token Encryption
-- **Decision**: Native JWT token issuance with HMAC-SHA256 and Fernet symmetric encryption for stored YouTube OAuth tokens.
-- **Rationale**: Secures multi-tenant operations without relying on hardcoded defaults (`default-user` or `token.json`).
+## ADR-003: Backend API List Jobs Support
+- **Context**: `backend/api/routes/jobs.py` supported individual job lookup and dispatch, but lacked `GET /api/jobs/` for listing tenant jobs.
+- **Decision**: Add `GET /api/jobs/` scoped strictly to `current_user.id`, returning ordered historical and active compute jobs.
+- **Rationale**: Enables the Global Job Center and operator diagnostics to inspect real compute records alongside video rendering states.
