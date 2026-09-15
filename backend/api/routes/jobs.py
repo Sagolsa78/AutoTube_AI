@@ -169,6 +169,25 @@ async def create_job(
     return new_job
 
 
+@router.get("/", response_model=List[JobResponse])
+async def list_jobs(
+    status: Optional[str] = Query(None, description="Filter by job status"),
+    capability: Optional[str] = Query(None, description="Filter by capability"),
+    limit: int = Query(20, ge=1, le=100),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """List compute and render jobs for the authenticated user."""
+    stmt = select(Job).where(Job.user_id == user.id)
+    if status:
+        stmt = stmt.where(Job.status == status)
+    if capability:
+        stmt = stmt.where(Job.capability == capability)
+    stmt = stmt.order_by(Job.created_at.desc()).limit(limit)
+    res = await db.execute(stmt)
+    return res.scalars().all()
+
+
 @router.get("/telemetry")
 async def get_telemetry(db: AsyncSession = Depends(get_db)):
     """Exposes real-time worker cluster status and daily GPU spend for UI dashboard."""

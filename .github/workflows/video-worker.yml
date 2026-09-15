@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       job_id:
-        description: 'The Job ID (or Video ID) to render'
+        description: "The Job ID (or Video ID) to render"
         required: true
         type: string
 
@@ -20,36 +20,101 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.11
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          cache: "pip"
+          cache: pip
+          cache-dependency-path: requirements.txt
 
-      - name: Install system dependencies (FFmpeg)
+      # Fail quickly before spending minutes installing dependencies
+      - name: Validate required configuration
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          S3_ENDPOINT_URL: ${{ secrets.S3_ENDPOINT_URL }}
+          S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
+          S3_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
+          S3_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg
+          python - <<'PY'
+          import os
+          from urllib.parse import urlparse
+
+          required = [
+              "DATABASE_URL",
+              "S3_ENDPOINT_URL",
+              "S3_BUCKET_NAME",
+              "S3_ACCESS_KEY_ID",
+              "S3_SECRET_ACCESS_KEY",
+              "GEMINI_API_KEY",
+              "PEXELS_API_KEY",
+          ]
+
+          missing = [key for key in required if not os.environ.get(key)]
+
+          if missing:
+              print("Missing required secrets:")
+              for key in missing:
+                  print(f"  - {key}")
+              raise SystemExit(1)
+
+          db_url = os.environ["DATABASE_URL"]
+          parsed = urlparse(db_url)
+
+          print("DATABASE_URL: configured")
+          print(f"Database scheme: {parsed.scheme or '<missing>'}")
+          print(f"Database host: {'configured' if parsed.hostname else '<missing>'}")
+
+          if parsed.scheme not in ("postgresql", "postgresql+asyncpg"):
+              raise SystemExit(
+                  f"Invalid DATABASE_URL scheme: {parsed.scheme!r}"
+              )
+
+          if not parsed.hostname:
+              raise SystemExit(
+                  "DATABASE_URL does not contain a valid database host"
+              )
+
+          print("Configuration validation passed.")
+          PY
+
+      - name: Check FFmpeg
+        run: |
+          if command -v ffmpeg >/dev/null 2>&1; then
+            echo "FFmpeg already available"
+            ffmpeg -version | head -n 1
+          else
+            echo "FFmpeg not found. Installing..."
+            sudo apt-get update
+            sudo apt-get install -y ffmpeg
+            ffmpeg -version | head -n 1
+          fi
 
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          python -m pip install -r requirements.txt
 
       - name: Execute Render Job
         env:
           APP_ENV: production
           APP_MODE: cloud
+
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
           STORAGE_BACKEND: r2
           S3_ENDPOINT_URL: ${{ secrets.S3_ENDPOINT_URL }}
           S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
           S3_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
           S3_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
           R2_PUBLIC_DOMAIN: ${{ secrets.R2_PUBLIC_DOMAIN }}
+
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+
           JOB_ID: ${{ inputs.job_id }}
+
         run: |
           python -m backend.worker.main --job-id "$JOB_ID"
-

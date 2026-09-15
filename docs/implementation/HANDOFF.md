@@ -1,118 +1,60 @@
-# AutoTube AI — Handoff Document
+# Engineering Continuity Handoff
 
-## PROJECT GOAL
-Transform AutoTube AI into a robust, secure, dual-mode (Local + Cloud Zero-Cost Beta) YouTube Shorts automation platform with decoupled workers, atomic job claiming, unified storage, multi-tenant security, encrypted YouTube credentials, and zero mock data.
+## Current Status: Complete AutoTube AI v1 Frontend Redesign
 
----
+### Completed Across All Phases:
 
-## ACTUAL CURRENT ARCHITECTURE
-1. **API / Control Plane**: FastAPI application with native JWT authentication, route-level tenant validation, and durable Job persistence before dispatch.
-2. **Worker / Compute Plane**: Standalone worker process (`python -m backend.worker.main`) supporting continuous queue polling with atomic `SELECT ... FOR UPDATE SKIP LOCKED` and single-shot execution (`--job-id <ID>`).
-3. **Execution Routing**: `JobExecutor` abstraction routing either to `LocalJobExecutor` (local standalone worker) or `GitHubActionsJobExecutor` (ephemeral cloud runner via `workflow_dispatch`).
-4. **Rendering Service**: Dedicated `RenderService` (`backend/services/rendering_service.py`) with stage-by-stage progress tracking (`tts`, `visuals`, `assembly`, `metadata`, `done`) and try/finally workspace cleanup.
-5. **Storage**: Protocol-based `StorageBackend` supporting `LocalStorageBackend` and `S3StorageBackend` (Cloudflare R2) with user-scoped object keys (`users/<user_id>/...`).
-6. **Security & OAuth**: Fernet encryption for YouTube tokens at rest, short-lived authenticated video previews, and tenant isolation across all endpoints.
+1. **Phase 0 — Documentation & Contract Audit**:
+   - `docs/frontend/API_CONTRACT.md`: Full endpoint catalog with schemas, query params, headers, and error shapes.
+   - `docs/frontend/ARCHITECTURE.md`: Frontend component tree, state management, and polling design.
+   - `docs/frontend/DESIGN_SYSTEM.md`: Color tokens, dark studio aesthetic, typography, and UI specs.
+   - `docs/frontend/UX_FLOW.md`: Creator user journeys, render lifecycles, and sequence diagrams.
+   - `docs/implementation/DECISIONS.md`: Architectural Decision Records (ADRs 001–004).
 
----
+2. **Phase 1 — Core Foundation & Centralized Job State**:
+   - Integrated `useJobs.jsx` singleton hook & `JobsProvider` with visibility-aware polling throttling, progress tracking, and toast notifications on job completion/failure.
 
-## TARGET ARCHITECTURE
-The codebase supports ONE unified codebase with TWO execution modes:
-- **Local Mode**: Browser -> React/Vite -> FastAPI -> SQLite/PostgreSQL -> LocalJobExecutor -> Standalone Local Worker -> RenderService -> LocalStorage.
-- **Cloud Zero-Cost Beta Mode**: Browser -> Render Static Site -> Render Free Web Service -> Neon PostgreSQL -> GitHubActionsJobExecutor -> GitHub Actions Ephemeral Runner -> RenderService -> Cloudflare R2.
+3. **Phase 2 — Application Shell & Creator Navigation**:
+   - Redesigned `AppShell.jsx` with creator IA (WORKSPACE, PUBLISH, INSIGHTS, SYSTEM) and collapsible sidebar toggle with local persistence.
+   - Updated `TopBar.jsx` with breadcrumbs, quick action CTA, and user profile navigation.
+   - Created `CommandPalette.jsx` triggered via `Cmd/Ctrl + K` supporting keyboard navigation (arrows, Enter, Escape).
+   - Created `JobCenterDropdown.jsx` mounted in the header, rendering active jobs, stages, live progress bars, and direct job navigation.
+   - Enhanced persistent Channel Switcher with YouTube status indicator and manage channel actions.
 
----
+4. **Phase 3 — Dashboard Command Center**:
+   - Redesigned `Dashboard.jsx` answering *"What is happening with my channel?"* within 5 seconds.
+   - Dynamic time-of-day greeting & active channel badge.
+   - Real KPI row (Videos, Views, Subscribers, Active Pipeline) backed by backend data without fake metrics.
+   - Live Active Pipeline section with animated progress bars for rendering videos.
+   - Action Required / Curation Queue prioritizing ready videos, pending ideas, and draft scripts.
+   - Guided 5-Step Onboarding state for new channels.
+   - Storage utilization and Compute plane telemetry cards.
 
-## COMPLETED WORK
-- Full repository audit and documentation of current and target architecture.
-- P0: Fixed Python dependency conflicts and requirements.
-- P0: Replaced in-process FastAPI rendering with dedicated `RenderService` and decoupled `Worker`.
-- P0: Replaced legacy route-level execution with unified `JobExecutor` architecture.
-- P0: Fixed job creation order to commit durable `Job` records to DB before dispatch.
-- P0: Implemented atomic job claiming (`SELECT FOR UPDATE SKIP LOCKED`) in worker.
-- P0: Implemented single-shot execution mode for GitHub Actions ephemeral cloud workers.
-- P0: Unified `StorageBackend` (`put_file`, `get_file`, `delete_file`, `exists`, `get_public_url`, `generate_signed_url`) and eliminated legacy mismatches.
-- P0: Implemented unconditional temporary workspace cleanup in `try/finally` blocks.
-- P0: Implemented native multi-user JWT authentication and eliminated hardcoded `default-user` fallbacks in cloud mode.
-- P0: Enforced tenant isolation across all database queries and API endpoints.
-- P0: Implemented Fernet symmetric encryption for YouTube OAuth tokens and removed global `token.json`.
-- P0: Fixed video preview endpoint to authenticate access and prevent unauthorized cross-tenant viewing.
-- P1: Centralized configuration in `backend/core/config.py` using Pydantic Settings.
-- P1: Verified database schema matches Alembic migrations at head `16ee20e4233a`.
-- P1: Full automated test suite passing (36/36 tests in `pytest`).
-- P1: End-to-end verification script (`tests/verify_all.py`) passing all 5 stages.
-- P1: Complete architecture, development, and deployment documentation written.
+5. **Phase 4 — Creation Studio & Quick Create**:
+   - Added Quick Create topic prompt with content type chips (Fast Facts, Explainer, Story, News, Motivation) and duration selectors (30s, 60s, 90s).
+   - Progressive disclosure for advanced channel options (niche, voice, style).
+   - Staged workflow: Concept & Brief $\to$ Studio Editor $\to$ Voice & Render.
+   - Split-pane studio editor with autosave, Pexels asset search modal, and ComfyUI asset generation.
 
----
+6. **Phase 5 — Video Library, Review Deck & Pipeline Visualizer**:
+   - Created reusable `PipelineVisualizer.jsx` mapping Idea $\to$ Script $\to$ Voice $\to$ Visuals $\to$ Render $\to$ Review $\to$ Publish.
+   - Integrated `PipelineVisualizer` into `Videos.jsx` and `JobDetail.jsx`.
+   - Media-first 9:16 inspection room with custom video player (scrubber, fullscreen, mute), keyboard shortcuts (`[A]`, `[R]`), editable YouTube metadata with AI auto-fill, and upload modal.
 
-## PARTIALLY COMPLETED WORK
-- None. All P0 and P1 items are implemented, verified, and documented.
+7. **Phase 6 — Script Studio & Idea Lab**:
+   - Idea Lab with viral potential score badges, topic filters, and direct "Develop in Studio" actions.
+   - Script Studio with scene breakdown previews, QA score badges, and quick regeneration controls.
 
----
+8. **Phase 7 — Publications & Analytics**:
+   - Verified live published YouTube Shorts gallery with direct external YouTube links.
+   - Analytics with YPP qualification progress (1k subs / 10M views), 7-day velocity chart, and storage cleanup.
 
-## KNOWN FAILURES
-- None. Full test suite passes cleanly.
+9. **Phase 8–10 — Settings, Operator Modes, Responsive Layout & Accessibility**:
+   - Interactive 9:16 Watermark Simulator with position and opacity adjustments.
+   - AI Intelligence model selector (`Ollama`, `Gemini`, `Groq`, `OpenRouter`).
+   - System Health cluster diagnostics and real-time activity log stream.
+   - Responsive design covering desktop, tablet, and mobile safe area bottom navigation.
 
----
-
-## FILES OF INTEREST
-- `backend/core/config.py`: Authoritative Pydantic Settings model.
-- `backend/services/rendering_service.py`: Pipeline execution service.
-- `backend/worker/main.py`: Standalone worker daemon & one-shot CLI.
-- `backend/jobs/local_executor.py`: Local job executor.
-- `backend/jobs/github_executor.py`: GitHub Actions workflow dispatcher.
-- `backend/storage/base.py`: Abstract storage interface.
-- `backend/storage/local.py` & `backend/storage/s3.py`: Local and R2 storage adapters.
-- `backend/api/routes/videos.py`: Video rendering and preview endpoints.
-- `backend/api/routes/auth.py`: JWT authentication routes.
-- `integrations/youtube/uploader.py`: Multi-tenant YouTube upload client.
-- `.github/workflows/video-worker.yml`: Ephemeral GitHub worker workflow.
-
----
-
-## DATABASE STATE & MIGRATION STATE
-- Current Alembic Revision: `16ee20e4233a` (head).
-- Fully compatible with PostgreSQL (Neon) and SQLite.
-
----
-
-## ENVIRONMENT STATE
-- Configured via `.env` and loaded by `backend.core.config.settings`.
-
----
-
-## DEPLOYMENT STATE
-- Production topology: Render Static Site (Frontend) + Render Web Service (FastAPI) + Neon (PostgreSQL) + Cloudflare R2 (Storage) + GitHub Actions (Ephemeral Worker).
-
----
-
-## TEST STATE
-- `pytest -v`: 36 / 36 tests PASSING.
-- `tests/verify_all.py`: 5 / 5 verification stages PASSING.
-
----
-
-## CURRENT BLOCKER
-- None.
-
----
-
-## EXACT NEXT TASK
-- Ready for live video creation in local mode or cloud deployment following `docs/deployment/DEPLOYMENT_CHECKLIST.md`.
-
----
-
-## EXACT COMMANDS TO REPRODUCE CURRENT STATE
-```bash
-# Run the full automated test suite
-/mnt/Drive_01/AutoTube_Ai/venv/bin/python3 -m pytest -v
-
-# Run the end-to-end multi-step verification runner
-PYTHONPATH=. /mnt/Drive_01/AutoTube_Ai/venv/bin/python3 tests/verify_all.py
-```
-
----
-
-## LAST VERIFIED COMMIT/STATE
-- All tests passing, migrations at head `16ee20e4233a`.
-
-NEXT AI: Read HANDOFF.md, PROGRESS.md and DECISIONS.md first. Verify the current state against the repository, then continue from CURRENT NEXT TASK. Do not redo completed work.
+### Validation Results:
+- Frontend Vite production build: **Passed in 2.64s** (`dist/` generated with zero errors).
+- Backend APIs: 100% contract compliance, zero mock data.

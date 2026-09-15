@@ -1,66 +1,18 @@
-# AutoTube AI — Progress Checkpoint
+# AutoTube AI Implementation Progress
 
-CURRENT PHASE: Full Verification & Production Readiness Repair
-STATUS: COMPLETED (ALL TESTS PASSING)
+## Implementation Phases Matrix
 
-COMPLETED:
-- Repository audit & architecture stabilization.
-- Fixed Python dependency conflicts and consolidated version pins in `requirements.txt`.
-- Refactored `RenderService` (`backend/services/rendering_service.py`) out of API routes with lifecycle workspace management and try/finally cleanup.
-- Refactored standalone `Worker` (`backend/worker/main.py`) with atomic job claiming (`SELECT FOR UPDATE SKIP LOCKED`), single-shot mode (`--job-id`), and stale job watchdog.
-- Fixed job creation order: durable `Job` records are committed to the DB prior to executor dispatch.
-- Implemented `JobExecutor` abstraction (`LocalJobExecutor` & `GitHubActionsJobExecutor`).
-- Harmonized `StorageBackend` interface across `LocalStorageBackend` and `S3StorageBackend` (Cloudflare R2).
-- Enforced tenant isolation across all resources (users, channels, ideas, scripts, scenes, assets, videos, jobs, YouTube connections).
-- Encrypted YouTube OAuth tokens at rest with Fernet (`ENCRYPTION_KEY`).
-- Removed `default-user` and global `token.json` dependencies.
-- Added comprehensive unit and integration tests across auth, tenant isolation, pipeline, worker, storage, config, and cloud router.
-
-FILES CHANGED:
-- `backend/core/config.py`
-- `backend/services/rendering_service.py`
-- `backend/worker/main.py`
-- `backend/storage/base.py`
-- `backend/storage/local.py`
-- `backend/storage/s3.py`
-- `backend/api/routes/videos.py`
-- `backend/api/routes/channels.py`
-- `backend/api/routes/auth.py`
-- `backend/jobs/local_executor.py`
-- `backend/jobs/github_executor.py`
-- `backend/worker_router.py`
-- `integrations/youtube/uploader.py`
-- `tests/test_pipeline.py`
-- `tests/test_worker.py`
-- `tests/test_config.py`
-- `tests/test_cloud_architecture.py`
-- `tests/test_tenant_isolation.py`
-- `docs/*`
-
-DATABASE/MIGRATIONS:
-- Schema verified with Alembic at migration head `16ee20e4233a`.
-- Supports PostgreSQL and SQLite asyncpg/aiosqlite drivers.
-
-ENVIRONMENT VARIABLES:
-- Centralized in `backend/core/config.py` with Pydantic BaseSettings.
-
-TESTS RUN:
-- `pytest -v` (36 tests across 12 test suites)
-- `tests/verify_all.py` (5-stage end-to-end suite)
-
-TEST RESULTS:
-- 36 / 36 tests passed (100% pass rate).
-
-FAILURES:
-- None.
-
-KNOWN ISSUES:
-- None blocking. In local mode without Ollama or Gemini keys, mock/fallback AI providers handle generation gracefully.
-
-NEXT EXACT STEP:
-- System is ready for live local development or beta deployment to Render + Neon + Cloudflare R2 + GitHub Actions.
-
-DO NOT REPEAT:
-- Do not re-introduce in-process background workers inside FastAPI lifespan.
-- Do not revert `storage.put_file` / `get_file` back to legacy `download`.
-- Do not bypass `Job` DB persistence before executor dispatch.
+| Phase | Description | Status | Scope / Deliverables |
+|---|---|---|---|
+| **Phase 0** | Frontend Audit, Architecture & API Contract | **COMPLETED** | API Contract, Architecture, Design System, UX Flow docs |
+| **Phase 1** | Foundation, Data Fetching & Centralized Job Polling | **COMPLETED** | `useJobs.jsx` singleton provider hook, `GET /api/jobs/` alignment |
+| **Phase 2** | Global Shell, Creator Nav, Channel Switcher & Header Job Center | **COMPLETED** | `AppShell.jsx`, `TopBar.jsx`, `JobCenterDropdown.jsx`, `CommandPalette.jsx` (Cmd+K) |
+| **Phase 3** | Dashboard Command Center | **COMPLETED** | Real KPI metrics row, Active in-flight pipeline, Curation queue, Onboarding |
+| **Phase 4** | Creation Studio & Quick Create | **COMPLETED** | Quick Create topic mode + progressive disclosure, Staged workflow, Asset Picker |
+| **Phase 5** | Video Library, Detail Workspace & Pipeline Visualizer | **COMPLETED** | 9:16 Video Player, PipelineVisualizer, Metadata auto-fill, YouTube Upload modal |
+| **Phase 6** | Script Studio & Idea Lab | **COMPLETED** | Categorized inbox, Scene breakdowns, QA Score badges, Regenerate/Discard |
+| **Phase 7** | Publishing & Channel Analytics | **COMPLETED** | Live published gallery, YPP monetization tracker (1k subs / 10M views), Velocity chart |
+| **Phase 8** | Guided Onboarding & Notifications | **COMPLETED** | 5-step guided setup wizard for new channels, toast alerts on render completion |
+| **Phase 9** | Settings, Integrations & Operator Diagnostics | **COMPLETED** | Watermark 9:16 simulator, AI model selector (`ollama`/`gemini`/`groq`/`openrouter`), Health & Logs |
+| **Phase 10** | Responsive Design, Accessibility & Error States | **COMPLETED** | Desktop (1440/1280), Tablet (1024/768), Mobile safe area bottom navigation, keyboard shortcuts |
+| **Phase 11** | E2E Build Verification & Quality Bar | **COMPLETED** | Full creator journeys verified, zero compilation errors (`vite build` passed) |

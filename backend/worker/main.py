@@ -28,63 +28,78 @@ async def execute_job(job_id: str):
     from backend.services.rendering_service import run_job
     from backend.services.asset_service import execute_asset_job
     
+    capability = None
+    payload = {}
+    video_id = None
+
+    # Step 1: Read & Claim the Job in a short-lived DB session
     async with AsyncSessionLocal() as db:
-        # Load the Job
-        job_record = await db.get(Job, job_id)
-        if not job_record:
-            log.error(f"[Worker] Job {job_id} not found.")
-            return False
-
-        if job_record.status not in [JobStatus.queued.value, JobStatus.waiting_for_local_worker.value, JobStatus.dispatched.value, JobStatus.running.value]:
-            log.warning(f"[Worker] Job {job_id} is in status {job_record.status}, not ready to run.")
-            return False
-
-        # Mark as running only if not already claimed as running
-        if job_record.status != JobStatus.running.value:
-            job_record.status = JobStatus.running.value
-            job_record.started_at = datetime.now(timezone.utc)
-            await db.commit()
-        
         try:
-            if job_record.capability == "RENDER":
-                payload = job_record.payload or {}
-                video_id = payload.get("video_id")
-                if not video_id:
-                    raise ValueError("No video_id in RENDER payload.")
-                
-                render_job = RenderJob(**payload)
-                await run_job(video_id, render_job, job_id=job_id)
-                
-                # Render updates Video directly. Check status.
-                await db.refresh(job_record)
+            job_record = await db.get(Job, job_id)
+            if not job_record:
+                log.error(f"[Worker] Job {job_id} not found.")
+                return False
+
+            if job_record.status not in [JobStatus.queued.value, JobStatus.waiting_for_local_worker.value, JobStatus.dispatched.value, JobStatus.running.value]:
+                log.warning(f"[Worker] Job {job_id} is in status {job_record.status}, not ready to run.")
+                return False
+
+            if job_record.status != JobStatus.running.value:
+                job_record.status = JobStatus.running.value
+                job_record.started_at = datetime.now(timezone.utc)
+                await db.commit()
+
+            capability = job_record.capability
+            payload = job_record.payload or {}
+            video_id = payload.get("video_id")
+        except Exception as e:
+            await db.rollback()
+            log.error(f"[Worker] Error claiming job {job_id}: {e}")
+            return False
+
+    # Step 2: Execute long-running render / asset pipeline (no idle DB connection held)
+    success = False
+    error_msg = None
+    try:
+        if capability == "RENDER":
+            if not video_id:
+                raise ValueError("No video_id in RENDER payload.")
+            render_job = RenderJob(**payload)
+            await run_job(video_id, render_job, job_id=job_id)
+            
+            # Check video outcome
+            async with AsyncSessionLocal() as db:
                 video = await db.get(Video, video_id)
                 if video and video.status == VideoStatus.ready:
-                    job_record.status = JobStatus.completed.value
+                    success = True
                 else:
-                    job_record.status = JobStatus.failed.value
-                    job_record.error_message = video.notes if video else "Unknown failure"
-                    
-            elif job_record.capability in ["IMAGE", "VIDEO"]:
-                # Execute Asset Generation Job
-                success = await execute_asset_job(job_id)
-                await db.refresh(job_record)
-                if not success and job_record.status != JobStatus.failed.value:
-                    job_record.status = JobStatus.failed.value
-                    
-            else:
-                raise ValueError(f"Unsupported capability: {job_record.capability}")
-            
+                    success = False
+                    error_msg = video.notes if video else "Render failed"
+        elif capability in ["IMAGE", "VIDEO"]:
+            success = await execute_asset_job(job_id)
+        else:
+            raise ValueError(f"Unsupported capability: {capability}")
+    except Exception as e:
+        log.exception(f"[Worker] Unhandled error running job {job_id}: {e}")
+        success = False
+        error_msg = str(e)
 
-                
+    # Step 3: Update Job Status in a fresh DB session
+    async with AsyncSessionLocal() as db:
+        try:
+            job_record = await db.get(Job, job_id)
+            if job_record:
+                job_record.status = JobStatus.completed.value if success else JobStatus.failed.value
+                if error_msg:
+                    job_record.error_message = error_msg
+                job_record.completed_at = datetime.now(timezone.utc)
+                await db.commit()
+                log.info(f"[Worker] Job {job_id} finalized with status: {job_record.status}")
         except Exception as e:
-            log.exception(f"[Worker] Unhandled error running job {job_id}: {e}")
-            job_record.status = JobStatus.failed.value
-            job_record.error_message = str(e)
-            
-        job_record.completed_at = datetime.now(timezone.utc)
-        await db.commit()
-        log.info(f"[Worker] Job {job_id} execution finished with status {job_record.status}")
-        return job_record.status == JobStatus.completed.value
+            await db.rollback()
+            log.error(f"[Worker] Error finalizing job {job_id}: {e}")
+
+    return success
 
 
 async def poll_jobs():

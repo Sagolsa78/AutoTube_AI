@@ -8,6 +8,7 @@ import StatusBadge from '../components/StatusBadge';
 import Button from '../components/Button';
 import EmptyState from '../components/EmptyState';
 import Skeleton from '../components/Skeleton';
+import PipelineVisualizer from '../components/pipeline/PipelineVisualizer';
 import { toast } from 'sonner';
 import { useChannel } from '../contexts/ChannelContext';
 
@@ -469,6 +470,13 @@ export default function Videos({ filter }) {
           {/* RIGHT/BOTTOM: Metadata Inspector & Filmstrip (7 Cols) */}
           <div className="lg:col-span-7 flex flex-col gap-6 min-w-0">
             
+            {/* Unified Pipeline Visualizer */}
+            <PipelineVisualizer
+              video={activeVideo}
+              script={activeScript}
+              idea={activeIdea}
+            />
+
             {/* Metadata Inspector Card */}
             <Card variant="surface">
               <CardHeader
