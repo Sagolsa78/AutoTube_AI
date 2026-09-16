@@ -216,7 +216,7 @@ export default function Profile() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           
           {/* LEFT COLUMN: Watermark & Brand Simulator (4 cols) */}
-          <div className="lg:col-span-4 space-y-6 sticky top-20">
+          <div className="lg:col-span-4 space-y-6 lg:sticky lg:top-20">
             <Card variant="surface">
               <CardHeader
                 title={
