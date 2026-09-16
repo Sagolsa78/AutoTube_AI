@@ -392,7 +392,8 @@ async def preview_video(
     # 3. Remote storage key (S3/R2) — stream directly to avoid CORS/latency
     if settings.STORAGE_BACKEND in ["s3", "r2"] and v.path:
         try:
-            from backend.storage import storage
+            from backend.storage import get_storage
+            storage = get_storage()
             public_url = await storage.get_public_url(v.path)
             if public_url:
                 from fastapi.responses import RedirectResponse
