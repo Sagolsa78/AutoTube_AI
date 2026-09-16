@@ -17,6 +17,7 @@ import Profile from './pages/Profile';
 import Channels from './pages/Channels';
 import Publications from './pages/Publications';
 import Analytics from './pages/Analytics';
+import Costs from './pages/Costs';
 import Logs from './pages/Logs';
 import Health from './pages/Health';
 import AppShell from './components/layout/AppShell';
@@ -81,7 +82,7 @@ export default function App() {
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-        
+
         {/* Protected Application Routes */}
         <Route element={<ProtectedRoute />}>
             <Route path="/app" element={<AppShell />}>
@@ -94,6 +95,7 @@ export default function App() {
           <Route path="best" element={<Videos filter="best" />} />
           <Route path="publications" element={<Publications />} />
           <Route path="analytics" element={<Analytics />} />
+          <Route path="costs" element={<Costs />} />
           <Route path="channels" element={<Channels />} />
           <Route path="logs" element={<Logs />} />
           <Route path="health" element={<Health />} />

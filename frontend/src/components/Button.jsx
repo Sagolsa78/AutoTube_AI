@@ -5,21 +5,21 @@ import Icon from './Icon';
  * Button Component
  * Standardized creator studio button system
  */
-export default function Button({ 
-  children, 
-  variant = 'secondary', 
-  size = 'md', 
+export default function Button({
+  children,
+  variant = 'secondary',
+  size = 'md',
   icon = null,
   iconPosition = 'left',
   loading = false,
   disabled = false,
-  className = '', 
+  className = '',
   onClick,
   type = 'button',
-  ...props 
+  ...props
 }) {
   let btnClass = 'btn';
-  
+
   if (variant === 'primary') btnClass += ' btn-primary';
   else if (variant === 'secondary') btnClass += ' btn-secondary';
   else if (variant === 'ghost') btnClass += ' btn-ghost';
@@ -37,7 +37,7 @@ export default function Button({
   const iconSize = size === 'sm' ? 14 : size === 'lg' ? 18 : 16;
 
   return (
-    <button 
+    <button
       type={type}
       className={btnClass}
       disabled={disabled || loading}

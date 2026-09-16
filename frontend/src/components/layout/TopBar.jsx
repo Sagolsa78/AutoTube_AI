@@ -12,11 +12,11 @@ export default function TopBar() {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const channelDropdownRef = useRef(null);
 
-  const titles = { 
-    '/app': 'Command Center', 
+  const titles = {
+    '/app': 'Command Center',
     '/app/create': 'Creation Studio',
-    '/app/ideas': 'Idea Lab', 
-    '/app/scripts': 'Script Studio', 
+    '/app/ideas': 'Idea Lab',
+    '/app/scripts': 'Script Studio',
     '/app/videos': 'Video Library',
     '/app/best': 'Best Content',
     '/app/publications': 'Publishing',
@@ -24,10 +24,10 @@ export default function TopBar() {
     '/app/channels': 'Channels',
     '/app/logs': 'Activity Logs',
     '/app/health': 'System Health',
-    '/app/profile': 'Settings' 
+    '/app/profile': 'Settings'
   };
 
-  const currentEntry = Object.entries(titles).find(([path]) => 
+  const currentEntry = Object.entries(titles).find(([path]) =>
     path === '/app' ? loc.pathname === '/app' : loc.pathname.startsWith(path)
   );
   const currentTitle = currentEntry ? currentEntry[1] : 'Studio';
@@ -97,7 +97,7 @@ export default function TopBar() {
 
         {/* Right: Persistent Channel Switcher + Job Center + Actions */}
         <div className="flex items-center gap-2.5 ml-auto">
-          
+
           {/* Global Job Center */}
           <JobCenterDropdown />
 
@@ -117,7 +117,7 @@ export default function TopBar() {
                 </span>
                 <Icon name="chevron-down" size={13} className="text-text-muted shrink-0" />
               </button>
-              
+
               {channelDropdownOpen && (
                 <div className="absolute right-0 mt-2 w-60 bg-surface border border-border rounded-xl shadow-dropdown py-1 z-50 animate-in fade-in-50 zoom-in-95">
                   <div className="px-3 py-2 text-[11px] font-bold text-text-muted uppercase tracking-wider border-b border-border/80">
@@ -132,8 +132,8 @@ export default function TopBar() {
                           setChannelDropdownOpen(false);
                         }}
                         className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs text-left transition-colors ${
-                          activeChannel?.id === c.id 
-                            ? 'bg-elevated text-brand-red font-bold' 
+                          activeChannel?.id === c.id
+                            ? 'bg-elevated text-brand-red font-bold'
                             : 'text-text-primary hover:bg-surface-hover'
                         }`}
                       >
@@ -149,8 +149,8 @@ export default function TopBar() {
                     ))}
                   </div>
                   <div className="border-t border-border/80 p-1">
-                    <Link 
-                      to="/app/channels" 
+                    <Link
+                      to="/app/channels"
                       onClick={() => setChannelDropdownOpen(false)}
                       className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs text-text-secondary hover:text-text-primary hover:bg-surface-hover transition-colors"
                     >
@@ -164,8 +164,8 @@ export default function TopBar() {
           )}
 
           {/* Primary Quick Create CTA */}
-          <Link 
-            to="/app/create" 
+          <Link
+            to="/app/create"
             className="btn btn-primary btn-sm flex items-center gap-1.5 shadow-brand-glow"
           >
             <Icon name="plus" size={14} />
@@ -174,7 +174,7 @@ export default function TopBar() {
           </Link>
 
           {/* Settings / Profile Link */}
-          <Link 
+          <Link
             to="/app/profile"
             className="p-1.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-surface-hover transition-colors"
             title="Settings & Profile"
@@ -186,9 +186,9 @@ export default function TopBar() {
       </header>
 
       {/* Command Palette Modal */}
-      <CommandPalette 
-        isOpen={commandPaletteOpen} 
-        onClose={() => setCommandPaletteOpen(false)} 
+      <CommandPalette
+        isOpen={commandPaletteOpen}
+        onClose={() => setCommandPaletteOpen(false)}
       />
     </>
   );

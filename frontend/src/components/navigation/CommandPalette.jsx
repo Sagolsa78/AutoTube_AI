@@ -21,7 +21,7 @@ export default function CommandPalette({ isOpen, onClose }) {
   const navigate = useNavigate();
   const inputRef = useRef(null);
 
-  const filteredCommands = COMMANDS.filter(cmd => 
+  const filteredCommands = COMMANDS.filter(cmd =>
     cmd.title.toLowerCase().includes(query.toLowerCase()) ||
     cmd.subtitle.toLowerCase().includes(query.toLowerCase()) ||
     cmd.section.toLowerCase().includes(query.toLowerCase())
@@ -66,7 +66,7 @@ export default function CommandPalette({ isOpen, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center pt-20 px-4 bg-black/70 backdrop-blur-sm animate-in fade-in-50">
-      <div 
+      <div
         className="w-full max-w-xl bg-surface border border-border rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95"
         onClick={e => e.stopPropagation()}
       >

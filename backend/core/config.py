@@ -1,20 +1,25 @@
 from __future__ import annotations
+
 import os
+from pathlib import Path
 from typing import Literal, Optional
-from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
-from pydantic import field_validator, Field, AliasChoices
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
 
 class Settings(BaseSettings):
     """
     Centralized configuration for AutoTube AI.
     Loads from environment variables or .env file.
     """
+
     # ── Application ───────────────────────────────────────────────────────────
     APP_ENV: Literal["development", "production", "test"] = "development"
     APP_MODE: Literal["local", "cloud"] = "local"
     LOG_LEVEL: str = "INFO"
-    
+
     # Allowed origins for CORS (comma-separated string parsed to list in main.py)
     CORS_ORIGINS: str = "*"
     FRONTEND_URL: str = "http://localhost:5173"
@@ -32,7 +37,9 @@ class Settings(BaseSettings):
         # Normalize driver scheme for async engines
         if v.startswith("postgres://"):
             v = v.replace("postgres://", "postgresql+asyncpg://", 1)
-        elif v.startswith("postgresql://") and not v.startswith("postgresql+asyncpg://"):
+        elif v.startswith("postgresql://") and not v.startswith(
+            "postgresql+asyncpg://"
+        ):
             v = v.replace("postgresql://", "postgresql+asyncpg://", 1)
         elif v.startswith("sqlite://") and not v.startswith("sqlite+aiosqlite://"):
             v = v.replace("sqlite://", "sqlite+aiosqlite://", 1)
@@ -52,7 +59,16 @@ class Settings(BaseSettings):
                 else:
                     new_params.append((k, val))
             new_query = urlencode(new_params)
-            v = urlunparse((parsed.scheme, parsed.netloc, parsed.path, parsed.params, new_query, parsed.fragment))
+            v = urlunparse(
+                (
+                    parsed.scheme,
+                    parsed.netloc,
+                    parsed.path,
+                    parsed.params,
+                    new_query,
+                    parsed.fragment,
+                )
+            )
         return v
 
     # ── Storage ───────────────────────────────────────────────────────────────
@@ -61,7 +77,7 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("STORAGE_BACKEND", "STORAGE_PROVIDER"),
     )
     STORAGE_ROOT: str = "storage"
-    
+
     # S3 / R2 Configuration
     S3_ENDPOINT_URL: Optional[str] = None
     S3_BUCKET_NAME: str = "autoshorts-assets"
@@ -75,22 +91,24 @@ class Settings(BaseSettings):
     COMPUTE_STRATEGY: str = "local-first"
     ZERO_LAPTOP_MODE: bool = False
     RUNPOD_API_KEY: Optional[str] = None
-    
+
     # GitHub Actions (for cloud worker)
     GITHUB_TOKEN: Optional[str] = None
     GITHUB_REPOSITORY: Optional[str] = None
     WORKER_GIT_REF: str = "main"  # git ref used by GitHub Actions worker
     WORKER_SECRET: Optional[str] = None  # shared secret for worker-API authentication
-    
+
     # ── AI Providers ──────────────────────────────────────────────────────────
     # Ordered list of providers for fallback chain
     SCRIPT_PROVIDER_ORDER: str = "gemini,groq,openrouter,ollama"
-    
+
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "qwen2.5-coder:7b"
     OLLAMA_MODELS: str = "qwen2.5-coder:7b"  # comma-separated fallback list
-    OLLAMA_TIMEOUT: int = Field(default=60, validation_alias=AliasChoices("OLLAMA_TIMEOUT"))
-    
+    OLLAMA_TIMEOUT: int = Field(
+        default=60, validation_alias=AliasChoices("OLLAMA_TIMEOUT")
+    )
+
     GEMINI_API_KEY: Optional[str] = None
     GROQ_API_KEY: Optional[str] = None
     OPENROUTER_API_KEY: Optional[str] = None
@@ -98,7 +116,7 @@ class Settings(BaseSettings):
     # ── Stock Footage Providers ───────────────────────────────────────────────
     PEXELS_API_KEY: Optional[str] = None
     PIXABAY_API_KEY: Optional[str] = None
-    
+
     # ── Visual Generation ─────────────────────────────────────────────────────
     COMFYUI_URL: str = "http://127.0.0.1:8188"
 
@@ -111,18 +129,16 @@ class Settings(BaseSettings):
     # Fernet key for encrypting OAuth tokens at rest (32 url-safe base64 bytes).
     # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
     ENCRYPTION_KEY: Optional[str] = None
-    
+
     # ── Default Active AI Model ───────────────────────────────────────────────
     DEFAULT_AI_PROVIDER: str = "gemini"
     DEFAULT_AI_MODEL: str = "gemini-3.5-flash-lite"
-    
+
     # ── GitHub / Cloud Worker ─────────────────────────────────────────────────
     GITHUB_REPO: str = "Sagolsa78/AutoTube_AI"  # owner/repo for dispatch
 
     model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="ignore"
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )
 
     @property
@@ -132,8 +148,6 @@ class Settings(BaseSettings):
     @property
     def YOUTUBE_CLIENT_SECRETS(self):
         """Path to the YouTube OAuth client secrets JSON file."""
-        import os
-        from pathlib import Path
         base = Path(__file__).resolve().parent.parent.parent
         secret_file = os.getenv("YOUTUBE_CLIENT_SECRETS", "client_secret.json")
         return base / secret_file

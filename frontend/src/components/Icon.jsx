@@ -8,7 +8,7 @@ export default function Icon({ name, size = 16, className = '' }) {
       .join('') || '';
 
   let pascalName = toPascalCase(name);
-  
+
   // Custom mapping for legacy names
   const mapping = {
     'fileText': 'FileText',

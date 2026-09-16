@@ -24,16 +24,16 @@ export default function Ideas() {
       setLoading(true);
       const data = await api.getIdeas(activeChannelId);
       setIdeas((data || []).sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
-    } catch (e) { 
-      console.error(e); 
-    } finally { 
-      setLoading(false); 
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
     }
   };
 
-  useEffect(() => { 
+  useEffect(() => {
     if (activeChannelId) {
-      loadIdeas(); 
+      loadIdeas();
     } else {
       setIdeas([]);
       setLoading(false);
@@ -47,16 +47,15 @@ export default function Ideas() {
     }
     setGenerating(true);
     try {
-      const prof = await api.getProfile();
-      await api.generateIdeas(activeChannelId, 5, prof?.default_niche || 'science_wow');
+      await api.generateIdeas(activeChannelId, 5, undefined);
       await loadIdeas();
       toast.success('Generated 5 new video concepts!');
       setActiveTab('pending');
-    } catch (e) { 
-      console.error(e); 
-      toast.error(`Generation failed: ${e.message}`); 
-    } finally { 
-      setGenerating(false); 
+    } catch (e) {
+      console.error(e);
+      toast.error(`Generation failed: ${e.message}`);
+    } finally {
+      setGenerating(false);
     }
   };
 
@@ -65,9 +64,9 @@ export default function Ideas() {
       await api.discardIdea(id);
       await loadIdeas();
       toast.success('Concept discarded');
-    } catch (e) { 
-      console.error(e); 
-      toast.error(`Discard failed: ${e.message}`); 
+    } catch (e) {
+      console.error(e);
+      toast.error(`Discard failed: ${e.message}`);
     }
   };
 
@@ -139,11 +138,11 @@ export default function Ideas() {
             }
             action={
               activeTab === 'pending' && (
-                <Button 
-                  variant="primary" 
-                  size="sm" 
-                  icon="sparkles" 
-                  onClick={generate} 
+                <Button
+                  variant="primary"
+                  size="sm"
+                  icon="sparkles"
+                  onClick={generate}
                   disabled={generating}
                 >
                   Generate Concepts
@@ -156,9 +155,9 @@ export default function Ideas() {
             {filteredIdeas.map(i => {
               const isDiscarded = i.status === 'discarded';
               return (
-                <Card 
-                  key={i.id} 
-                  variant="surface" 
+                <Card
+                  key={i.id}
+                  variant="surface"
                   className={`flex flex-col justify-between ${isDiscarded ? 'opacity-60' : ''}`}
                 >
                   <div className="space-y-3">
@@ -206,19 +205,19 @@ export default function Ideas() {
                   <CardFooter className="pt-3">
                     {i.status === 'pending' && (
                       <div className="flex items-center gap-2 w-full">
-                        <Button 
-                          variant="primary" 
-                          size="sm" 
-                          icon="sparkles" 
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          icon="sparkles"
                           className="flex-1 shadow-brand-glow"
                           onClick={() => developInStudio(i.id)}
                         >
                           Develop in Studio
                         </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          icon="trash" 
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          icon="trash"
                           className="hover:text-danger"
                           onClick={() => actionDiscard(i.id)}
                           title="Discard concept"
@@ -227,10 +226,10 @@ export default function Ideas() {
                     )}
 
                     {i.status === 'promoted' && (
-                      <Button 
-                        variant="secondary" 
-                        size="sm" 
-                        icon="film" 
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        icon="film"
                         className="w-full"
                         onClick={() => developInStudio(i.id)}
                       >

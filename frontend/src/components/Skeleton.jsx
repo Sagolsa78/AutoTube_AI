@@ -6,7 +6,7 @@ import React from 'react';
  */
 export default function Skeleton({ className = '', height = '1rem', width = '100%', rounded = 'rounded-md' }) {
   return (
-    <div 
+    <div
       className={`bg-elevated animate-pulse ${rounded} ${className}`}
       style={{ height, width }}
     />

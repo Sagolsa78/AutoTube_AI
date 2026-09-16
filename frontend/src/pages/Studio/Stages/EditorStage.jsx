@@ -113,10 +113,10 @@ export default function EditorStage({ idea, script, setScript, editingScenes, se
   // Debounce the save effect whenever editingScenes changes deeply
   useEffect(() => {
     if (!script || editingScenes.length === 0) return;
-    
+
     // Clear previous timeout
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-    
+
     // Set new timeout (debounced by 1.5 seconds)
     saveTimeoutRef.current = setTimeout(() => {
       saveSceneEdits(editingScenes);
@@ -150,7 +150,7 @@ export default function EditorStage({ idea, script, setScript, editingScenes, se
     if (!modalScene) return;
     try {
       const res = await api.assignAssetToScene(modalScene.id, assetData);
-      
+
       setEditingScenes(prev => prev.map(s => {
         if (s.id === modalScene.id) {
           return {
@@ -177,7 +177,7 @@ export default function EditorStage({ idea, script, setScript, editingScenes, se
     const scene = editingScenes[sceneIdx];
     const mode = scene.preferred_visual_mode;
     if (!['GENERATED_IMAGE', 'GENERATED_VIDEO'].includes(mode)) return;
-    
+
     const prompt = scene.generation_prompt || scene.visual_description || idea?.topic || "beautiful scenery";
     const mappedMode = mode === 'GENERATED_IMAGE' ? 'IMAGE' : 'VIDEO';
 
@@ -195,7 +195,7 @@ export default function EditorStage({ idea, script, setScript, editingScenes, se
             clearInterval(checkInterval);
             setGeneratingAsset(null);
             toast.success('Asset generated successfully!');
-            
+
             const updatedScenes = [...editingScenes];
             updatedScenes[sceneIdx] = {
               ...updatedScenes[sceneIdx],
@@ -208,14 +208,14 @@ export default function EditorStage({ idea, script, setScript, editingScenes, se
               asset_id: jobRes.result.asset_id
             };
             setEditingScenes(updatedScenes);
-            
+
             await api.assignAssetToScene(scene.id, {
                 source_asset_id: `comfy_${jobId}`,
                 source: 'comfyui',
                 url: jobRes.result.url,
                 thumbnail_url: jobRes.result.thumbnail_url
             });
-            
+
           } else if (jobRes.status === 'failed') {
             clearInterval(checkInterval);
             setGeneratingAsset(null);
@@ -305,9 +305,9 @@ export default function EditorStage({ idea, script, setScript, editingScenes, se
           <div className="grid grid-cols-2 gap-4 text-left max-w-sm mx-auto bg-elevated p-4 rounded-xl border border-border">
             <div>
               <label className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1.5">Language</label>
-              <select 
+              <select
                 className="w-full bg-surface-input border border-border rounded-lg px-2.5 py-1.5 text-xs text-text-primary focus:border-brand-red focus:outline-none"
-                value={language} 
+                value={language}
                 onChange={e => setLanguage(e.target.value)}
               >
                 <option value="en">English</option>
@@ -318,9 +318,9 @@ export default function EditorStage({ idea, script, setScript, editingScenes, se
             </div>
             <div>
               <label className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1.5">Dialect</label>
-              <select 
+              <select
                 className="w-full bg-surface-input border border-border rounded-lg px-2.5 py-1.5 text-xs text-text-primary focus:border-brand-red focus:outline-none"
-                value={locale} 
+                value={locale}
                 onChange={e => setLocale(e.target.value)}
               >
                 <option value="US">US</option>
@@ -331,11 +331,11 @@ export default function EditorStage({ idea, script, setScript, editingScenes, se
             </div>
           </div>
 
-          <Button 
-            variant="primary" 
-            size="md" 
-            icon={generating ? 'loader' : 'zap'} 
-            onClick={generateScript} 
+          <Button
+            variant="primary"
+            size="md"
+            icon={generating ? 'loader' : 'zap'}
+            onClick={generateScript}
             disabled={generating}
             loading={generating}
             className="w-full max-w-xs mx-auto shadow-brand-glow"
@@ -346,7 +346,7 @@ export default function EditorStage({ idea, script, setScript, editingScenes, se
       ) : (
         // Split Pane Workspace
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start flex-1 min-h-[600px]">
-          
+
           {/* LEFT PANE: Script Editing (5 cols) */}
           <div className="lg:col-span-5 flex flex-col h-full max-h-[80vh] overflow-hidden bg-surface border border-border rounded-xl">
              <div className="p-3 border-b border-border bg-elevated/50 flex justify-between items-center shrink-0">
@@ -357,12 +357,12 @@ export default function EditorStage({ idea, script, setScript, editingScenes, se
                     Autosave ON
                 </span>
              </div>
-             
+
              <div className="overflow-y-auto hide-scrollbar flex-1 p-3 space-y-3">
                  {editingScenes.map((sc, idx) => {
                      const isActive = idx === activeSceneIdx;
                      return (
-                         <div 
+                         <div
                             key={sc.id || idx}
                             onClick={() => setActiveSceneIdx(idx)}
                             className={`p-3 rounded-xl border transition-all cursor-pointer ${isActive ? 'border-brand-red bg-elevated shadow-md' : 'border-border bg-surface hover:border-border-strong'}`}
@@ -375,7 +375,7 @@ export default function EditorStage({ idea, script, setScript, editingScenes, se
                                     <Icon name="check-circle" size={12} className="text-success" />
                                 )}
                              </div>
-                             
+
                              <textarea
                                 className="w-full bg-surface-input border border-border rounded-lg p-2 text-sm text-text-primary focus:border-brand-red focus:outline-none min-h-[80px] resize-y font-sans mb-2"
                                 placeholder="Voiceover narration..."
@@ -383,8 +383,8 @@ export default function EditorStage({ idea, script, setScript, editingScenes, se
                                 onChange={e => updateScene(idx, 'narration', e.target.value)}
                                 onClick={e => e.stopPropagation()} // prevent double triggers if needed
                              />
-                             
-                             <input 
+
+                             <input
                                 type="text"
                                 className="w-full bg-transparent border-none p-0 text-xs text-text-muted focus:outline-none focus:text-text-primary placeholder:text-text-muted/50"
                                 placeholder="Visual description prompt..."
@@ -409,16 +409,16 @@ export default function EditorStage({ idea, script, setScript, editingScenes, se
                               Visual Inspector (Scene {activeScene.scene_number})
                           </span>
                       </div>
-                      
+
                       <div className="flex flex-col md:flex-row flex-1 p-6 gap-8 items-start">
-                          
+
                           {/* 9:16 Canvas Preview */}
                           <div className="w-full md:w-[280px] bg-black aspect-[9/16] relative flex items-center justify-center shrink-0 border border-border group select-none rounded-xl overflow-hidden shadow-2xl mx-auto">
                             {activeScene.asset?.thumbnail_url ? (
-                                <img 
-                                src={activeScene.asset.thumbnail_url} 
-                                alt={`Scene ${activeScene.scene_number}`} 
-                                className="w-full h-full object-cover" 
+                                <img
+                                src={activeScene.asset.thumbnail_url}
+                                alt={`Scene ${activeScene.scene_number}`}
+                                className="w-full h-full object-cover"
                                 />
                             ) : (
                                 <div className="flex flex-col items-center gap-2 text-text-muted">
@@ -429,16 +429,16 @@ export default function EditorStage({ idea, script, setScript, editingScenes, se
 
                             {/* Replace Overlay */}
                             <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-xs">
-                                <Button 
-                                variant="primary" 
-                                size="sm" 
-                                icon="search" 
+                                <Button
+                                variant="primary"
+                                size="sm"
+                                icon="search"
                                 onClick={() => openAssetModal(activeScene)}
                                 >
                                 Search Assets
                                 </Button>
                             </div>
-                            
+
                             {activeScene.duration_est && (
                                 <div className="absolute bottom-3 right-3 bg-black/80 backdrop-blur-sm text-white px-2 py-0.5 rounded text-[10px] font-mono border border-border/50">
                                     ~{Math.round(activeScene.duration_est)}s
@@ -448,7 +448,7 @@ export default function EditorStage({ idea, script, setScript, editingScenes, se
 
                           {/* Scene Visual Controls */}
                           <div className="flex-1 space-y-6 w-full">
-                            
+
                             <div>
                                 <label className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1.5">
                                 Visual Intent (AI Generated)
@@ -458,7 +458,7 @@ export default function EditorStage({ idea, script, setScript, editingScenes, se
                                     <span className="leading-relaxed">{activeScene.visual_intent || "No intent generated."}</span>
                                 </div>
                             </div>
-                            
+
                             <div className="space-y-3">
                                 <div>
                                     <label className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1.5">
@@ -491,10 +491,10 @@ export default function EditorStage({ idea, script, setScript, editingScenes, se
                                             }}
                                         />
                                         {['GENERATED_VIDEO', 'GENERATED_IMAGE'].includes(activeScene.preferred_visual_mode) ? (
-                                            <Button 
-                                                variant="primary" 
-                                                size="sm" 
-                                                icon={generatingAsset?.sceneIdx === activeSceneIdx ? "loader" : "zap"} 
+                                            <Button
+                                                variant="primary"
+                                                size="sm"
+                                                icon={generatingAsset?.sceneIdx === activeSceneIdx ? "loader" : "zap"}
                                                 disabled={generatingAsset?.sceneIdx === activeSceneIdx}
                                                 className={generatingAsset?.sceneIdx === activeSceneIdx ? "animate-pulse" : ""}
                                                 onClick={() => generateAssetForScene(activeSceneIdx)}
@@ -502,10 +502,10 @@ export default function EditorStage({ idea, script, setScript, editingScenes, se
                                                 {generatingAsset?.sceneIdx === activeSceneIdx ? "Generating..." : "Generate"}
                                             </Button>
                                         ) : (
-                                            <Button 
-                                                variant="secondary" 
-                                                size="sm" 
-                                                icon="search" 
+                                            <Button
+                                                variant="secondary"
+                                                size="sm"
+                                                icon="search"
                                                 onClick={() => openAssetModal(activeScene)}
                                             >
                                                 Find
@@ -513,7 +513,7 @@ export default function EditorStage({ idea, script, setScript, editingScenes, se
                                         )}
                                     </div>
                                 </div>
-                                
+
                                 <div className="pt-4 mt-4 border-t border-border">
                                     <label className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1.5">
                                     Current Source
@@ -549,17 +549,17 @@ export default function EditorStage({ idea, script, setScript, editingScenes, se
 
       {/* Asset Picker Modal */}
       {modalScene && (
-        <div 
+        <div
           className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in"
           onClick={() => setModalScene(null)}
         >
-          <div 
+          <div
             className="bg-surface border border-border rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden"
             onClick={e => e.stopPropagation()}
           >
             <div className="px-4 py-3 border-b border-border flex items-center gap-3 bg-elevated">
               <Icon name="search" size={16} className="text-text-muted" />
-              <input 
+              <input
                 type="text"
                 autoFocus
                 className="flex-1 bg-transparent border-none outline-none text-text-primary text-sm placeholder:text-text-muted"
@@ -574,7 +574,7 @@ export default function EditorStage({ idea, script, setScript, editingScenes, se
                 <Icon name="x" size={18} />
               </button>
             </div>
-            
+
             <div className="flex-1 overflow-y-auto p-4 hide-scrollbar">
               {searching ? (
                 <div className="flex flex-col items-center justify-center h-40 gap-3 text-text-muted">
@@ -584,24 +584,24 @@ export default function EditorStage({ idea, script, setScript, editingScenes, se
               ) : searchResults.length > 0 ? (
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                   {searchResults.map((res, i) => (
-                    <div 
+                    <div
                       key={i}
                       onClick={() => selectAssetForScene(res)}
                       className="group relative aspect-[9/16] bg-elevated rounded-xl overflow-hidden border-2 border-transparent hover:border-brand-red cursor-pointer transition-all hover:-translate-y-1 hover:shadow-brand-glow"
                     >
                       <img src={res.thumbnail_url} alt="Stock" className="w-full h-full object-cover" />
-                      
+
                       {res.type === 'video' && (
                         <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-sm text-white p-1.5 rounded-full shadow-sm">
                           <Icon name="video" size={12} />
                         </div>
                       )}
-                      
+
                       <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent p-2 pt-6 opacity-0 group-hover:opacity-100 transition-opacity text-left">
                         <p className="text-[10px] font-bold text-white line-clamp-1">{res.source}</p>
                         {res.photographer && <p className="text-[9px] text-gray-300 truncate">By {res.photographer}</p>}
                       </div>
-                      
+
                       <div className="absolute inset-0 bg-brand-red/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
                         <div className="bg-brand-red text-white w-8 h-8 rounded-full flex items-center justify-center shadow-lg transform scale-50 group-hover:scale-100 transition-transform duration-200">
                           <Icon name="check" size={16} />

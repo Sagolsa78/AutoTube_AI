@@ -3,17 +3,19 @@
 MANUAL TEST — Script Generator
 Run: python manual_tests/test_script.py "Why do cats purr?" kids_facts
 """
-import sys
 import json
 import os
+import sys
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 # pyrefly: ignore [missing-import]
 from dotenv import load_dotenv
+
 load_dotenv()
 
-from engine.script.generator import generate_script
 from engine.quality.checker import check_script
+from engine.script.generator import generate_script
 
 
 def main():
@@ -31,7 +33,7 @@ def main():
     print(f"\n✅ Generated via: {script['provider_used']}")
     print(f"\n📌 HOOK:\n   {script['hook']}")
     print(f"\n📝 BODY:")
-    for i, line in enumerate(script['body'], 1):
+    for i, line in enumerate(script["body"], 1):
         print(f"   {i}. {line}")
     print(f"\n🎯 PAYOFF:\n   {script['payoff']}")
     print(f"\n📣 CTA:\n   {script['cta']}")
@@ -58,7 +60,14 @@ def main():
     out_file = f"manual_tests/output_script_{niche}.json"
     os.makedirs("manual_tests", exist_ok=True)
     with open(out_file, "w") as f:
-        json.dump({"script": script, "quality": {"score": report.score, "issues": report.issues}}, f, indent=2)
+        json.dump(
+            {
+                "script": script,
+                "quality": {"score": report.score, "issues": report.issues},
+            },
+            f,
+            indent=2,
+        )
     print(f"\n💾 Saved → {out_file}")
 
 

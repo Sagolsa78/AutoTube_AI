@@ -159,4 +159,8 @@ export const api = {
   getYoutubeAuthUrl: () => request('/youtube/auth'),
   getYoutubeStatus: () => request('/youtube/status'),
   disconnectYoutube: () => request('/youtube/disconnect', { method: 'DELETE' }),
+
+  // ── Costs ─────────────────────────────────────────
+  getCostSummary: () => request('/costs/summary'),
+  getJobCosts: (jobId) => request(`/costs/jobs/${jobId}`),
 };

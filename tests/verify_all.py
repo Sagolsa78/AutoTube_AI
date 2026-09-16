@@ -2,13 +2,17 @@
 Direct End-to-End Verification Runner for AutoTube AI Overhaul.
 Runs tests in a clean, unified event loop.
 """
+
 import asyncio
 import uuid
-from httpx import AsyncClient, ASGITransport
+
+from httpx import ASGITransport, AsyncClient
+
+from backend.db.database import engine, init_db
 from backend.main import app
-from backend.db.database import init_db, engine
-from integrations.providers.ai_providers import get_available_models
 from backend.youtube import youtube_client
+from integrations.providers.ai_providers import get_available_models
+
 
 async def main():
     print("==================================================")
@@ -19,8 +23,13 @@ async def main():
     print("\n[1/5] Checking Database Initialization & Schema...")
     await init_db()
     from sqlalchemy import text
+
     async with engine.begin() as conn:
-        res = await conn.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name = 'users';"))
+        res = await conn.execute(
+            text(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = 'users';"
+            )
+        )
         cols = [r[0] for r in res.fetchall()]
         print(f"Users columns in database: {cols}")
         assert "password_hash" in cols, "password_hash column missing!"
@@ -33,7 +42,9 @@ async def main():
     models_info = get_available_models()
     assert "ollama" in models_info
     assert "gemini" in models_info
-    print(f"Ollama Local Status: available={models_info['ollama']['available']}, models={models_info['ollama']['models']}")
+    print(
+        f"Ollama Local Status: available={models_info['ollama']['available']}, models={models_info['ollama']['models']}"
+    )
     print(f"Gemini Cloud Status: available={models_info['gemini']['available']}")
     print("✔ [2/5] AI Model Detection working correctly.")
 
@@ -47,13 +58,16 @@ async def main():
 
         # Register
         print(f"Registering new user: {test_email}...")
-        reg_res = await ac.post("/api/auth/register", json={
-            "email": test_email,
-            "password": test_pass,
-            "display_name": f"Alex {uid}",
-            "channel_name": f"Science Lab {uid}",
-            "niche": "science_wow"
-        })
+        reg_res = await ac.post(
+            "/api/auth/register",
+            json={
+                "email": test_email,
+                "password": test_pass,
+                "display_name": f"Alex {uid}",
+                "channel_name": f"Science Lab {uid}",
+                "niche": "science_wow",
+            },
+        )
         assert reg_res.status_code == 201, f"Registration failed: {reg_res.text}"
         reg_data = reg_res.json()
         token = reg_data["access_token"]
@@ -76,20 +90,20 @@ async def main():
         print("✔ /api/auth/models verified.")
 
         # Update AI Preference to qwen2.5-coder:7b
-        patch_res = await ac.patch("/api/auth/ai-settings", json={
-            "provider": "ollama",
-            "model": "qwen2.5-coder:7b"
-        }, headers=headers)
+        patch_res = await ac.patch(
+            "/api/auth/ai-settings",
+            json={"provider": "ollama", "model": "qwen2.5-coder:7b"},
+            headers=headers,
+        )
         assert patch_res.status_code == 200
         assert patch_res.json()["preferred_ai_model"] == "qwen2.5-coder:7b"
         print("✔ /api/auth/ai-settings preference persisted.")
 
         # Login
         print("Logging in with newly created credentials...")
-        login_res = await ac.post("/api/auth/login", json={
-            "email": test_email,
-            "password": test_pass
-        })
+        login_res = await ac.post(
+            "/api/auth/login", json={"email": test_email, "password": test_pass}
+        )
         assert login_res.status_code == 200
         login_token = login_res.json()["access_token"]
         assert login_token
@@ -110,6 +124,7 @@ async def main():
     # 5. Review & Approval YouTube Workflow Verification
     print("\n[5/5] Checking Video Approval State Machine...")
     from backend.models.models import VideoStatus
+
     assert VideoStatus.ready == "ready"
     assert VideoStatus.approved == "approved"
     assert VideoStatus.uploaded == "uploaded"
@@ -118,6 +133,7 @@ async def main():
     print("\n==================================================")
     print("🎉 ALL 5 VERIFICATION SUITES PASSED PERFECTLY!")
     print("==================================================")
+
 
 if __name__ == "__main__":
     asyncio.run(main())

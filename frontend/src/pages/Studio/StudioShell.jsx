@@ -34,7 +34,7 @@ export default function StudioShell() {
   const [selectedIdea, setSelectedIdea] = useState(null);
   const [script, setScript] = useState(null);
   const [editingScenes, setEditingScenes] = useState([]);
-  
+
   const [selectedStyle, setSelectedStyle] = useState('fast_facts');
   const [selectedCaption, setSelectedCaption] = useState('bold_centered');
   const [selectedVoice, setSelectedVoice] = useState('en-US-ChristopherNeural');
@@ -113,18 +113,18 @@ export default function StudioShell() {
                   onClick={() => isSelectable && setStage(s.id)}
                   disabled={!isSelectable}
                   className={`flex items-center gap-2.5 py-1.5 px-3 rounded-lg transition-all text-left shrink-0 select-none ${
-                    isActive 
-                      ? 'bg-elevated border border-border-strong text-text-primary' 
+                    isActive
+                      ? 'bg-elevated border border-border-strong text-text-primary'
                       : isPast
-                        ? 'text-text-primary hover:bg-surface-hover' 
+                        ? 'text-text-primary hover:bg-surface-hover'
                         : 'text-text-muted opacity-50 cursor-not-allowed'
                   }`}
                 >
                   <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-mono font-bold transition-all ${
-                    isActive 
-                      ? 'bg-brand-red text-white shadow-brand-glow' 
-                      : isPast 
-                        ? 'bg-success/20 text-success' 
+                    isActive
+                      ? 'bg-brand-red text-white shadow-brand-glow'
+                      : isPast
+                        ? 'bg-success/20 text-success'
                         : 'bg-elevated border border-border text-text-muted'
                   }`}>
                     {isPast ? '✓' : s.step}
@@ -142,8 +142,8 @@ export default function StudioShell() {
             })}
 
             {/* Active AI Model Pill */}
-            <Link 
-              to="/app/profile" 
+            <Link
+              to="/app/profile"
               title="Configure AI models in Settings"
               className="hidden sm:flex items-center gap-2 py-1 px-2.5 rounded-lg bg-surface border border-border hover:border-brand-red text-xs transition-colors shrink-0 ml-auto select-none"
             >
@@ -161,20 +161,20 @@ export default function StudioShell() {
       <div className="py-6">
         <GridContainer>
           {stage === 'brief' && (
-            <BriefStage 
-              selectedIdea={selectedIdea} 
-              setSelectedIdea={setSelectedIdea} 
-              onNext={() => setStage('editor')} 
+            <BriefStage
+              selectedIdea={selectedIdea}
+              setSelectedIdea={setSelectedIdea}
+              onNext={() => setStage('editor')}
             />
           )}
 
           {stage === 'editor' && (
-            <EditorStage 
+            <EditorStage
               idea={selectedIdea}
               script={script}
-              setScript={(s) => { 
-                setScript(s); 
-                setEditingScenes(s.scenes?.map(sc => ({ ...sc })) || []); 
+              setScript={(s) => {
+                setScript(s);
+                setEditingScenes(s.scenes?.map(sc => ({ ...sc })) || []);
               }}
               editingScenes={editingScenes}
               setEditingScenes={setEditingScenes}
@@ -184,7 +184,7 @@ export default function StudioShell() {
           )}
 
           {stage === 'render' && (
-            <RenderStage 
+            <RenderStage
               script={script}
               captionStyles={captionStyles}
               selectedStyle={selectedStyle}

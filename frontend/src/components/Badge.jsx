@@ -1,15 +1,15 @@
 import React from 'react';
 
-export default function Badge({ 
-  children, 
-  variant = 'default', 
-  className = '', 
-  style = {} 
+export default function Badge({
+  children,
+  variant = 'default',
+  className = '',
+  style = {}
 }) {
   const variantClass = variant !== 'default' ? `badge-${variant}` : '';
-  
+
   return (
-    <span 
+    <span
       className={`badge ${variantClass} ${className}`}
       style={style}
     >
