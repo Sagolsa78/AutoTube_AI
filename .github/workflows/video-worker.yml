@@ -83,14 +83,15 @@ jobs:
           print("Configuration validation passed.")
           PY
 
-      - name: Check FFmpeg
+      - name: Check FFmpeg and Fonts
         run: |
+          sudo apt-get update
+          sudo apt-get install -y fonts-liberation fonts-noto
           if command -v ffmpeg >/dev/null 2>&1; then
             echo "FFmpeg already available"
             ffmpeg -version | head -n 1
           else
             echo "FFmpeg not found. Installing..."
-            sudo apt-get update
             sudo apt-get install -y ffmpeg
             ffmpeg -version | head -n 1
           fi

@@ -30,9 +30,10 @@ class S3StorageBackend(StorageBackend):
 
     async def put_file(self, local_path: str | Path, remote_key: str) -> str:
         local_path = Path(local_path)
+        content_type = 'video/mp4' if str(local_path).endswith('.mp4') else 'application/octet-stream'
         try:
             async with self.session.client('s3', endpoint_url=self.endpoint_url, config=self.s3_config) as s3:
-                await s3.upload_file(str(local_path), self.bucket, remote_key)
+                await s3.upload_file(str(local_path), self.bucket, remote_key, ExtraArgs={'ContentType': content_type})
         except Exception as err:
             log.warning(
                 f"s3.upload_file failed ({err}). Falling back to single-part s3.put_object for {remote_key}..."
@@ -40,7 +41,7 @@ class S3StorageBackend(StorageBackend):
             with open(local_path, "rb") as f:
                 file_bytes = f.read()
             async with self.session.client('s3', endpoint_url=self.endpoint_url, config=self.s3_config) as s3:
-                await s3.put_object(Bucket=self.bucket, Key=remote_key, Body=file_bytes)
+                await s3.put_object(Bucket=self.bucket, Key=remote_key, Body=file_bytes, ContentType=content_type)
         
         log.info(f"Uploaded {local_path} to s3://{self.bucket}/{remote_key}")
             

@@ -64,7 +64,9 @@ export default function JobCenterDropdown() {
 
       {/* Dropdown Panel */}
       {isOpen && (
-        <div className="absolute right-0 sm:right-0 mt-2 w-[calc(100vw-32px)] sm:w-96 max-w-[380px] -mr-2 sm:mr-0 bg-surface border border-border rounded-xl shadow-dropdown py-2 z-50 animate-in fade-in-50 zoom-in-95">
+        <>
+          <div className="fixed inset-0 z-40 sm:hidden" onClick={() => setIsOpen(false)} />
+          <div className="fixed inset-x-4 top-[70px] sm:absolute sm:inset-auto sm:right-0 sm:top-full sm:mt-2 w-auto sm:w-96 max-w-full sm:max-w-[380px] bg-surface border border-border rounded-xl shadow-dropdown py-2 z-50 animate-in fade-in-50 zoom-in-95">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-2 border-b border-border/80">
             <div className="flex items-center gap-2">
@@ -192,7 +194,8 @@ export default function JobCenterDropdown() {
               Cluster Health →
             </Link>
           </div>
-        </div>
+          </div>
+        </>
       )}
     </div>
   );
