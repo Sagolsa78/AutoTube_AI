@@ -607,40 +607,48 @@ export default function Videos({ filter }) {
                 }
               />
               <CardContent>
-                <div className="flex gap-3 overflow-x-auto pb-3 snap-x hide-scrollbar">
+                <div className="flex gap-3 overflow-x-auto pb-4 snap-x hide-scrollbar px-1">
                   {videos.map((v) => {
                     const isActive = v.id === activeVideoId;
                     return (
                       <div
                         key={v.id}
                         onClick={() => setActiveVideoId(v.id)}
-                        className={`relative shrink-0 w-24 sm:w-28 aspect-[9/16] rounded-xl overflow-hidden cursor-pointer snap-start transition-all border-2 select-none ${
+                        className={`relative shrink-0 w-24 sm:w-28 aspect-[9/16] rounded-xl overflow-hidden cursor-pointer snap-start transition-all duration-300 border-2 select-none group ${
                           isActive 
                             ? 'border-brand-red scale-105 shadow-brand-glow z-10' 
-                            : 'border-border/80 opacity-70 hover:opacity-100 hover:border-border-strong'
+                            : 'border-border/80 opacity-70 hover:opacity-100 hover:border-brand-red/50 hover:shadow-lg'
                         }`}
                       >
                         {/* Poster / Preview representation */}
-                        <div className="absolute inset-0 bg-elevated flex items-center justify-center">
+                        <div className="absolute inset-0 bg-gradient-to-br from-surface to-elevated flex items-center justify-center">
                           {['rendering', 'paused'].includes(v.status) ? (
-                            <Icon name="loader" size={20} className="text-warning animate-spin" />
+                            <div className="flex flex-col items-center gap-2">
+                              <Icon name="loader" size={24} className="text-warning animate-spin" />
+                              <span className="text-[9px] font-bold text-warning uppercase tracking-wider">{Math.round(v.render_progress || 0)}%</span>
+                            </div>
                           ) : (
-                            <Icon name="video" size={22} className={isActive ? 'text-brand-red' : 'text-text-muted'} />
+                            <Icon name="play-circle" size={32} className={`transition-transform duration-300 group-hover:scale-110 ${isActive ? 'text-brand-red drop-shadow-[0_0_8px_rgba(255,51,102,0.6)]' : 'text-text-muted group-hover:text-text-primary'}`} />
                           )}
                         </div>
 
+                        {/* Top Gradient Overlay */}
+                        <div className="absolute inset-x-0 top-0 bg-gradient-to-b from-black/60 to-transparent h-10 pointer-events-none" />
+
                         {/* Bottom Tag */}
-                        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 to-transparent p-2 flex items-center justify-between">
-                          <span className="text-[10px] font-mono font-bold text-white">
-                            {v.id.substring(0, 4)}
-                          </span>
-                          <span className={`w-2 h-2 rounded-full ${
-                            v.status === 'ready' ? 'bg-success' :
-                            v.status === 'rendering' ? 'bg-warning animate-pulse' :
-                            v.status === 'paused' ? 'bg-warning' :
-                            v.status === 'cancelled' ? 'bg-danger' :
-                            v.status === 'uploaded' ? 'bg-info' : 'bg-text-muted'
-                          }`} />
+                        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent p-2 pt-6 flex flex-col items-center justify-end gap-1">
+                          <div className="flex items-center justify-between w-full">
+                            <span className="text-[10px] font-mono font-bold text-white/90 truncate">
+                              #{v.id.substring(0, 4)}
+                            </span>
+                            <span className={`w-2 h-2 rounded-full shadow-sm ${
+                              v.status === 'ready' ? 'bg-success shadow-success/50' :
+                              v.status === 'rendering' ? 'bg-warning animate-pulse shadow-warning/50' :
+                              v.status === 'paused' ? 'bg-warning shadow-warning/50' :
+                              v.status === 'cancelled' ? 'bg-danger shadow-danger/50' :
+                              v.status === 'uploaded' ? 'bg-info shadow-info/50' : 'bg-text-muted'
+                            }`} />
+                          </div>
                         </div>
                       </div>
                     );
