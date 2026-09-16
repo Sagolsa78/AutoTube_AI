@@ -1,16 +1,18 @@
-import os
 import logging
-from fastapi import APIRouter, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
-from backend.db.database import get_db
-from backend.models.models import Video, Publication, Analytics, Script, Idea, User
-from backend.auth.dependencies import get_current_user
-from backend.youtube import youtube_client
+import os
 
+from fastapi import APIRouter, Depends
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from backend.auth.dependencies import get_current_user
+from backend.db.database import get_db
+from backend.models.models import Analytics, Idea, Publication, Script, User, Video
+from backend.youtube import youtube_client
+
 router = APIRouter()
+
 
 def get_dir_size(path: str) -> float:
     """Calculate directory size in Megabytes (MB)."""
@@ -24,13 +26,15 @@ def get_dir_size(path: str) -> float:
                 total_bytes += os.path.getsize(fp)
     return round(total_bytes / (1024 * 1024), 2)
 
+
 log = logging.getLogger(__name__)
+
 
 @router.get("/")
 async def get_dashboard_analytics(
     channel_id: str | None = None,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Returns aggregated analytics for the dashboard and analytics view.
@@ -42,17 +46,26 @@ async def get_dashboard_analytics(
     yt_channel_data = await youtube_client.fetch_channel_analytics(user_id)
 
     # Total uploaded videos & publications for this tenant
-    pub_q = select(Publication).where(Publication.status == "live", Publication.user_id == user_id)
+    pub_q = select(Publication).where(
+        Publication.status == "live", Publication.user_id == user_id
+    )
     if channel_id:
-        pub_q = pub_q.join(Video, Publication.video_id == Video.id).join(Script, Video.script_id == Script.id).join(Idea, Script.idea_id == Idea.id).where(Idea.channel_id == channel_id)
+        pub_q = (
+            pub_q.join(Video, Publication.video_id == Video.id)
+            .join(Script, Video.script_id == Script.id)
+            .join(Idea, Script.idea_id == Idea.id)
+            .where(Idea.channel_id == channel_id)
+        )
     pubs = (await db.execute(pub_q)).scalars().all()
-    
+
     total_views = 0
     total_subs = 0
     total_likes = 0
 
     for pub in pubs:
-        an_q = select(Analytics).where(Analytics.video_id == pub.video_id, Analytics.user_id == user_id)
+        an_q = select(Analytics).where(
+            Analytics.video_id == pub.video_id, Analytics.user_id == user_id
+        )
         an = (await db.execute(an_q)).scalars().first()
         if an:
             total_views += an.views
@@ -62,25 +75,35 @@ async def get_dashboard_analytics(
     # Video & Content counts for this tenant
     total_videos_q = select(func.count(Video.id)).where(Video.user_id == user_id)
     if channel_id:
-        total_videos_q = total_videos_q.join(Script, Video.script_id == Script.id).join(Idea, Script.idea_id == Idea.id).where(Idea.channel_id == channel_id)
+        total_videos_q = (
+            total_videos_q.join(Script, Video.script_id == Script.id)
+            .join(Idea, Script.idea_id == Idea.id)
+            .where(Idea.channel_id == channel_id)
+        )
     total_videos_res = await db.execute(total_videos_q)
     total_videos = total_videos_res.scalar() or 0
 
-    total_ideas_res = await db.execute(select(func.count(Idea.id)).where(Idea.user_id == user_id))
+    total_ideas_res = await db.execute(
+        select(func.count(Idea.id)).where(Idea.user_id == user_id)
+    )
     total_ideas = total_ideas_res.scalar() or 0
 
     # Disk usage telemetry (MB)
     from backend.core.config import settings
+
     if settings.STORAGE_BACKEND in ["s3", "r2"]:
         try:
             from backend.storage import get_storage
+
             storage = get_storage()
             total_bytes = 0
-            async with storage.session.client('s3', endpoint_url=storage.endpoint_url, config=storage.s3_config) as s3:
-                paginator = s3.get_paginator('list_objects_v2')
+            async with storage.session.client(
+                "s3", endpoint_url=storage.endpoint_url, config=storage.s3_config
+            ) as s3:
+                paginator = s3.get_paginator("list_objects_v2")
                 async for page in paginator.paginate(Bucket=storage.bucket):
-                    for obj in page.get('Contents', []):
-                        total_bytes += obj.get('Size', 0)
+                    for obj in page.get("Contents", []):
+                        total_bytes += obj.get("Size", 0)
             total_storage_mb = round(total_bytes / (1024 * 1024), 2)
             output_dir_size = total_storage_mb
             temp_dir_size = 0.0
@@ -91,13 +114,21 @@ async def get_dashboard_analytics(
             total_storage_mb = 0.0
     else:
         output_dir_size = get_dir_size("output")
-        temp_dir_size = get_dir_size("temp") + get_dir_size("audio") + get_dir_size("visuals")
+        temp_dir_size = (
+            get_dir_size("temp") + get_dir_size("audio") + get_dir_size("visuals")
+        )
         total_storage_mb = round(output_dir_size + temp_dir_size, 2)
 
     # Niche / Topic performance mock or aggregated
-    topic_q = select(Idea.topic, func.count(Idea.id)).group_by(Idea.topic)
+    topic_q = (
+        select(Idea.topic, func.count(Idea.id))
+        .where(Idea.user_id == user_id)
+        .group_by(Idea.topic)
+    )
     niche_counts = (await db.execute(topic_q)).all()
-    niche_breakdown = [{"niche": n[0] or "General", "count": n[1]} for n in niche_counts]
+    niche_breakdown = [
+        {"niche": n[0] or "General", "count": n[1]} for n in niche_counts
+    ]
 
     # Return real aggregate numbers (zero mock fallback)
     real_views = total_views + int(yt_channel_data.get("views_90d", 0))
@@ -110,20 +141,20 @@ async def get_dashboard_analytics(
             "current_views": real_views,
             "views_target": 10000000,
             "current_subs": real_subs,
-            "subs_target": 1000
+            "subs_target": 1000,
         },
         "performance": {
             "total_views": real_views,
             "total_subs": real_subs,
             "total_likes": total_likes,
             "total_videos": total_videos,
-            "total_ideas": total_ideas
+            "total_ideas": total_ideas,
         },
         "storage": {
             "output_mb": output_dir_size,
             "temp_mb": temp_dir_size,
             "total_mb": total_storage_mb,
-            "limit_mb": 50000
+            "limit_mb": 50000,
         },
         "niche_distribution": niche_breakdown,
         "view_velocity_7d": [
@@ -134,39 +165,52 @@ async def get_dashboard_analytics(
             {"day": "Fri", "views": round(total_views * 0.22)},
             {"day": "Sat", "views": round(total_views * 0.13)},
             {"day": "Sun", "views": round(total_views * 0.10)},
-        ]
+        ],
     }
+
 
 @router.get("/summary/top-videos")
 async def get_top_videos(
     channel_id: str | None = None,
     limit: int = 5,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Returns the top performing videos based on views/likes.
     """
     q = select(Analytics).where(Analytics.user_id == user.id)
     if channel_id:
-        q = q.join(Video, Analytics.video_id == Video.id).join(Script, Video.script_id == Script.id).join(Idea, Script.idea_id == Idea.id).where(Idea.channel_id == channel_id)
-    q = q.order_by(Analytics.views.desc()).limit(limit).options(
-        selectinload(Analytics.video).selectinload(Video.publication)
+        q = (
+            q.join(Video, Analytics.video_id == Video.id)
+            .join(Script, Video.script_id == Script.id)
+            .join(Idea, Script.idea_id == Idea.id)
+            .where(Idea.channel_id == channel_id)
+        )
+    q = (
+        q.order_by(Analytics.views.desc())
+        .limit(limit)
+        .options(selectinload(Analytics.video).selectinload(Video.publication))
     )
     results = await db.execute(q)
     top_analytics = results.scalars().all()
-    
+
     # Format the response to match what frontend expects
-    return [{
-        "id": a.video_id,
-        "title": a.video.selected_title or "Untitled Video",
-        "views": a.views,
-        "likes": a.likes,
-        "comments": a.comments,
-        "thumbnail": None
-    } for a in top_analytics]
+    return [
+        {
+            "id": a.video_id,
+            "title": a.video.selected_title or "Untitled Video",
+            "views": a.views,
+            "likes": a.likes,
+            "comments": a.comments,
+            "thumbnail": None,
+        }
+        for a in top_analytics
+    ]
+
 
 import shutil
+
 
 @router.post("/cleanup")
 async def cleanup_storage():
@@ -181,9 +225,10 @@ async def cleanup_storage():
             size = get_dir_size(path)
             freed_mb += size
             shutil.rmtree(path)
-            os.makedirs(path) # Recreate empty dir
-            
+            os.makedirs(path)  # Recreate empty dir
+
     return {"message": "Cleanup complete", "freed_mb": round(freed_mb, 2)}
+
 
 @router.get("/logs")
 async def get_system_logs(lines: int = 100):
@@ -193,8 +238,8 @@ async def get_system_logs(lines: int = 100):
     log_file = "app.log"
     if not os.path.exists(log_file):
         return {"logs": ["No log file found."]}
-        
+
     with open(log_file, "r") as f:
         all_lines = f.readlines()
-        
+
     return {"logs": all_lines[-lines:]}

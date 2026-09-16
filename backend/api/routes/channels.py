@@ -1,23 +1,24 @@
 """
 Channels router — CRUD for YouTube channels tracked in the system.
 """
+
 from __future__ import annotations
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.db.database import get_db
-from backend.models.models import Channel
 from backend.auth.dependencies import get_current_user
-from backend.models.models import User
+from backend.db.database import get_db
+from backend.models.models import Channel, User
 
 router = APIRouter()
 
 
 class ChannelCreate(BaseModel):
-    name:     str
-    niche:    str
+    name: str
+    niche: str
     language: str = "en"
     default_cta: str | None = None
     caption_style: str | None = None
@@ -34,8 +35,8 @@ class ChannelCreate(BaseModel):
 
 
 class ChannelUpdate(BaseModel):
-    name:     str | None = None
-    niche:    str | None = None
+    name: str | None = None
+    niche: str | None = None
     language: str | None = None
     default_cta: str | None = None
     caption_style: str | None = None
@@ -52,10 +53,10 @@ class ChannelUpdate(BaseModel):
 
 
 class ChannelOut(BaseModel):
-    id:        str
-    name:      str
-    niche:     str
-    language:  str
+    id: str
+    name: str
+    niche: str
+    language: str
     default_cta: str
     caption_style: str
     watermark_enabled: bool
@@ -76,8 +77,7 @@ class ChannelOut(BaseModel):
 
 @router.get("/", response_model=list[ChannelOut])
 async def list_channels(
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
     q = select(Channel).where(Channel.user_id == user.id)
     result = await db.execute(q)
@@ -88,13 +88,10 @@ async def list_channels(
 async def create_channel(
     body: ChannelCreate,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     channel_data = body.model_dump(exclude_unset=True)
-    channel = Channel(
-        user_id=user.id,
-        **channel_data
-    )
+    channel = Channel(user_id=user.id, **channel_data)
     db.add(channel)
     await db.flush()
     return _fmt(channel)
@@ -104,10 +101,12 @@ async def create_channel(
 async def get_channel(
     channel_id: str,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
-    channel = await db.get(Channel, channel_id)
-    if not channel or channel.user_id != user.id:
+    channel = await db.scalar(
+        select(Channel).where(Channel.id == channel_id, Channel.user_id == user.id)
+    )
+    if not channel:
         raise HTTPException(404, "Channel not found")
     return _fmt(channel)
 
@@ -117,10 +116,12 @@ async def update_channel(
     channel_id: str,
     body: ChannelUpdate,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
-    channel = await db.get(Channel, channel_id)
-    if not channel or channel.user_id != user.id:
+    channel = await db.scalar(
+        select(Channel).where(Channel.id == channel_id, Channel.user_id == user.id)
+    )
+    if not channel:
         raise HTTPException(404, "Channel not found")
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(channel, field, value)
@@ -132,31 +133,35 @@ async def update_channel(
 async def delete_channel(
     channel_id: str,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
-    channel = await db.get(Channel, channel_id)
-    if not channel or channel.user_id != user.id:
+    channel = await db.scalar(
+        select(Channel).where(Channel.id == channel_id, Channel.user_id == user.id)
+    )
+    if not channel:
         raise HTTPException(404, "Channel not found")
     await db.delete(channel)
 
 
 def _fmt(c: Channel) -> dict:
     return {
-        "id":         c.id,
-        "name":       c.name,
-        "niche":      c.niche,
-        "language":   c.language,
-        "default_cta":       c.default_cta or "Follow for more!",
-        "caption_style":     c.caption_style or "bold_centered",
-        "watermark_enabled": c.watermark_enabled if c.watermark_enabled is not None else True,
+        "id": c.id,
+        "name": c.name,
+        "niche": c.niche,
+        "language": c.language,
+        "default_cta": c.default_cta or "Follow for more!",
+        "caption_style": c.caption_style or "bold_centered",
+        "watermark_enabled": (
+            c.watermark_enabled if c.watermark_enabled is not None else True
+        ),
         "watermark_opacity": c.watermark_opacity or 0.4,
         "watermark_position": c.watermark_position or "bottom_right",
-        "watermark_scale":   c.watermark_scale or 0.12,
-        "default_voice_id":  c.default_voice_id or "en-US-ChristopherNeural",
-        "content_tone":      c.content_tone or "casual",
-        "niche_keywords":    c.niche_keywords or [],
+        "watermark_scale": c.watermark_scale or 0.12,
+        "default_voice_id": c.default_voice_id or "en-US-ChristopherNeural",
+        "content_tone": c.content_tone or "casual",
+        "niche_keywords": c.niche_keywords or [],
         "title_style_preference": c.title_style_preference or "curiosity",
-        "hashtag_set":       c.hashtag_set or ["shorts", "viral"],
-        "auto_approve":      c.auto_approve if c.auto_approve is not None else False,
+        "hashtag_set": c.hashtag_set or ["shorts", "viral"],
+        "auto_approve": c.auto_approve if c.auto_approve is not None else False,
         "created_at": str(c.created_at),
     }

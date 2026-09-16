@@ -4,7 +4,7 @@
 
 - **Dark & Cinematic**: Deep canvas backgrounds (`#0A0B0D`) paired with structured surface layers (`#111318`, `#171A20`) and subtle slate borders (`#262A32`).
 - **Restrained Brand Red Accent**: `#E6392F` used for key brand anchors and primary call-to-actions, never overused for decorative noise.
-- **Typography**: 
+- **Typography**:
   - Primary UI & Body: `Manrope` / `Inter`
   - Code / Telemetry / Metrics: `JetBrains Mono`
 - **Focus & Accessibility**: Visible ring focus states (`focus-visible:ring-2 ring-brand-red`), full keyboard accessibility for navigation & Command Palette (`Cmd/Ctrl + K`).

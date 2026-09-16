@@ -77,8 +77,8 @@ export default function JobDetail() {
       <GridContainer>
         <div className="text-center py-20 space-y-4">
           <Icon name="alert-triangle" size={40} className="text-warning mx-auto" />
-          <h2 className="text-xl font-bold text-text-primary">Render Job Not Found</h2>
-          <p className="text-xs text-text-muted">The requested video render job could not be found or has been removed.</p>
+          <h2 className="text-xl font-bold text-text-primary">Production Not Found</h2>
+          <p className="text-xs text-text-muted">The requested video production could not be found or has been removed.</p>
           <Link to="/app/videos">
             <Button variant="secondary" icon="arrow-left">Back to Video Library</Button>
           </Link>
@@ -105,9 +105,9 @@ export default function JobDetail() {
   return (
     <GridContainer>
       <div className="space-y-6">
-        <PageHeader 
-          title={video.selected_title || video.title_candidates?.[0] || `Render Job #${id.substring(0, 8)}`}
-          description="Real-time pipeline execution tracking and component telemetry."
+        <PageHeader
+          title={video.selected_title || video.title_candidates?.[0] || 'Production Tracking'}
+          description="Track the real-time status of your video production."
           badge={<StatusBadge status={status || video.status} />}
           actions={
             <div className="flex items-center gap-2">
@@ -132,11 +132,11 @@ export default function JobDetail() {
 
         {/* ── 2. Detailed Execution Grid ───────────────────────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          
+
           {/* Main Execution Card (2 cols) */}
           <div className="lg:col-span-2 space-y-6">
             <Card variant="surface">
-              <CardHeader 
+              <CardHeader
                 title={
                   <CardTitle icon={<Icon name="cpu" className="text-brand-red" size={16} />}>
                     Stage Execution Progress
@@ -149,15 +149,15 @@ export default function JobDetail() {
                 }
               />
               <CardContent className="space-y-6">
-                
+
                 {/* Progress Bar */}
                 <div className="space-y-2">
                   <div className="w-full bg-canvas rounded-full h-3 overflow-hidden border border-border/60">
-                    <div 
+                    <div
                       className={`h-full rounded-full transition-all duration-500 ${
                         status === 'failed' ? 'bg-danger' : isDone ? 'bg-success' : 'bg-warning'
                       }`}
-                      style={{ width: `${Math.max(5, Math.min(100, currentProgress))}%` }} 
+                      style={{ width: `${Math.max(5, Math.min(100, currentProgress))}%` }}
                     />
                   </div>
                   <div className="flex justify-between items-center text-xs">
@@ -169,10 +169,10 @@ export default function JobDetail() {
                 {/* Stage Steps Grid */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
                   {[
-                    { id: 'tts', label: '1. Voiceover (TTS)', desc: 'Edge-TTS synthesis' },
-                    { id: 'visuals', label: '2. Visuals & Clips', desc: 'Pexels / ComfyUI' },
-                    { id: 'assembly', label: '3. Video Assembly', desc: 'FFmpeg 9:16 Mux' },
-                    { id: 'metadata', label: '4. Subtitles & SEO', desc: 'Ass Captions & Tags' }
+                    { id: 'tts', label: '1. Voiceover', desc: 'Synthesizing AI Voice' },
+                    { id: 'visuals', label: '2. Visuals', desc: 'Generating stock & AI clips' },
+                    { id: 'assembly', label: '3. Assembly', desc: 'Creating final video' },
+                    { id: 'metadata', label: '4. Polishing', desc: 'Adding subtitles and SEO' }
                   ].map((st, i) => {
                     const stages = ['tts', 'visuals', 'assembly', 'metadata'];
                     const currentIdx = currentStage === 'done' ? stages.length : stages.indexOf(currentStage);
@@ -180,13 +180,13 @@ export default function JobDetail() {
                     const isActive = i === currentIdx;
 
                     return (
-                      <div 
+                      <div
                         key={st.id}
                         className={`p-3 rounded-xl border text-xs flex flex-col justify-between gap-2 ${
-                          isPast 
-                            ? 'bg-success/10 border-success/30 text-success' 
-                            : isActive 
-                              ? 'bg-warning/10 border-warning/30 text-warning animate-pulse' 
+                          isPast
+                            ? 'bg-success/10 border-success/30 text-success'
+                            : isActive
+                              ? 'bg-warning/10 border-warning/30 text-warning animate-pulse'
                               : 'bg-elevated border-border text-text-muted'
                         }`}
                       >
@@ -204,13 +204,13 @@ export default function JobDetail() {
                 {status === 'failed' && (
                   <div className="p-4 bg-danger/10 border border-danger/30 rounded-xl space-y-3 animate-in fade-in">
                     <h4 className="text-danger font-bold flex items-center gap-2 text-sm">
-                      <Icon name="alert-triangle" size={16} /> Render Execution Failure
+                      <Icon name="alert-triangle" size={16} /> Production Halted
                     </h4>
                     <p className="font-mono text-xs text-text-secondary whitespace-pre-wrap bg-surface p-3 rounded border border-border">
-                      {progData.notes || 'Pipeline execution failed during video synthesis.'}
+                      {progData.notes || 'An error occurred during video production.'}
                     </p>
                     <Button variant="primary" size="sm" icon="refresh-cw" onClick={handleRetry}>
-                      Retry Render Pipeline
+                      Retry Production
                     </Button>
                   </div>
                 )}
@@ -221,17 +221,17 @@ export default function JobDetail() {
           {/* Metadata Sidebar Card (1 col) */}
           <div className="space-y-6">
             <Card variant="surface">
-              <CardHeader 
+              <CardHeader
                 title={
                   <CardTitle icon={<Icon name="info" className="text-text-muted" size={16} />}>
                     Job Specifications
                   </CardTitle>
-                } 
+                }
               />
               <CardContent className="space-y-3 text-xs">
                 <div className="flex justify-between py-1.5 border-b border-border/50">
-                  <span className="text-text-muted">Video ID</span>
-                  <span className="font-mono font-bold text-text-primary">{id.substring(0, 8)}</span>
+                  <span className="text-text-muted">Target Platform</span>
+                  <span className="font-mono font-bold text-text-primary">YouTube Shorts</span>
                 </div>
                 <div className="flex justify-between py-1.5 border-b border-border/50">
                   <span className="text-text-muted">Created</span>

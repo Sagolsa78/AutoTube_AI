@@ -11,7 +11,7 @@ AutoShorts Studio is a professional-grade, faceless YouTube Shorts automation pi
 
 - **$0 Billing Mode:** Fully operational using local LLMs (via Ollama) and free-tier APIs (Google Gemini, Groq, OpenRouter, Pexels, Edge TTS).
 - **Multi-Tenant Cloud Ready:** Fully migrated to an Async PostgreSQL database with JWT-based Authentication, enabling public beta hosting where users can securely connect their own YouTube channels.
-- **Durable Background Workers:** Separate `worker` daemon orchestrates the heavy FFmpeg rendering pipeline asynchronously, allowing the API to remain fast and scalable. 
+- **Durable Background Workers:** Separate `worker` daemon orchestrates the heavy FFmpeg rendering pipeline asynchronously, allowing the API to remain fast and scalable.
 - **Premium UI/UX:** A bespoke, enterprise-grade React dashboard built on "Pro Max" design principles (glassmorphism, accessible keyboard navigation, dynamic SVG iconography).
 - **Dynamic Caption Engine:** 7 highly polished burnt-in subtitle styles (e.g., Neon Glow, Karaoke Pop, Minimalist) using advanced FFmpeg ASS filtergraphs.
 - **Intelligent Video Assembly:** Automatically normalizes color/exposure across fetched stock clips and applies smooth 0.3s crossfades for professional-feeling cuts.
@@ -94,7 +94,7 @@ To enable direct multi-tenant uploading:
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduct, development process, and pull request guidelines. 
+We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduct, development process, and pull request guidelines.
 
 1. Fork the Project
 2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)

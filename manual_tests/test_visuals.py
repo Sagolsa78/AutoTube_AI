@@ -5,12 +5,14 @@ Run: python manual_tests/test_visuals.py "cat" "kitten" "butterfly"
 
 Queries can be passed as CLI arguments (space-separated).
 """
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 # pyrefly: ignore [missing-import]
 from dotenv import load_dotenv
+
 load_dotenv()
 
 from engine.visuals.fetcher import fetch_clips

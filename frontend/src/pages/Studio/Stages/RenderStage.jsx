@@ -6,11 +6,11 @@ import Button from '../../../components/Button';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
-export default function RenderStage({ 
-  script, 
-  captionStyles, 
-  selectedStyle, setSelectedStyle, 
-  selectedCaption, setSelectedCaption, 
+export default function RenderStage({
+  script,
+  captionStyles,
+  selectedStyle, setSelectedStyle,
+  selectedCaption, setSelectedCaption,
   selectedVoice, setSelectedVoice,
   onBack
 }) {
@@ -115,18 +115,18 @@ export default function RenderStage({
             </p>
           </div>
           <div className="space-y-3 pt-2">
-            <Button 
-              variant="primary" 
-              size="md" 
-              icon="play" 
+            <Button
+              variant="primary"
+              size="md"
+              icon="play"
               className="w-full shadow-brand-glow"
               onClick={() => navigate('/app/videos')}
             >
               Open in Review Queue
             </Button>
-            <Button 
-              variant="secondary" 
-              size="sm" 
+            <Button
+              variant="secondary"
+              size="sm"
               className="w-full"
               onClick={() => navigate('/app/create')}
             >
@@ -153,7 +153,7 @@ export default function RenderStage({
         {/* Progress Bar */}
         <div className="space-y-2">
           <div className="w-full bg-elevated rounded-full h-2.5 overflow-hidden">
-            <div 
+            <div
               className="bg-brand-red h-full rounded-full transition-all duration-500 ease-out"
               style={{ width: `${Math.min(100, Math.max(5, renderProgress?.progress || 10))}%` }}
             />
@@ -206,12 +206,12 @@ export default function RenderStage({
           <Button variant="ghost" size="sm" icon="arrow-left" onClick={onBack}>
             Back
           </Button>
-          <Button 
-            variant="primary" 
-            size="sm" 
-            icon="play" 
+          <Button
+            variant="primary"
+            size="sm"
+            icon="play"
             className="shadow-brand-glow"
-            onClick={startRender} 
+            onClick={startRender}
             disabled={!script}
           >
             Start Render Pipeline
@@ -220,7 +220,7 @@ export default function RenderStage({
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        
+
         {/* Visual Styling */}
         <Card variant="surface">
           <CardHeader

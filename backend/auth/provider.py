@@ -1,23 +1,26 @@
-import os
 import logging
+import os
 from typing import Optional
-from fastapi import Request, HTTPException
+
 import jwt
+from fastapi import HTTPException, Request
 
 log = logging.getLogger(__name__)
+
 
 class AuthProvider:
     """
     Authentication provider that verifies standard JWT tokens (e.g. Supabase, Firebase)
     and static API keys.
     """
-    
+
     def __init__(self, disabled: bool = False, api_key: str = None):
         self.disabled = disabled
         self.api_key = api_key
-        # Supabase and standard providers use HS256 or RS256. 
+        # Supabase and standard providers use HS256 or RS256.
         # Configure this via env variables.
         from backend.core.config import settings
+
         self.jwt_secret = getattr(settings, "JWT_SECRET", None)
         self.jwt_algorithm = getattr(settings, "JWT_ALGORITHM", "HS256")
 
@@ -77,10 +80,10 @@ class AuthProvider:
             try:
                 if self.jwt_secret:
                     payload = jwt.decode(
-                        token, 
-                        self.jwt_secret, 
+                        token,
+                        self.jwt_secret,
                         algorithms=[self.jwt_algorithm],
-                        options={"verify_aud": False}
+                        options={"verify_aud": False},
                     )
                 else:
                     # No jwt_secret configured: cannot verify signature.
@@ -91,7 +94,7 @@ class AuthProvider:
                         "Rejecting token."
                     )
                     return None
-                
+
                 user_id = payload.get("sub")
                 if user_id:
                     return payload
@@ -100,4 +103,3 @@ class AuthProvider:
                 return None
 
         return None
-

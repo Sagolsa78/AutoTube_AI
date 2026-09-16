@@ -75,24 +75,24 @@ This guide details how to deploy AutoTube AI to production in a robust, scalable
    S3_BUCKET_NAME=autoshorts-assets
    S3_ACCESS_KEY_ID=<your-r2-access-key>
    S3_SECRET_ACCESS_KEY=<your-r2-secret-key>
-   
+
    # Database (Neon Postgres)
    DATABASE_URL=postgresql+asyncpg://neondb_owner:<password>@ep-xxx-pooler.us-east-2.aws.neon.tech/neondb?ssl=require
-   
+
    # AI Providers
    DEFAULT_AI_PROVIDER=gemini
    DEFAULT_AI_MODEL=gemini-2.5-flash
    SCRIPT_PROVIDER_ORDER=gemini,groq,openrouter
    GEMINI_API_KEY=<your-gemini-key>
-   
+
    # Stock Footage
    PEXELS_API_KEY=<your-pexels-key>
-   
+
    # Security & Multi-User JWT
    AUTH_DISABLED=false
    JWT_SECRET=<generate-a-random-64-char-secret>
    JWT_ALGORITHM=HS256
-   
+
    # CORS (Allow your frontend domain)
    CORS_ORIGINS=https://your-frontend.vercel.app,http://localhost:5173
    ```

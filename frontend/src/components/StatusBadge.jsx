@@ -5,11 +5,11 @@ import Icon from './Icon';
  * StatusBadge Component
  * WCAG AA compliant status indicators: ALWAYS text + icon + color (Section 11 & 22)
  */
-export default function StatusBadge({ 
-  status = 'pending', 
-  label = null, 
+export default function StatusBadge({
+  status = 'pending',
+  label = null,
   size = 'md',
-  className = '' 
+  className = ''
 }) {
   const normalized = (status || '').toLowerCase().trim();
 
@@ -108,10 +108,10 @@ export default function StatusBadge({
 
   return (
     <span className={`badge ${config.classes} ${size === 'sm' ? 'text-[10px] px-1.5 py-0.5' : ''} ${className}`}>
-      <Icon 
-        name={config.icon} 
-        size={iconSize} 
-        className={config.spin ? 'animate-spin' : ''} 
+      <Icon
+        name={config.icon}
+        size={iconSize}
+        className={config.spin ? 'animate-spin' : ''}
       />
       <span>{displayText}</span>
     </span>

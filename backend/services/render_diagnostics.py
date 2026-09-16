@@ -1,14 +1,16 @@
 import os
-import shutil
 import platform
+import shutil
 import subprocess
+
 from backend.services.media.encoder import select_video_encoder
+
 
 def get_diagnostics() -> dict:
     """Return diagnostic data about the render environment."""
     ffmpeg_path = shutil.which("ffmpeg")
     ffprobe_path = shutil.which("ffprobe")
-    
+
     ffmpeg_version = "unknown"
     if ffmpeg_path:
         try:
@@ -18,7 +20,7 @@ def get_diagnostics() -> dict:
             pass
 
     encoder, _ = select_video_encoder()
-    
+
     total, used, free = shutil.disk_usage("/")
 
     return {
@@ -32,11 +34,11 @@ def get_diagnostics() -> dict:
         },
         "encoder": {
             "selected": encoder,
-            "preference": os.getenv("VIDEO_ENCODER", "auto")
+            "preference": os.getenv("VIDEO_ENCODER", "auto"),
         },
         "disk": {
             "total_gb": round(total / (1024**3), 2),
             "free_gb": round(free / (1024**3), 2),
-            "used_gb": round(used / (1024**3), 2)
-        }
+            "used_gb": round(used / (1024**3), 2),
+        },
     }

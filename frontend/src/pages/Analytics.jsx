@@ -160,7 +160,7 @@ export default function Analytics() {
 
         {/* ── Mid Row: YPP Goal Progress & Storage Breakdown ────────────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
-          
+
           {/* YPP Monetization Tracker (8 cols) */}
           <div className="lg:col-span-8 flex">
             <Card variant="surface" className="flex-1 flex flex-col justify-between">
@@ -186,7 +186,7 @@ export default function Analytics() {
                     </span>
                   </div>
                   <div className="w-full bg-elevated rounded-full h-3 overflow-hidden border border-border/60">
-                    <div 
+                    <div
                       className="bg-brand-red h-full rounded-full transition-all duration-700"
                       style={{ width: `${subsPct}%` }}
                     />
@@ -205,7 +205,7 @@ export default function Analytics() {
                     </span>
                   </div>
                   <div className="w-full bg-elevated rounded-full h-3 overflow-hidden border border-border/60">
-                    <div 
+                    <div
                       className="bg-info h-full rounded-full transition-all duration-700"
                       style={{ width: `${viewsPct}%` }}
                     />
@@ -235,7 +235,7 @@ export default function Analytics() {
                     <span className="font-mono font-bold text-text-primary">{data?.storage?.output_mb || 0} MB</span>
                   </div>
                   <div className="w-full bg-elevated rounded-full h-2 overflow-hidden">
-                    <div 
+                    <div
                       className="bg-brand-red h-full rounded-full"
                       style={{ width: `${Math.min(100, (((data?.storage?.output_mb || 0) / storageLimit) * 100))}%` }}
                     />
@@ -248,7 +248,7 @@ export default function Analytics() {
                     <span className="font-mono font-bold text-text-primary">{data?.storage?.temp_mb || 0} MB</span>
                   </div>
                   <div className="w-full bg-elevated rounded-full h-2 overflow-hidden">
-                    <div 
+                    <div
                       className="bg-warning h-full rounded-full"
                       style={{ width: `${Math.min(100, (((data?.storage?.temp_mb || 0) / storageLimit) * 100))}%` }}
                     />
@@ -267,7 +267,7 @@ export default function Analytics() {
 
         {/* ── Bottom Row: Velocity & Niche Distribution ─────────────────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          
+
           {/* 7-Day View Velocity Bar Chart (6 cols) */}
           <div className="lg:col-span-6">
             <Card variant="surface" className="h-full">
@@ -288,7 +288,7 @@ export default function Analytics() {
                           {v.views.toLocaleString()}
                         </span>
                         <div className="flex-1 w-full flex items-end justify-center">
-                          <div 
+                          <div
                             className="w-4/5 sm:w-1/2 bg-brand-red/80 group-hover:bg-brand-red rounded-t-sm transition-all duration-300 min-h-[4px]"
                             style={{ height: `${heightPct}%` }}
                           />
@@ -327,7 +327,7 @@ export default function Analytics() {
                         <span className="font-mono text-text-secondary">{nb.count} ideas</span>
                       </div>
                       <div className="w-full bg-elevated rounded-full h-2 overflow-hidden">
-                        <div 
+                        <div
                           className="bg-brand-red h-full rounded-full"
                           style={{ width: `${Math.min(100, (nb.count / (data?.total_ideas || 1)) * 100)}%` }}
                         />

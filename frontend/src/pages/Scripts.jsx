@@ -26,16 +26,16 @@ export default function Scripts() {
       setLoading(true);
       const allScripts = await api.getScripts(activeChannelId);
       setScripts((allScripts || []).sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
-    } catch (e) { 
-      console.error(e); 
-    } finally { 
-      setLoading(false); 
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
     }
   };
 
-  useEffect(() => { 
+  useEffect(() => {
       if (activeChannelId) {
-          loadData(); 
+          loadData();
       } else {
           setScripts([]);
           setLoading(false);
@@ -48,8 +48,8 @@ export default function Scripts() {
       await api.discardScript(id);
       await loadData();
       toast.success('Script discarded');
-    } catch (e) { 
-      toast.error(`Discard failed: ${e.message}`); 
+    } catch (e) {
+      toast.error(`Discard failed: ${e.message}`);
     }
   };
 
@@ -60,10 +60,10 @@ export default function Scripts() {
       await api.regenerateScript(id);
       await loadData();
       toast.success('Script regenerated successfully!');
-    } catch (e) { 
-      toast.error(`Regeneration failed: ${e.message}`); 
-    } finally { 
-      setRegenerating(null); 
+    } catch (e) {
+      toast.error(`Regeneration failed: ${e.message}`);
+    } finally {
+      setRegenerating(null);
     }
   };
 
@@ -132,10 +132,10 @@ export default function Scripts() {
             }
             action={
               activeTab === 'draft' && (
-                <Button 
-                  variant="primary" 
-                  size="sm" 
-                  icon="sparkles" 
+                <Button
+                  variant="primary"
+                  size="sm"
+                  icon="sparkles"
                   onClick={() => navigate('/app/ideas')}
                 >
                   Browse Concepts
@@ -148,9 +148,9 @@ export default function Scripts() {
             {filteredScripts.map(s => {
               const isDiscarded = s.status === 'discarded';
               return (
-                <Card 
-                  key={s.id} 
-                  variant="surface" 
+                <Card
+                  key={s.id}
+                  variant="surface"
                   className={`overflow-hidden p-0 flex flex-col md:flex-row transition-all ${
                     isDiscarded ? 'opacity-60' : 'hover:border-border-strong'
                   }`}
@@ -235,7 +235,7 @@ export default function Scripts() {
                       <span className="text-[10px] font-bold uppercase tracking-widest text-text-muted block">
                         Script Excerpt & Scenes
                       </span>
-                      
+
                       {s.scenes?.length > 0 ? (
                         <div className="space-y-2.5">
                           {s.scenes.slice(0, 4).map(sc => (

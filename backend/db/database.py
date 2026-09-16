@@ -1,12 +1,15 @@
 """
 Async database engine + session factory.
 """
+
 import asyncio
 import logging
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+
 from sqlalchemy.exc import OperationalError
-from backend.models.models import Base
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
 from backend.core.config import settings
+from backend.models.models import Base
 
 log = logging.getLogger(__name__)
 
@@ -18,18 +21,22 @@ engine_kwargs = {
 
 # Add pool settings for PostgreSQL
 if "postgresql" in settings.DATABASE_URL:
-    engine_kwargs.update({
-        "pool_size": settings.DB_POOL_SIZE,
-        "max_overflow": settings.DB_MAX_OVERFLOW,
-        "pool_pre_ping": True,           # verify connections before use
-        "pool_recycle": 180,             # recycle connections every 3 min (Neon sleeps)
-        "pool_timeout": 30,              # wait up to 30s for a pool connection
-    })
+    engine_kwargs.update(
+        {
+            "pool_size": settings.DB_POOL_SIZE,
+            "max_overflow": settings.DB_MAX_OVERFLOW,
+            "pool_pre_ping": True,  # verify connections before use
+            "pool_recycle": 180,  # recycle connections every 3 min (Neon sleeps)
+            "pool_timeout": 30,  # wait up to 30s for a pool connection
+        }
+    )
     if "-pooler" in settings.DATABASE_URL or "pooler" in settings.DATABASE_URL:
         engine_kwargs["connect_args"] = {"statement_cache_size": 0}
 
 engine = create_async_engine(settings.DATABASE_URL, **engine_kwargs)
-AsyncSessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+AsyncSessionLocal = async_sessionmaker(
+    engine, class_=AsyncSession, expire_on_commit=False
+)
 
 
 async def init_db():
@@ -41,6 +48,7 @@ async def init_db():
     log.info("Checking database connectivity...")
     try:
         from sqlalchemy import text
+
         async with engine.begin() as conn:
             # Verify connection is alive
             await conn.execute(text("SELECT 1"))
@@ -65,17 +73,27 @@ async def get_db():
             return  # success — exit retry loop
         except OperationalError as exc:
             err_str = str(exc).lower()
-            is_transient = any(k in err_str for k in (
-                "name resolution", "could not connect", "connection refused",
-                "connection reset", "ssl", "timeout", "temporary failure"
-            ))
+            is_transient = any(
+                k in err_str
+                for k in (
+                    "name resolution",
+                    "could not connect",
+                    "connection refused",
+                    "connection reset",
+                    "ssl",
+                    "timeout",
+                    "temporary failure",
+                )
+            )
             if is_transient and attempt < max_retries:
-                wait = 2 ** attempt  # 2s, 4s
+                wait = 2**attempt  # 2s, 4s
                 log.warning(
                     "DB connection transient error (attempt %d/%d), retrying in %ds: %s",
-                    attempt, max_retries, wait, exc
+                    attempt,
+                    max_retries,
+                    wait,
+                    exc,
                 )
                 await asyncio.sleep(wait)
                 continue
             raise  # non-transient or exhausted retries
-

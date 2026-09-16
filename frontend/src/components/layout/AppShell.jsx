@@ -18,12 +18,11 @@ const publishNav = [
 
 const insightsNav = [
   { to: '/app/analytics', label: 'Analytics', icon: 'barChart' },
+  { to: '/app/costs', label: 'Costs', icon: 'dollarSign' },
 ];
 
 const systemNav = [
   { to: '/app/channels', label: 'Channels', icon: 'hash' },
-  { to: '/app/logs', label: 'Activity Logs', icon: 'activity' },
-  { to: '/app/health', label: 'System Health', icon: 'heart' },
   { to: '/app/profile', label: 'Settings', icon: 'settings' },
 ];
 
@@ -46,8 +45,8 @@ function NavItem({ to, label, icon, primary, collapsed }) {
       title={collapsed ? label : undefined}
       className={`flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-all select-none ${
         active
-          ? (primary 
-              ? 'bg-brand-red text-white shadow-brand-glow' 
+          ? (primary
+              ? 'bg-brand-red text-white shadow-brand-glow'
               : 'bg-elevated text-text-primary border border-border')
           : (primary
               ? 'text-brand-red hover:bg-brand-red/10 border border-brand-red/20'
@@ -102,7 +101,7 @@ export default function AppShell() {
   return (
     <div className="min-h-screen bg-canvas text-text-primary flex flex-col md:flex-row antialiased">
       {/* ── Desktop Sidebar ─────── */}
-      <aside 
+      <aside
         className={`hidden md:flex flex-col shrink-0 sticky top-0 h-screen bg-surface border-r border-border z-40 select-none transition-all duration-300 ${
           collapsed ? 'w-[68px]' : 'w-[230px]'
         }`}
@@ -219,18 +218,18 @@ export default function AppShell() {
       </div>
 
       {/* ── Mobile Bottom Navigation Bar (<= 768px only) ─────────── */}
-      <nav 
+      <nav
         className="mobile-only md:hidden fixed bottom-0 inset-x-0 bg-surface/95 backdrop-blur-lg border-t border-border z-50 flex items-center justify-around h-[60px] safe-area-bottom select-none shadow-dropdown"
         aria-label="Mobile Navigation"
       >
         {mobileNav.map(n => {
           const path = loc.pathname.replace(/\/$/, '');
           const active = n.to === '/app' ? path === '/app' : path.startsWith(n.to);
-          
+
           if (n.isCenter) {
             return (
-              <Link 
-                key={n.to} 
+              <Link
+                key={n.to}
                 to={n.to}
                 className="flex flex-col items-center justify-center -mt-4 group"
               >
@@ -245,8 +244,8 @@ export default function AppShell() {
           }
 
           return (
-            <Link 
-              key={n.to} 
+            <Link
+              key={n.to}
               to={n.to}
               className={`flex flex-col items-center justify-center w-16 h-full space-y-1 transition-colors relative ${
                 active ? 'text-brand-red' : 'text-text-muted hover:text-text-secondary'

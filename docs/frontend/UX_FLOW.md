@@ -13,7 +13,7 @@ sequenceDiagram
     participant Frontend as AutoTube Frontend
     participant Backend as AutoTube API
     participant DB as PostgreSQL
-    
+
     Creator->>Frontend: Register / Login (/register)
     Frontend->>Backend: POST /api/auth/register
     Backend->>DB: Create User + Default Channel
@@ -50,7 +50,7 @@ sequenceDiagram
     participant API as Backend Control Plane
     participant Worker as Compute Worker (Local/Cloud)
     participant Header as Global Job Center
-    
+
     Creator->>Studio: Click "Generate Video"
     Studio->>API: POST /api/videos/render
     API->>API: Create Video + Job in DB

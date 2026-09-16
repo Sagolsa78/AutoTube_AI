@@ -2,8 +2,11 @@
 Script generator — builds a structured script from a topic + niche config.
 Outputs a canonical StorySpec using StoryPlanner.
 """
+
 from __future__ import annotations
+
 import logging
+
 from engine.story.planner import StoryPlanner
 
 log = logging.getLogger(__name__)
@@ -29,7 +32,6 @@ Rules:
 - scene_number must be sequential starting at 1.
 - preferred_visual_mode should generally be "STOCK" unless something is impossible to find.
 """,
-
     "science_wow": """You are a scriptwriter for a science YouTube Shorts channel targeting curious adults and teens.
 
 Write a punchy, mind-blowing script about: {topic}
@@ -46,7 +48,6 @@ Rules:
 - scene_number must be sequential starting at 1.
 - preferred_visual_mode should generally be "STOCK".
 """,
-
     "tech_mysteries": """You are a scriptwriter for a technology mysteries YouTube Shorts channel.
 
 Write a sharp, intelligent script about: {topic}
@@ -67,28 +68,29 @@ Rules:
 
 _DEFAULT_PROMPT = _PROMPTS["science_wow"]
 
+
 def generate_script(
     topic: str,
     niche: str = "science_wow",
     language: str = "en",
     provider: str | None = None,
-    model: str | None = None
+    model: str | None = None,
 ) -> tuple:
     """
     Generate a structured script for the given topic.
-    Returns (story_spec, provider_used).
+    Returns (story_spec, provider_used, cost_data).
     """
     template = _PROMPTS.get(niche, _DEFAULT_PROMPT)
     if language != "en":
         template += f"\n- MUST write the script entirely in language code: {language}\n"
-        
+
     planner = StoryPlanner(max_retries=2)
-    
-    story_spec, provider_used = planner.generate_story(
+
+    story_spec, provider_used, cost_data = planner.generate_story(
         topic=topic,
         prompt_template=template,
         preferred_provider=provider,
-        preferred_model=model
+        preferred_model=model,
     )
-    
-    return story_spec, provider_used
+
+    return story_spec, provider_used, cost_data

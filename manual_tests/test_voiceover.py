@@ -5,16 +5,18 @@ Run: python manual_tests/test_voiceover.py [optional: path to script JSON]
 
 If no JSON path is given, uses a hardcoded sample script.
 """
-import sys
 import json
 import os
+import sys
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 # pyrefly: ignore [missing-import]
 from dotenv import load_dotenv
+
 load_dotenv()
 
-from engine.tts.voiceover import generate_voiceover, NICHE_VOICES
+from engine.tts.voiceover import NICHE_VOICES, generate_voiceover
 
 SAMPLE_SCRIPT = {
     "full_text": (
@@ -35,14 +37,14 @@ def main():
     if len(sys.argv) > 1 and os.path.exists(sys.argv[1]):
         with open(sys.argv[1]) as f:
             data = json.load(f)
-        text  = data.get("script", {}).get("full_text", SAMPLE_SCRIPT["full_text"])
+        text = data.get("script", {}).get("full_text", SAMPLE_SCRIPT["full_text"])
         niche = data.get("script", {}).get("niche", niche)
     else:
         text = SAMPLE_SCRIPT["full_text"]
 
     os.makedirs("storage/audio", exist_ok=True)
     audio_path = "storage/audio/test_voice.mp3"
-    sub_path   = "storage/audio/test_subs.ass"
+    sub_path = "storage/audio/test_subs.ass"
 
     print(f"\n{'='*60}")
     print(f"  Voice : {NICHE_VOICES.get(niche, 'en-US-GuyNeural')}")
@@ -52,7 +54,10 @@ def main():
 
     print("⏳ Generating voiceover...")
     import asyncio
-    result = asyncio.run(generate_voiceover(text, niche=niche, audio_path=audio_path, sub_path=sub_path))
+
+    result = asyncio.run(
+        generate_voiceover(text, niche=niche, audio_path=audio_path, sub_path=sub_path)
+    )
 
     print(f"\n✅ Done!")
     print(f"  Audio  → {result['audio_path']}")

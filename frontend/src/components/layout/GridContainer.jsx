@@ -7,7 +7,7 @@ import React from 'react';
  */
 export default function GridContainer({ children, className = '', fluid = false }) {
   return (
-    <div 
+    <div
       className={`w-full mx-auto px-4 sm:px-6 lg:px-8 ${
         fluid ? 'max-w-none' : 'max-w-[1800px]'
       } ${className}`}

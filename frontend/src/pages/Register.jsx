@@ -53,16 +53,16 @@ export default function Register() {
   return (
     <div className="min-h-screen bg-canvas text-text-primary flex items-center justify-center p-4">
       <div className="w-full max-w-lg bg-surface border border-border rounded-2xl p-6 sm:p-8 shadow-2xl relative overflow-hidden">
-        
+
         {/* Ambient Glow */}
         <div className="absolute -top-32 -left-32 w-64 h-64 bg-brand-red opacity-10 blur-[100px] rounded-full pointer-events-none" />
         <div className="absolute -bottom-32 -right-32 w-64 h-64 bg-brand-red opacity-10 blur-[100px] rounded-full pointer-events-none" />
-        
+
         <div className="relative z-10 flex flex-col items-center">
           <div className="w-14 h-14 bg-surface-input rounded-2xl flex items-center justify-center border border-border mb-4">
             <Icon name="user" size={26} className="text-brand-red" />
           </div>
-          
+
           <h1 className="text-2xl font-black mb-1 tracking-tight text-center">Create Creator Account</h1>
           <p className="text-xs text-text-muted text-center mb-6">
             Multi-user studio workspace with isolated channels & AI pipelines

@@ -18,7 +18,7 @@ export default function Logs() {
   const [filter, setFilter] = useState('all');
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
-  
+
   useEffect(() => {
     let isMounted = true;
     (async () => {
@@ -29,7 +29,7 @@ export default function Logs() {
           let severity = 'info';
           if (line.includes('ERROR') || line.includes('Failed')) severity = 'error';
           if (line.includes('WARN')) severity = 'warning';
-          
+
           return {
             id: i,
             severity,

@@ -5,13 +5,15 @@ Run: python manual_tests/test_full_pipeline.py "Why do cats purr?" kids_facts
 
 Produces a local MP4 in storage/renders/ for your review.
 """
-import sys
-import os
 import glob
+import os
+import sys
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 # pyrefly: ignore [missing-import]
 from dotenv import load_dotenv
+
 load_dotenv()
 
 
@@ -26,8 +28,9 @@ def main():
     print(f"{'='*60}\n")
 
     # ── Step 1: Script ─────────────────────────────────────────────────────────
-    from engine.script.generator import generate_script
     from engine.quality.checker import check_script
+    from engine.script.generator import generate_script
+
     print("Step 1/4 — Generating script...")
     script = generate_script(topic, niche)
     report = check_script(script, niche)
@@ -41,20 +44,25 @@ def main():
 
     # ── Step 2: Voiceover ──────────────────────────────────────────────────────
     from engine.tts.voiceover import generate_voiceover
+
     print("\nStep 2/4 — Generating voiceover...")
     os.makedirs("storage/audio", exist_ok=True)
     import asyncio
-    tts = asyncio.run(generate_voiceover(
-        script["full_text"],
-        niche=niche,
-        audio_path="storage/audio/pipeline_voice.mp3",
-        sub_path="storage/audio/pipeline_subs.ass",
-    ))
+
+    tts = asyncio.run(
+        generate_voiceover(
+            script["full_text"],
+            niche=niche,
+            audio_path="storage/audio/pipeline_voice.mp3",
+            sub_path="storage/audio/pipeline_subs.ass",
+        )
+    )
     print(f"  ✅ Audio: {tts['audio_path']}  ({tts['duration']:.1f}s)")
     print(f"  ✅ Word boundaries: {len(tts.get('word_boundaries', []))} events")
 
     # ── Step 3: Visuals ────────────────────────────────────────────────────────
     from engine.visuals.fetcher import fetch_clips
+
     print("\nStep 3/4 — Fetching visuals...")
     os.makedirs("storage/visuals", exist_ok=True)
     clips = fetch_clips(
@@ -73,6 +81,7 @@ def main():
 
     # ── Step 4: Assembly ───────────────────────────────────────────────────────
     from engine.rendering.assembler import assemble_video
+
     print("\nStep 4/4 — Assembling video...")
     video_path = assemble_video(
         clip_paths,

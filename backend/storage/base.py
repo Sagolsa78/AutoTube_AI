@@ -1,5 +1,5 @@
-from typing import Protocol, Optional
 from pathlib import Path
+from typing import Optional, Protocol
 
 
 class StorageBackend(Protocol):

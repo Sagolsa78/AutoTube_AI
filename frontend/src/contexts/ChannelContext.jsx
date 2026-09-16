@@ -18,7 +18,7 @@ export function ChannelProvider({ children }) {
     try {
       const data = await api.getChannels();
       setChannels(data || []);
-      
+
       if (data && data.length > 0) {
         // If we don't have an active channel, or the active channel is not in the list, set it to the first one
         if (!activeChannelId || !data.find(c => c.id === activeChannelId)) {

@@ -50,7 +50,7 @@ export default function Metric({
       {progress !== null && (
         <div className="mt-3 pt-3 border-t border-border/60">
           <div className="w-full bg-elevated rounded-full h-1.5 overflow-hidden">
-            <div 
+            <div
               className={`h-full rounded-full transition-all duration-500 ${progressColor}`}
               style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
             />
