@@ -199,17 +199,32 @@ export default function Profile() {
           title="Studio Settings"
           description="Configure brand identity, watermark overlay, AI generation defaults, and subtitle styling."
           actions={
-            <Button
-              variant="primary"
-              size="sm"
-              icon={saving ? 'loader' : 'check'}
-              onClick={save}
-              disabled={saving}
-              loading={saving}
-              className="shadow-brand-glow"
-            >
-              {saving ? 'Saving...' : 'Save Preferences'}
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                icon="log-out"
+                onClick={() => {
+                  import('../services/api').then(({ setAuthToken }) => {
+                    setAuthToken(null);
+                    window.location.href = '/login';
+                  });
+                }}
+              >
+                Log Out
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                icon={saving ? 'loader' : 'check'}
+                onClick={save}
+                disabled={saving}
+                loading={saving}
+                className="shadow-brand-glow"
+              >
+                {saving ? 'Saving...' : 'Save Preferences'}
+              </Button>
+            </div>
           }
         />
 

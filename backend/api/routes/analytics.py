@@ -1,4 +1,5 @@
 import os
+import logging
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -22,6 +23,8 @@ def get_dir_size(path: str) -> float:
             if not os.path.islink(fp):
                 total_bytes += os.path.getsize(fp)
     return round(total_bytes / (1024 * 1024), 2)
+
+log = logging.getLogger(__name__)
 
 @router.get("/")
 async def get_dashboard_analytics(
@@ -67,9 +70,29 @@ async def get_dashboard_analytics(
     total_ideas = total_ideas_res.scalar() or 0
 
     # Disk usage telemetry (MB)
-    output_dir_size = get_dir_size("output")
-    temp_dir_size = get_dir_size("temp") + get_dir_size("audio") + get_dir_size("visuals")
-    total_storage_mb = round(output_dir_size + temp_dir_size, 2)
+    from backend.core.config import settings
+    if settings.STORAGE_BACKEND in ["s3", "r2"]:
+        try:
+            from backend.storage import get_storage
+            storage = get_storage()
+            total_bytes = 0
+            async with storage.session.client('s3', endpoint_url=storage.endpoint_url, config=storage.s3_config) as s3:
+                paginator = s3.get_paginator('list_objects_v2')
+                async for page in paginator.paginate(Bucket=storage.bucket):
+                    for obj in page.get('Contents', []):
+                        total_bytes += obj.get('Size', 0)
+            total_storage_mb = round(total_bytes / (1024 * 1024), 2)
+            output_dir_size = total_storage_mb
+            temp_dir_size = 0.0
+        except Exception as e:
+            log.error(f"Error fetching s3 usage: {e}")
+            output_dir_size = 0.0
+            temp_dir_size = 0.0
+            total_storage_mb = 0.0
+    else:
+        output_dir_size = get_dir_size("output")
+        temp_dir_size = get_dir_size("temp") + get_dir_size("audio") + get_dir_size("visuals")
+        total_storage_mb = round(output_dir_size + temp_dir_size, 2)
 
     # Niche / Topic performance mock or aggregated
     topic_q = select(Idea.topic, func.count(Idea.id)).group_by(Idea.topic)

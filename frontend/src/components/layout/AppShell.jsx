@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useLocation, Outlet } from 'react-router-dom';
 import Icon from '../Icon';
 import TopBar from './TopBar';
+import { api } from '../../services/api';
 
 const workspaceNav = [
   { to: '/app', label: 'Home', icon: 'home' },
@@ -67,6 +68,30 @@ export default function AppShell() {
   const [collapsed, setCollapsed] = useState(() => {
     return localStorage.getItem('autotube_sidebar_collapsed') === 'true';
   });
+
+  const [engineStatus, setEngineStatus] = useState('Checking...');
+  const [isEngineOnline, setIsEngineOnline] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    const checkHealth = async () => {
+      try {
+        await api.getSystemHealth();
+        if (mounted) {
+          setIsEngineOnline(true);
+          setEngineStatus('Engine Online');
+        }
+      } catch (e) {
+        if (mounted) {
+          setIsEngineOnline(false);
+          setEngineStatus('Waking Engine...');
+        }
+      }
+    };
+    checkHealth();
+    const interval = setInterval(checkHealth, 15000);
+    return () => { mounted = false; clearInterval(interval); };
+  }, []);
 
   const toggleCollapse = () => {
     const next = !collapsed;
@@ -160,11 +185,20 @@ export default function AppShell() {
           >
             <div className="flex items-center gap-2 min-w-0">
               <span className="relative flex h-2 w-2 shrink-0">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-success"></span>
+                {isEngineOnline ? (
+                  <>
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-success"></span>
+                  </>
+                ) : (
+                  <>
+                    <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-warning opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-warning"></span>
+                  </>
+                )}
               </span>
               {!collapsed && (
-                <span className="text-[11px] font-medium text-text-secondary truncate">Engine Online</span>
+                <span className={`text-[11px] font-medium truncate ${isEngineOnline ? 'text-text-secondary' : 'text-warning'}`}>{engineStatus}</span>
               )}
             </div>
             {!collapsed && (
@@ -214,10 +248,11 @@ export default function AppShell() {
             <Link 
               key={n.to} 
               to={n.to}
-              className={`flex flex-col items-center justify-center w-16 h-full space-y-1 transition-colors ${
+              className={`flex flex-col items-center justify-center w-16 h-full space-y-1 transition-colors relative ${
                 active ? 'text-brand-red' : 'text-text-muted hover:text-text-secondary'
               }`}
             >
+              {active && <div className="absolute top-0 inset-x-2 h-[3px] bg-brand-red rounded-b-md shadow-[0_0_8px_rgba(255,59,48,0.5)]" />}
               <Icon name={n.icon} size={20} />
               <span className={`text-[10px] font-medium tracking-tight ${active ? 'font-bold' : ''}`}>
                 {n.label}
