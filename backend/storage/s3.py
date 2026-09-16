@@ -3,6 +3,7 @@ import logging
 from pathlib import Path
 from typing import Optional
 import aioboto3
+from botocore.config import Config
 
 from backend.storage.base import StorageBackend
 from backend.core.config import settings
@@ -25,18 +26,30 @@ class S3StorageBackend(StorageBackend):
             # Region is required by boto3, even if endpoint_url overrides it
             region_name="auto" 
         )
+        self.s3_config = Config(signature_version='s3v4')
 
     async def put_file(self, local_path: str | Path, remote_key: str) -> str:
-        async with self.session.client('s3', endpoint_url=self.endpoint_url) as s3:
-            await s3.upload_file(str(local_path), self.bucket, remote_key)
-            log.info(f"Uploaded {local_path} to s3://{self.bucket}/{remote_key}")
+        local_path = Path(local_path)
+        try:
+            async with self.session.client('s3', endpoint_url=self.endpoint_url, config=self.s3_config) as s3:
+                await s3.upload_file(str(local_path), self.bucket, remote_key)
+        except Exception as err:
+            log.warning(
+                f"s3.upload_file failed ({err}). Falling back to single-part s3.put_object for {remote_key}..."
+            )
+            with open(local_path, "rb") as f:
+                file_bytes = f.read()
+            async with self.session.client('s3', endpoint_url=self.endpoint_url, config=self.s3_config) as s3:
+                await s3.put_object(Bucket=self.bucket, Key=remote_key, Body=file_bytes)
+        
+        log.info(f"Uploaded {local_path} to s3://{self.bucket}/{remote_key}")
             
         public_url = await self.get_public_url(remote_key)
         return public_url if public_url else await self.generate_signed_url(remote_key)
 
     async def get_file(self, remote_key: str, local_path: str | Path) -> str:
         Path(local_path).parent.mkdir(parents=True, exist_ok=True)
-        async with self.session.client('s3', endpoint_url=self.endpoint_url) as s3:
+        async with self.session.client('s3', endpoint_url=self.endpoint_url, config=self.s3_config) as s3:
             await s3.download_file(self.bucket, remote_key, str(local_path))
             log.info(f"Downloaded s3://{self.bucket}/{remote_key} to {local_path}")
         return str(local_path)
@@ -46,7 +59,7 @@ class S3StorageBackend(StorageBackend):
 
     async def delete_file(self, remote_key: str) -> bool:
         try:
-            async with self.session.client('s3', endpoint_url=self.endpoint_url) as s3:
+            async with self.session.client('s3', endpoint_url=self.endpoint_url, config=self.s3_config) as s3:
                 await s3.delete_object(Bucket=self.bucket, Key=remote_key)
                 return True
         except Exception as e:
@@ -55,7 +68,7 @@ class S3StorageBackend(StorageBackend):
 
     async def exists(self, remote_key: str) -> bool:
         try:
-            async with self.session.client('s3', endpoint_url=self.endpoint_url) as s3:
+            async with self.session.client('s3', endpoint_url=self.endpoint_url, config=self.s3_config) as s3:
                 await s3.head_object(Bucket=self.bucket, Key=remote_key)
                 return True
         except Exception:
@@ -70,7 +83,7 @@ class S3StorageBackend(StorageBackend):
         return None
 
     async def generate_signed_url(self, remote_key: str, expires_in: int = 3600) -> str:
-        async with self.session.client('s3', endpoint_url=self.endpoint_url) as s3:
+        async with self.session.client('s3', endpoint_url=self.endpoint_url, config=self.s3_config) as s3:
             url = await s3.generate_presigned_url(
                 'get_object',
                 Params={'Bucket': self.bucket, 'Key': remote_key},
@@ -79,7 +92,7 @@ class S3StorageBackend(StorageBackend):
             return url
 
     async def generate_upload_url(self, remote_key: str, expires_in: int = 3600) -> str:
-        async with self.session.client('s3', endpoint_url=self.endpoint_url) as s3:
+        async with self.session.client('s3', endpoint_url=self.endpoint_url, config=self.s3_config) as s3:
             url = await s3.generate_presigned_url(
                 'put_object',
                 Params={'Bucket': self.bucket, 'Key': remote_key},
