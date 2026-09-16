@@ -389,23 +389,19 @@ async def preview_video(
             headers={"Cache-Control": "no-store", "Accept-Ranges": "bytes"}
         )
 
-    # 3. Remote storage key (S3/R2) — stream directly to avoid CORS
+    # 3. Remote storage key (S3/R2) — stream directly to avoid CORS/latency
     if settings.STORAGE_BACKEND in ["s3", "r2"] and v.path:
         try:
             from backend.storage import storage
-            import tempfile
-            tmp_fd, tmp_path = tempfile.mkstemp(suffix=".mp4")
-            import os as _os
-            _os.close(tmp_fd)
-            await storage.get_file(v.path, tmp_path)
-            if os.path.exists(tmp_path) and os.path.getsize(tmp_path) > 0:
-                return FileResponse(
-                    tmp_path, 
-                    media_type="video/mp4",
-                    headers={"Cache-Control": "no-store", "Accept-Ranges": "bytes"}
-                )
+            public_url = await storage.get_public_url(v.path)
+            if public_url:
+                from fastapi.responses import RedirectResponse
+                return RedirectResponse(url=public_url, status_code=307)
+            signed_url = await storage.generate_signed_url(v.path)
+            from fastapi.responses import RedirectResponse
+            return RedirectResponse(url=signed_url, status_code=307)
         except Exception as e:
-            log.error(f"Failed to stream video from storage {v.path}: {e}")
+            log.error(f"Failed to generate url for storage {v.path}: {e}")
             raise HTTPException(500, f"Video could not be retrieved from storage: {e}")
 
     raise HTTPException(404, f"Video file not found: {v.path or video_id}")

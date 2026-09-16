@@ -77,8 +77,8 @@ async def get_dashboard_analytics(
     niche_breakdown = [{"niche": n[0] or "General", "count": n[1]} for n in niche_counts]
 
     # Return real aggregate numbers (zero mock fallback)
-    real_views = total_views + int(yt_channel_data.get("viewCount", 0))
-    real_subs = total_subs + int(yt_channel_data.get("subscriberCount", 0))
+    real_views = total_views + int(yt_channel_data.get("views_90d", 0))
+    real_subs = total_subs + int(yt_channel_data.get("subscribers_gained", 0))
 
     return {
         "youtube_connected": yt_channel_data.get("connected", False),

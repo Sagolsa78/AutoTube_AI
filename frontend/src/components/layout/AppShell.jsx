@@ -190,7 +190,8 @@ export default function AppShell() {
         aria-label="Mobile Navigation"
       >
         {mobileNav.map(n => {
-          const active = n.to === '/app' ? loc.pathname === '/app' : loc.pathname.startsWith(n.to);
+          const path = loc.pathname.replace(/\/$/, '');
+          const active = n.to === '/app' ? path === '/app' : path.startsWith(n.to);
           
           if (n.isCenter) {
             return (
@@ -199,10 +200,12 @@ export default function AppShell() {
                 to={n.to}
                 className="flex flex-col items-center justify-center -mt-4 group"
               >
-                <div className="w-12 h-12 rounded-full bg-brand-red text-white flex items-center justify-center shadow-brand-glow transition-transform active:scale-95 border-2 border-canvas">
+                <div className={`w-12 h-12 rounded-full flex items-center justify-center shadow-brand-glow transition-transform active:scale-95 border-2 border-canvas ${
+                  active ? 'bg-brand-red text-white' : 'bg-surface text-brand-red border-brand-red/20'
+                }`}>
                   <Icon name={n.icon} size={22} />
                 </div>
-                <span className="text-[10px] font-bold text-brand-red mt-1">Create</span>
+                <span className={`text-[10px] font-bold mt-1 ${active ? 'text-brand-red' : 'text-text-muted'}`}>Create</span>
               </Link>
             );
           }

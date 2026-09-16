@@ -63,18 +63,32 @@ async def _generate_tts(
 
     if not word_boundaries:
         log.warning(
-            "edge-tts produced zero WordBoundary events — cannot generate "
-            "timed captions. Continuing without word boundaries."
+            "edge-tts produced zero WordBoundary events. Generating fallback boundaries "
+            "to ensure captions are not blank."
         )
+        # Fallback to linear interpolation
+        fallback_dur = 0.0
         if audio_path and Path(audio_path).exists():
             import subprocess
             try:
                 cmd = ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", audio_path]
                 dur_out = subprocess.check_output(cmd).decode().strip()
-                return float(dur_out), []
+                fallback_dur = float(dur_out)
             except Exception:
-                pass
-        return 0.0, []
+                fallback_dur = max(len(text.split()) * 0.4, 2.0)
+        else:
+            fallback_dur = max(len(text.split()) * 0.4, 2.0)
+            
+        words = text.split()
+        if words and fallback_dur > 0:
+            word_dur = fallback_dur / len(words)
+            for i, w in enumerate(words):
+                word_boundaries.append({
+                    "text": w,
+                    "offset": i * word_dur,
+                    "duration": word_dur
+                })
+        return fallback_dur, word_boundaries
 
     last = word_boundaries[-1]
     duration = last["offset"] + last["duration"]
