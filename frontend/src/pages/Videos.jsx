@@ -55,9 +55,9 @@ const CustomPlayer = ({ src }) => {
 
   return (
     <div className="relative w-full aspect-[9/16] max-h-[580px] sm:max-h-[640px] bg-black rounded-xl overflow-hidden shadow-2xl border border-border group select-none">
-      <video 
-        ref={videoRef} 
-        src={src} 
+      <video
+        ref={videoRef}
+        src={src}
         className="w-full h-full object-cover cursor-pointer"
         onTimeUpdate={handleTimeUpdate}
         onEnded={() => setPlaying(false)}
@@ -65,23 +65,23 @@ const CustomPlayer = ({ src }) => {
         onClick={togglePlay}
         playsInline
       />
-      
+
       {/* Controls Overlay */}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-4">
+      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-4 pointer-events-none">
         {/* Scrubber */}
-        <div 
-          className="w-full h-2 bg-white/20 hover:h-2.5 rounded-full cursor-pointer mb-3 relative transition-all"
+        <div
+          className="w-full h-2 bg-white/20 hover:h-2.5 rounded-full cursor-pointer mb-3 relative transition-all pointer-events-auto"
           onClick={handleSeek}
         >
-          <div 
+          <div
             className="absolute top-0 left-0 h-full bg-brand-red rounded-full"
-            style={{ width: `${progress}%` }} 
+            style={{ width: `${progress}%` }}
           />
         </div>
 
         {/* Action Controls */}
-        <div className="flex justify-between items-center text-white">
-          <button 
+        <div className="flex justify-between items-center text-white pointer-events-auto">
+          <button
             type="button"
             className="p-2 hover:bg-white/20 rounded-lg transition-colors"
             onClick={togglePlay}
@@ -89,9 +89,9 @@ const CustomPlayer = ({ src }) => {
           >
             <Icon name={playing ? 'pause' : 'play'} size={20} />
           </button>
-          
+
           <div className="flex gap-2">
-            <button 
+            <button
               type="button"
               className="p-2 hover:bg-white/20 rounded-lg transition-colors"
               onClick={() => setMuted(!muted)}
@@ -99,7 +99,7 @@ const CustomPlayer = ({ src }) => {
             >
               <Icon name={muted ? 'volume-x' : 'volume-2'} size={20} />
             </button>
-            <button 
+            <button
               type="button"
               className="p-2 hover:bg-white/20 rounded-lg transition-colors"
               onClick={toggleFullscreen}
@@ -110,10 +110,10 @@ const CustomPlayer = ({ src }) => {
           </div>
         </div>
       </div>
-      
+
       {/* Centered Play Button when paused */}
       {!playing && (
-        <div 
+        <div
           className="absolute inset-0 flex items-center justify-center cursor-pointer pointer-events-none"
         >
           <div className="w-14 h-14 bg-brand-red text-white rounded-full flex items-center justify-center shadow-brand-glow backdrop-blur-sm">
@@ -165,9 +165,9 @@ export default function Videos({ filter }) {
         api.getScripts(activeChannelId),
         api.getIdeas(activeChannelId)
       ]);
-      
+
       let sorted = (data || []).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-      
+
       if (filter === 'best') {
         sorted = sorted.filter(v => v.status === 'approved' || v.status === 'uploaded');
       }
@@ -175,14 +175,14 @@ export default function Videos({ filter }) {
       setVideos(sorted);
       setScripts(allScripts || []);
       setIdeas(allIdeas || []);
-      
+
       if (sorted.length > 0 && !activeVideoId) {
         setActiveVideoId(sorted[0].id);
       }
-    } catch (e) { 
-      console.error(e); 
-    } finally { 
-      setLoading(false); 
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -217,16 +217,16 @@ export default function Videos({ filter }) {
       setMetaEdit(null);
     }
   }, [activeVideoId, videos]);
-  
+
   // Keyboard Shortcuts (Arrow navigation, [A] Approve, [R] Reject)
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (uploadModal || e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
       const activeIndex = videos.findIndex(v => v.id === activeVideoId);
       if (activeIndex === -1) return;
-      
+
       const v = videos[activeIndex];
-      
+
       if (e.key === 'ArrowRight' && activeIndex < videos.length - 1) {
         setActiveVideoId(videos[activeIndex + 1].id);
       } else if (e.key === 'ArrowLeft' && activeIndex > 0) {
@@ -237,7 +237,7 @@ export default function Videos({ filter }) {
         action(v.id, 'reject');
       }
     };
-    
+
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [videos, activeVideoId, uploadModal]);
@@ -256,14 +256,14 @@ export default function Videos({ filter }) {
         await api.rejectVideo(id);
         toast.error("Video rejected.");
       }
-      
+
       const activeIndex = videos.findIndex(v => v.id === id);
       if (activeIndex !== -1 && activeIndex < videos.length - 1) {
         setActiveVideoId(videos[activeIndex + 1].id);
       }
-      
+
       await load();
-    } catch (e) { 
+    } catch (e) {
       console.error(e);
       toast.error(`Action failed: ${e.message}`);
     }
@@ -284,11 +284,11 @@ export default function Videos({ filter }) {
       toast.success('Successfully published to YouTube!');
       setUploadModal(null);
       await load();
-    } catch (e) { 
-      console.error(e); 
-      toast.error(`Upload failed: ${e.message}`); 
-    } finally { 
-      setUploading(false); 
+    } catch (e) {
+      console.error(e);
+      toast.error(`Upload failed: ${e.message}`);
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -314,7 +314,7 @@ export default function Videos({ filter }) {
   if (!videos.length) {
     return (
       <GridContainer>
-        <PageHeader 
+        <PageHeader
           title={filter === 'best' ? 'Best Content' : 'Review Queue'}
           description={filter === 'best' ? 'Curated highest-rated videos ready for YouTube.' : 'Review, approve, and upload your rendered Shorts.'}
         />
@@ -348,10 +348,10 @@ export default function Videos({ filter }) {
           }
           actions={
             filter === 'best' && activeVideo && (
-              <Button 
-                variant="primary" 
-                size="sm" 
-                icon="upload" 
+              <Button
+                variant="primary"
+                size="sm"
+                icon="upload"
                 onClick={() => setUploadModal(activeVideo)}
               >
                 Publish Top Video
@@ -362,7 +362,7 @@ export default function Videos({ filter }) {
 
         {/* Media-First Review Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          
+
           {/* LEFT/TOP: 9:16 Video Player Surface (5 Cols) */}
           <div className="lg:col-span-5 flex flex-col gap-4 w-full max-w-md mx-auto lg:max-w-none">
             {['ready', 'approved', 'uploaded'].includes(activeVideo.status) ? (
@@ -373,7 +373,7 @@ export default function Videos({ filter }) {
                   <div className="flex flex-col items-center text-center w-full max-w-[260px]">
                     <Icon name="loader" size={36} className="text-warning animate-spin mb-4" />
                     <span className="text-base font-bold text-warning mb-4">Rendering Video</span>
-                    
+
                     <div className="w-full space-y-3 mb-6">
                       {['tts', 'visuals', 'assembly', 'metadata'].map((stageName, i) => {
                         const stages = ['tts', 'visuals', 'assembly', 'metadata'];
@@ -382,7 +382,7 @@ export default function Videos({ filter }) {
                         const currentIdx = renderStage === 'done' ? stages.length : stages.indexOf(renderStage);
                         const isDone = i < currentIdx;
                         const isActive = i === currentIdx;
-                        
+
                         return (
                           <div key={stageName} className="flex items-center gap-3">
                             <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${
@@ -397,12 +397,12 @@ export default function Videos({ filter }) {
                         );
                       })}
                     </div>
-                    
+
                     <div className="w-full bg-elevated rounded-full h-2 overflow-hidden mb-2">
                       <div className="bg-warning h-full transition-all duration-300" style={{ width: `${activeVideo.render_progress || 0}%` }} />
                     </div>
                     <span className="text-xs font-mono text-text-muted">{Math.round(activeVideo.render_progress || 0)}% Completed</span>
-                    
+
                     <div className="flex gap-2 w-full mt-4">
                       {activeVideo.status === 'rendering' ? (
                         <button type="button" className="btn btn-secondary flex-1 py-2 text-xs flex items-center justify-center" onClick={() => api.pauseVideo(activeVideo.id).then(load)}>
@@ -469,7 +469,7 @@ export default function Videos({ filter }) {
 
           {/* RIGHT/BOTTOM: Metadata Inspector & Filmstrip (7 Cols) */}
           <div className="lg:col-span-7 flex flex-col gap-6 min-w-0">
-            
+
             {/* Unified Pipeline Visualizer */}
             <PipelineVisualizer
               video={activeVideo}
@@ -494,7 +494,7 @@ export default function Videos({ filter }) {
                   </div>
                 }
               />
-              
+
               <CardContent className="space-y-5">
                 <div>
                   <h2 className="text-lg sm:text-xl font-bold text-text-primary tracking-tight break-words">
@@ -537,28 +537,28 @@ export default function Videos({ filter }) {
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-text-secondary mb-1">Title</label>
-                      <input 
-                        type="text" 
+                      <input
+                        type="text"
                         className="w-full bg-surface-input border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:border-brand-red focus:outline-none"
-                        value={metaEdit.selected_title} 
-                        onChange={e => setMetaEdit({...metaEdit, selected_title: e.target.value})} 
+                        value={metaEdit.selected_title}
+                        onChange={e => setMetaEdit({...metaEdit, selected_title: e.target.value})}
                       />
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-text-secondary mb-1">Description</label>
-                      <textarea 
+                      <textarea
                         className="w-full bg-surface-input border border-border rounded-lg px-3 py-2 text-xs text-text-primary focus:border-brand-red focus:outline-none min-h-[70px]"
-                        value={metaEdit.description} 
-                        onChange={e => setMetaEdit({...metaEdit, description: e.target.value})} 
+                        value={metaEdit.description}
+                        onChange={e => setMetaEdit({...metaEdit, description: e.target.value})}
                       />
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-text-secondary mb-1">Hashtags</label>
-                      <input 
-                        type="text" 
+                      <input
+                        type="text"
                         className="w-full bg-surface-input border border-border rounded-lg px-3 py-2 text-xs font-mono text-info focus:border-brand-red focus:outline-none"
-                        value={metaEdit.hashtags} 
-                        onChange={e => setMetaEdit({...metaEdit, hashtags: e.target.value})} 
+                        value={metaEdit.hashtags}
+                        onChange={e => setMetaEdit({...metaEdit, hashtags: e.target.value})}
                       />
                     </div>
                   </div>
@@ -615,8 +615,8 @@ export default function Videos({ filter }) {
                         key={v.id}
                         onClick={() => setActiveVideoId(v.id)}
                         className={`relative shrink-0 w-24 sm:w-28 aspect-[9/16] rounded-xl overflow-hidden cursor-pointer snap-start transition-all duration-300 border-2 select-none group ${
-                          isActive 
-                            ? 'border-brand-red scale-105 shadow-brand-glow z-10' 
+                          isActive
+                            ? 'border-brand-red scale-105 shadow-brand-glow z-10'
                             : 'border-border/80 opacity-70 hover:opacity-100 hover:border-brand-red/50 hover:shadow-lg'
                         }`}
                       >
@@ -663,12 +663,12 @@ export default function Videos({ filter }) {
 
         {/* YouTube Upload Modal (§18) */}
         {uploadModal && (
-          <div 
+          <div
             className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in"
             onClick={() => !uploading && setUploadModal(null)}
           >
-            <div 
-              className="bg-surface border border-border rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden" 
+            <div
+              className="bg-surface border border-border rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden"
               onClick={e => e.stopPropagation()}
             >
               <div className="px-6 py-4 border-b border-border flex justify-between items-center bg-elevated/50">
@@ -677,53 +677,53 @@ export default function Videos({ filter }) {
                   Publish Short to YouTube
                 </h3>
                 {!uploading && (
-                  <button 
-                    type="button" 
-                    className="p-1.5 hover:bg-surface-hover rounded-lg text-text-secondary hover:text-text-primary transition-colors" 
+                  <button
+                    type="button"
+                    className="p-1.5 hover:bg-surface-hover rounded-lg text-text-secondary hover:text-text-primary transition-colors"
                     onClick={() => setUploadModal(null)}
                   >
                     <Icon name="x" size={18} />
                   </button>
                 )}
               </div>
-              
+
               <form onSubmit={doUpload} className="p-6 space-y-4">
                 <div>
                   <label className="block text-xs font-semibold text-text-secondary mb-1">Title</label>
-                  <input 
-                    name="title" 
-                    className="w-full bg-surface-input border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:border-brand-red focus:outline-none" 
-                    required 
-                    defaultValue={uploadModal.selected_title || ''} 
-                    maxLength={100} 
+                  <input
+                    name="title"
+                    className="w-full bg-surface-input border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:border-brand-red focus:outline-none"
+                    required
+                    defaultValue={uploadModal.selected_title || ''}
+                    maxLength={100}
                   />
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-text-secondary mb-1">Description</label>
-                  <textarea 
-                    name="description" 
-                    className="w-full bg-surface-input border border-border rounded-lg px-3 py-2 text-xs text-text-primary focus:border-brand-red focus:outline-none min-h-[80px]" 
-                    required 
-                    defaultValue={uploadModal.description || ''} 
+                  <textarea
+                    name="description"
+                    className="w-full bg-surface-input border border-border rounded-lg px-3 py-2 text-xs text-text-primary focus:border-brand-red focus:outline-none min-h-[80px]"
+                    required
+                    defaultValue={uploadModal.description || ''}
                   />
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-text-secondary mb-1">Tags (comma-separated)</label>
-                  <input 
-                    name="tags" 
-                    className="w-full bg-surface-input border border-border rounded-lg px-3 py-2 text-xs font-mono text-text-primary focus:border-brand-red focus:outline-none" 
-                    defaultValue={(uploadModal.hashtags || []).join(', ')} 
+                  <input
+                    name="tags"
+                    className="w-full bg-surface-input border border-border rounded-lg px-3 py-2 text-xs font-mono text-text-primary focus:border-brand-red focus:outline-none"
+                    defaultValue={(uploadModal.hashtags || []).join(', ')}
                   />
                 </div>
-                
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-semibold text-text-secondary mb-1">Privacy</label>
-                    <select 
-                      name="privacy" 
-                      className="w-full bg-surface-input border border-border rounded-lg px-3 py-2 text-xs text-text-primary focus:border-brand-red focus:outline-none" 
+                    <select
+                      name="privacy"
+                      className="w-full bg-surface-input border border-border rounded-lg px-3 py-2 text-xs text-text-primary focus:border-brand-red focus:outline-none"
                       defaultValue="public"
                     >
                       <option value="public">Public</option>
@@ -733,9 +733,9 @@ export default function Videos({ filter }) {
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-text-secondary mb-1">Made for Kids?</label>
-                    <select 
-                      name="kids" 
-                      className="w-full bg-surface-input border border-border rounded-lg px-3 py-2 text-xs text-text-primary focus:border-brand-red focus:outline-none" 
+                    <select
+                      name="kids"
+                      className="w-full bg-surface-input border border-border rounded-lg px-3 py-2 text-xs text-text-primary focus:border-brand-red focus:outline-none"
                       defaultValue="false"
                     >
                       <option value="false">No</option>
@@ -743,21 +743,21 @@ export default function Videos({ filter }) {
                     </select>
                   </div>
                 </div>
-                
+
                 <div className="pt-4 border-t border-border flex justify-end gap-3">
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    onClick={() => setUploadModal(null)} 
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setUploadModal(null)}
                     disabled={uploading}
                   >
                     Cancel
                   </Button>
-                  <Button 
-                    variant="primary" 
-                    size="sm" 
-                    icon={uploading ? 'loader' : 'upload'} 
-                    type="submit" 
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    icon={uploading ? 'loader' : 'upload'}
+                    type="submit"
                     disabled={uploading}
                     loading={uploading}
                   >

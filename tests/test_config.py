@@ -1,5 +1,7 @@
 import os
+
 from backend.core.config import Settings
+
 
 def test_config_loads_defaults():
     # Unset env vars to test defaults
@@ -7,15 +9,16 @@ def test_config_loads_defaults():
     os.environ.pop("DATABASE_URL", None)
     os.environ.pop("AUTH_DISABLED", None)
     os.environ.pop("AUTOTUBE_API_KEY", None)
-    
+
     settings = Settings(_env_file=None)
-    
+
     # Check default values
     assert settings.APP_ENV == "development"
     assert settings.STORAGE_PROVIDER == "local"
     assert "sqlite+aiosqlite://" in settings.DATABASE_URL
     assert settings.AUTH_DISABLED is False
     assert settings.AUTOTUBE_API_KEY is None
+
 
 def test_config_cloud_overrides():
     os.environ["APP_ENV"] = "production"
@@ -26,15 +29,24 @@ def test_config_cloud_overrides():
     os.environ["S3_ACCESS_KEY_ID"] = "test-access"
     os.environ["S3_SECRET_ACCESS_KEY"] = "test-secret"
     os.environ["AUTH_DISABLED"] = "false"
-    
+
     settings = Settings()
-    
+
     assert settings.APP_ENV == "production"
     assert settings.STORAGE_PROVIDER == "r2"
     assert settings.DATABASE_URL == "postgresql+asyncpg://user:pass@host/db"
     assert settings.AUTH_DISABLED is False
     assert settings.S3_BUCKET_NAME == "test-bucket"
-    
+
     # Cleanup
-    for k in ["APP_ENV", "STORAGE_PROVIDER", "DATABASE_URL", "S3_BUCKET_NAME", "S3_ENDPOINT_URL", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY", "AUTH_DISABLED"]:
+    for k in [
+        "APP_ENV",
+        "STORAGE_PROVIDER",
+        "DATABASE_URL",
+        "S3_BUCKET_NAME",
+        "S3_ENDPOINT_URL",
+        "S3_ACCESS_KEY_ID",
+        "S3_SECRET_ACCESS_KEY",
+        "AUTH_DISABLED",
+    ]:
         os.environ.pop(k, None)

@@ -1,7 +1,7 @@
 import React from 'react';
 import Icon from '../Icon';
 
-export default function PipelineVisualizer({ 
+export default function PipelineVisualizer({
   currentStep = 'render',
   video = null,
   script = null,
@@ -27,7 +27,7 @@ export default function PipelineVisualizer({
     {
       id: 'voice',
       label: 'Voice',
-      desc: video?.voice_override || 'Edge-TTS',
+      desc: video?.voice_override || 'AI Voice',
       icon: 'mic',
       status: video?.render_stage && video.render_stage !== 'queued' && video.render_stage !== 'tts' ? 'completed' : video?.render_stage === 'tts' ? 'active' : 'completed',
     },
@@ -43,10 +43,10 @@ export default function PipelineVisualizer({
       label: 'Render',
       desc: video?.render_stage === 'done' || ['ready', 'approved', 'uploaded'].includes(video?.status) ? '100%' : `${Math.round(video?.render_progress || 0)}%`,
       icon: 'film',
-      status: ['ready', 'approved', 'uploaded'].includes(video?.status) || video?.render_stage === 'done' 
-        ? 'completed' 
-        : video?.status === 'failed' 
-          ? 'failed' 
+      status: ['ready', 'approved', 'uploaded'].includes(video?.status) || video?.render_stage === 'done'
+        ? 'completed'
+        : video?.status === 'failed'
+          ? 'failed'
           : ['rendering', 'queued'].includes(video?.status)
             ? 'active'
             : 'pending',
@@ -56,10 +56,10 @@ export default function PipelineVisualizer({
       label: 'Review',
       desc: video?.status === 'uploaded' ? 'Approved' : video?.status === 'approved' ? 'Approved' : video?.status === 'ready' ? 'Action Req' : 'Pending',
       icon: 'check-circle',
-      status: ['approved', 'uploaded'].includes(video?.status) 
-        ? 'completed' 
-        : video?.status === 'ready' 
-          ? 'active' 
+      status: ['approved', 'uploaded'].includes(video?.status)
+        ? 'completed'
+        : video?.status === 'ready'
+          ? 'active'
           : video?.status === 'rejected'
             ? 'failed'
             : 'pending',
@@ -76,7 +76,7 @@ export default function PipelineVisualizer({
   return (
     <div className="w-full bg-surface border border-border rounded-xl p-4 sm:p-6 overflow-x-auto select-none hide-scrollbar">
       <div className="flex items-center justify-between min-w-[680px] relative">
-        
+
         {/* Background Connecting Line */}
         <div className="absolute top-4 left-6 right-6 h-0.5 bg-border -z-0" />
 

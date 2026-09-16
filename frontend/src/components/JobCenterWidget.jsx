@@ -21,10 +21,10 @@ export default function JobCenterWidget() {
         if (mounted) setLoading(false);
       }
     };
-    
+
     fetchJobs();
     const interval = setInterval(fetchJobs, 10000); // Poll every 10s globally
-    
+
     return () => {
       mounted = false;
       clearInterval(interval);
@@ -36,7 +36,7 @@ export default function JobCenterWidget() {
   return (
     <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2">
       {activeJobs.map(job => (
-        <Link 
+        <Link
           key={job.id}
           to={`/app/jobs/${job.id}`}
           className="bg-surface/90 backdrop-blur-lg border border-border shadow-2xl rounded-xl p-3 hover:border-brand-red/50 transition-colors flex flex-col gap-2 w-64 animate-in slide-in-from-bottom-4"
@@ -49,7 +49,7 @@ export default function JobCenterWidget() {
           </div>
           <div className="flex items-center gap-2">
             <div className="flex-1 bg-canvas rounded-full h-1.5 overflow-hidden">
-              <div 
+              <div
                 className="bg-warning h-full transition-all duration-500"
                 style={{ width: `${Math.max(5, Math.min(100, job.render_progress || 0))}%` }}
               />

@@ -34,8 +34,8 @@ export function JobsProvider({ children }) {
       });
 
       setJobs(jobsList);
-      
-      const inFlightVideos = videosList.filter(v => 
+
+      const inFlightVideos = videosList.filter(v =>
         ['rendering', 'queued', 'pending'].includes(v.status)
       );
       setActiveVideos(inFlightVideos);
@@ -47,7 +47,7 @@ export function JobsProvider({ children }) {
   }, []);
 
   // Compute active count (active videos + in-flight backend jobs)
-  const activeComputeJobs = jobs.filter(j => 
+  const activeComputeJobs = jobs.filter(j =>
     ['queued', 'dispatching', 'running', 'waiting_for_local_worker'].includes(j.status)
   );
   const activeCount = activeVideos.length + activeComputeJobs.length;
@@ -59,10 +59,10 @@ export function JobsProvider({ children }) {
     const updateInterval = () => {
       if (intervalId) clearInterval(intervalId);
       const isHidden = document.hidden;
-      const delay = isHidden 
-        ? 30000 
-        : activeCount > 0 
-          ? 3500 
+      const delay = isHidden
+        ? 30000
+        : activeCount > 0
+          ? 3500
           : 15000;
       intervalId = setInterval(fetchJobsAndVideos, delay);
     };

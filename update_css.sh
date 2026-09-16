@@ -17,7 +17,7 @@ cat << 'CSS_EOF' > frontend/src/index.css
 
     --brand-red: #E6392F;
     --brand-red-hover: #FF5045;
-    
+
     --success: #32C48D;
     --warning: #E8B04B;
     --danger: #E5484D;

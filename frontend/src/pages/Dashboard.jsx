@@ -136,7 +136,7 @@ export default function Dashboard() {
   return (
     <GridContainer>
       <div className="space-y-6">
-        
+
         {/* ── 1. Hero Creator Header ────────────────────────────────────────── */}
         <div className="bg-surface border border-border rounded-2xl p-6 relative overflow-hidden shadow-card-subtle">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
@@ -151,8 +151,8 @@ export default function Dashboard() {
                     YouTube Connected
                   </span>
                 ) : (
-                  <Link 
-                    to="/app/channels" 
+                  <Link
+                    to="/app/channels"
                     className="text-xs font-mono font-semibold text-warning bg-warning/10 border border-warning/20 px-2 py-0.5 rounded-full hover:bg-warning/20 transition-colors flex items-center gap-1"
                   >
                     <Icon name="alert-circle" size={12} />
@@ -230,7 +230,7 @@ export default function Dashboard() {
 
           <div className="bg-surface border border-border rounded-xl p-4 flex flex-col justify-between hover:border-border-strong transition-colors">
             <div className="flex items-center justify-between text-text-muted text-xs">
-              <span className="font-semibold uppercase tracking-wider">Active Pipeline</span>
+              <span className="font-semibold uppercase tracking-wider">Production Queue</span>
               <Icon name="cpu" size={16} className="text-warning" />
             </div>
             <div className="mt-3">
@@ -300,10 +300,10 @@ export default function Dashboard() {
 
         {/* ── 4. Main Two-Column Workspace Layout ────────────────────────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          
+
           {/* PRIMARY COLUMN (~65%): Active Pipeline & Action Queue */}
           <div className="lg:col-span-8 space-y-6 w-full">
-            
+
             {/* Active In-Flight Pipeline */}
             {activeVideos.length > 0 && (
               <Card variant="surface" className="border-warning/30 bg-warning/5">
@@ -324,14 +324,14 @@ export default function Dashboard() {
                     <div key={v.id} className="bg-surface p-4 rounded-xl border border-border space-y-2.5">
                       <div className="flex justify-between items-center text-xs">
                         <Link to={`/app/jobs/${v.id}`} className="font-bold text-text-primary hover:text-brand-red truncate pr-4">
-                          {v.selected_title || v.title_candidates?.[0] || `Short #${v.id.substring(0, 8)}`}
+                          {v.selected_title || v.title_candidates?.[0] || 'Draft Short'}
                         </Link>
                         <span className="font-mono text-warning font-bold">
                           {Math.round(v.render_progress || 0)}%
                         </span>
                       </div>
                       <div className="w-full bg-canvas rounded-full h-2 overflow-hidden">
-                        <div 
+                        <div
                           className="bg-warning h-full rounded-full transition-all duration-300"
                           style={{ width: `${Math.max(5, Math.min(100, v.render_progress || 10))}%` }}
                         />
@@ -392,7 +392,7 @@ export default function Dashboard() {
                             <div className="flex items-center gap-2 mb-1">
                               <StatusBadge status="ready" size="sm" />
                               <span className="text-[10px] text-text-muted font-mono">
-                                ID: {v.id.substring(0, 6)}
+                                In Review
                               </span>
                             </div>
                             <h4 className="text-xs sm:text-sm font-bold text-text-primary truncate">
@@ -508,47 +508,48 @@ export default function Dashboard() {
 
           {/* SECONDARY COLUMN (~35%): Telemetry, Compute & Recommendations */}
           <div className="lg:col-span-4 space-y-6 w-full">
-            
-            {/* Compute Plane / Engine Status */}
+
+            {/* Production Costs / Engine Status */}
             <Card variant="surface" className="w-full">
               <CardHeader
                 title={
-                  <CardTitle icon={<Icon name="cpu" size={16} className="text-brand-red" />}>
-                    Compute Telemetry
+                  <CardTitle icon={<Icon name="pieChart" size={16} className="text-brand-red" />}>
+                    Production Costs
                   </CardTitle>
                 }
                 action={
                   <span className="text-[10px] font-bold uppercase tracking-wider text-brand-red bg-brand-red/10 border border-brand-red/20 px-2 py-0.5 rounded">
-                    {computeTelemetry?.strategy || 'Local-First ($0)'}
+                    Tracking Active
                   </span>
                 }
               />
               <CardContent className="space-y-3">
                 <div className="flex items-center justify-between p-2.5 rounded-lg bg-elevated border border-border/80 text-xs">
                   <div className="flex items-center gap-2">
-                    <span className={`w-2 h-2 rounded-full ${computeTelemetry?.local_worker?.status === 'online' ? 'bg-success shadow-[0_0_6px_#32C48D]' : 'bg-text-muted'}`} />
+                    <span className={`w-2 h-2 rounded-full ${computeTelemetry ? 'bg-success shadow-[0_0_6px_#32C48D]' : 'bg-text-muted'}`} />
                     <span className="font-medium text-text-primary">
-                      {computeTelemetry?.local_worker?.name || 'Local RTX 3050'}
+                      Production Engine
                     </span>
                   </div>
-                  <span className={`text-[11px] font-mono font-semibold uppercase ${computeTelemetry?.local_worker?.status === 'online' ? 'text-success' : 'text-text-muted'}`}>
-                    {computeTelemetry?.local_worker?.status === 'online' ? 'Online' : 'Standby'}
+                  <span className={`text-[11px] font-mono font-semibold uppercase ${computeTelemetry ? 'text-success' : 'text-text-muted'}`}>
+                    {computeTelemetry ? 'Online' : 'Standby'}
                   </span>
                 </div>
 
                 <div className="space-y-1.5 pt-1">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-text-secondary">Cloud Burst Spend</span>
+                    <span className="text-text-secondary">AI APIs & Cloud Render</span>
                     <span className="font-mono font-bold text-text-primary">
                       ${computeTelemetry?.cloud_burst?.today_spent_usd !== undefined ? computeTelemetry.cloud_burst.today_spent_usd.toFixed(2) : '0.00'}
+
                       <span className="text-text-muted font-normal"> / $2.00 cap</span>
                     </span>
                   </div>
                   <div className="w-full bg-elevated rounded-full h-1.5 overflow-hidden border border-border/60">
-                    <div 
+                    <div
                       className="bg-brand-red h-full rounded-full transition-all duration-500"
-                      style={{ 
-                        width: `${Math.min(100, (((computeTelemetry?.cloud_burst?.today_spent_usd || 0) / 2.0) * 100))}%` 
+                      style={{
+                        width: `${Math.min(100, (((computeTelemetry?.cloud_burst?.today_spent_usd || 0) / 2.0) * 100))}%`
                       }}
                     />
                   </div>
@@ -584,10 +585,10 @@ export default function Dashboard() {
                 </div>
 
                 <div className="w-full bg-elevated rounded-full h-1.5 overflow-hidden">
-                  <div 
+                  <div
                     className="bg-brand-red h-full rounded-full transition-all duration-500"
-                    style={{ 
-                      width: `${Math.min(100, (((analytics?.storage?.total_mb || 0) / (analytics?.storage?.limit_mb || 50000)) * 100))}%` 
+                    style={{
+                      width: `${Math.min(100, (((analytics?.storage?.total_mb || 0) / (analytics?.storage?.limit_mb || 50000)) * 100))}%`
                     }}
                   />
                 </div>

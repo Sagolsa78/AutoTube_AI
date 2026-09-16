@@ -7,19 +7,19 @@ All permanent media files must pass through the `StorageBackend` abstract interf
 class StorageBackend(ABC):
     @abstractmethod
     async def put_file(self, local_path: str | Path, remote_key: str) -> str: ...
-    
+
     @abstractmethod
     async def get_file(self, remote_key: str, local_path: str | Path) -> str: ...
-    
+
     @abstractmethod
     async def delete_file(self, remote_key: str) -> bool: ...
-    
+
     @abstractmethod
     async def exists(self, remote_key: str) -> bool: ...
-    
+
     @abstractmethod
     async def get_public_url(self, remote_key: str) -> Optional[str]: ...
-    
+
     @abstractmethod
     async def generate_signed_url(self, remote_key: str, expires_in: int = 3600) -> str: ...
 ```

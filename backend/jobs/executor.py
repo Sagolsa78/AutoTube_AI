@@ -1,9 +1,12 @@
-from typing import Protocol, Any, Dict
+from typing import Any, Dict, Protocol
+
 from backend.models.models import JobStatus
+
 
 class JobExecutionHandle:
     def __init__(self, job_id: str):
         self.job_id = job_id
+
 
 class JobExecutor(Protocol):
     """
@@ -13,7 +16,7 @@ class JobExecutor(Protocol):
 
     async def submit(self, job_id: str, payload: Dict[str, Any]) -> JobExecutionHandle:
         """
-        Submits a job for execution. 
+        Submits a job for execution.
         Updates the job status in the database to 'dispatched' or 'running' depending on the executor.
         """
         ...

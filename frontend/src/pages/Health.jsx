@@ -64,7 +64,7 @@ export default function Health() {
             .sort((a, b) => a.priority - b.priority);
 
           if (groupProviders.length === 0) return null;
-          
+
           const groupIcons = {
             'LLM': { icon: 'sparkles', color: 'text-brand-red' },
             'TTS': { icon: 'mic', color: 'text-info' },
@@ -84,12 +84,12 @@ export default function Health() {
                   {groupProviders.filter(p => p.status === 'online').length}/{groupProviders.length} active
                 </span>
               </div>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {groupProviders.map(provider => (
-                  <Card 
-                    key={provider.name} 
-                    variant="surface" 
+                  <Card
+                    key={provider.name}
+                    variant="surface"
                     className="flex flex-col justify-between overflow-hidden relative"
                   >
                     {provider.status === 'offline' && (

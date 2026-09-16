@@ -2,26 +2,36 @@
 Scripts router — generate script from an approved idea, quality check, store.
 Now produces scene-based scripts with per-scene narration and visual descriptions.
 """
+
 from __future__ import annotations
+
 import asyncio
 from typing import Any
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
-from backend.db.database import get_db, AsyncSessionLocal
-from backend.models.models import Script, Idea, IdeaStatus, Channel, ScriptStatus, Scene, User
 from backend.auth.dependencies import get_current_user
 from backend.core.config import settings
+from backend.db.database import AsyncSessionLocal, get_db
+from backend.models.models import (
+    Channel,
+    Idea,
+    IdeaStatus,
+    Scene,
+    Script,
+    ScriptStatus,
+    User,
+)
 
 router = APIRouter()
 
 
-
-
 # ── Pydantic models ───────────────────────────────────────────────────────────
+
 
 class SceneOut(BaseModel):
     id: str
@@ -34,42 +44,51 @@ class SceneOut(BaseModel):
     visual_intent: str | None = None
     stock_query: str | None = None
 
+
 class ScriptOut(BaseModel):
-    id:             str
-    idea_id:        str
-    scenes:         list[SceneOut]
-    full_text:      str | None
-    duration_est:   float | None
-    quality_score:  float
-    fact_check_ok:  bool
-    provider_used:  str | None
-    status:         str
-    created_at:     str
-    language:       str | None = None
-    locale:         str | None = None
-    claims:         list | None = None
+    id: str
+    idea_id: str
+    scenes: list[SceneOut]
+    full_text: str | None
+    duration_est: float | None
+    quality_score: float
+    fact_check_ok: bool
+    provider_used: str | None
+    status: str
+    created_at: str
+    language: str | None = None
+    locale: str | None = None
+    claims: list | None = None
     latest_video_status: str | None = None
     latest_video_error: str | None = None
 
+
 class ScriptUpdateIn(BaseModel):
     """Allows editing full_text or individual scene narration/visual_description."""
+
     full_text: str | None = None
-    scenes: list[dict] | None = None   # [{id, narration?, visual_description?, preferred_visual_mode?, generation_prompt?, visual_intent?, stock_query?}]
+    scenes: list[dict] | None = (
+        None  # [{id, narration?, visual_description?, preferred_visual_mode?, generation_prompt?, visual_intent?, stock_query?}]
+    )
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
+
 @router.get("/", response_model=list[ScriptOut])
 async def list_scripts(
     channel_id: str | None = None,
-    idea_id: str | None = None, 
+    idea_id: str | None = None,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     user_id_val = user.id
-    q = select(Script).join(Idea).join(Channel).where(Channel.user_id == user_id_val).options(
-        selectinload(Script.scenes),
-        selectinload(Script.videos)
+    q = (
+        select(Script)
+        .join(Idea)
+        .join(Channel)
+        .where(Channel.user_id == user_id_val)
+        .options(selectinload(Script.scenes), selectinload(Script.videos))
     )
     if channel_id:
         q = q.where(Channel.id == channel_id)
@@ -81,24 +100,30 @@ async def list_scripts(
 
 @router.post("/generate/{idea_id}", response_model=ScriptOut, status_code=201)
 async def generate_script_for_idea(
-    idea_id: str, 
-    language: str | None = None, 
-    locale: str | None = None, 
+    idea_id: str,
+    language: str | None = None,
+    locale: str | None = None,
     provider: str | None = None,
     model: str | None = None,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Generate a script for an approved idea.
     Runs LLM + quality check synchronously (fine for manual test phase).
     """
     user_id_val = user.id
-    idea = await db.get(Idea, idea_id)
+    idea = await db.scalar(
+        select(Idea).where(Idea.id == idea_id, Idea.user_id == user_id_val)
+    )
     if not idea:
         raise HTTPException(404, "Idea not found")
-        
-    channel = await db.get(Channel, idea.channel_id)
+
+    channel = await db.scalar(
+        select(Channel).where(
+            Channel.id == idea.channel_id, Channel.user_id == user_id_val
+        )
+    )
     if not channel or channel.user_id != user_id_val:
         raise HTTPException(404, "Idea not found")
 
@@ -111,8 +136,14 @@ async def generate_script_for_idea(
     niche = channel.niche
     final_language = language or channel.language
     final_locale = locale or "US"
-    preferred_prov = provider or getattr(user, "preferred_ai_provider", None) or settings.DEFAULT_AI_PROVIDER
-    preferred_mod = model or getattr(user, "preferred_ai_model", None) or settings.DEFAULT_AI_MODEL
+    preferred_prov = (
+        provider
+        or getattr(user, "preferred_ai_provider", None)
+        or settings.DEFAULT_AI_PROVIDER
+    )
+    preferred_mod = (
+        model or getattr(user, "preferred_ai_model", None) or settings.DEFAULT_AI_MODEL
+    )
 
     # Release DB transaction immediately so Neon/PgBouncer pooler doesn't close idle connection
     try:
@@ -121,47 +152,66 @@ async def generate_script_for_idea(
         pass
 
     # Run generation pipeline in background thread so event loop and network remain unblocked
-    from engine.script.generator import generate_script
+    from backend.models.models import CostEvent
     from engine.quality.checker import check_script
     from engine.research.verifier import FactVerifier
+    from engine.script.generator import generate_script
+
     try:
-        story_spec, provider_used = await asyncio.to_thread(
+        story_spec, provider_used, cost_data = await asyncio.to_thread(
             generate_script,
             idea_topic,
             niche=niche,
             language=final_language,
             provider=preferred_prov,
-            model=preferred_mod
+            model=preferred_mod,
         )
         story_spec.language = final_language
         story_spec.locale = final_locale
         full_text = " ".join([s.narration for s in story_spec.scenes if s.narration])
         duration_est = len(full_text.split()) / 135 * 60
-        
+
         data = story_spec.model_dump()
         data["full_text"] = full_text
         report = await asyncio.to_thread(check_script, data, niche)
-        
+
         # True fact checking
         verifier = FactVerifier()
-        fact_check_ok = await asyncio.to_thread(verifier.verify_story, story_spec, final_language)
-            
+        fact_check_ok = await asyncio.to_thread(
+            verifier.verify_story, story_spec, final_language
+        )
+
     except Exception as exc:
         raise HTTPException(500, f"Script generation failed: {exc}")
 
     # Use a fresh, verified session from the pool to save the generated script and scenes
     async with AsyncSessionLocal() as save_db:
         script = Script(
-            user_id        = user_id_val,
-            idea_id        = idea_id_val,
-            full_text      = full_text,
-            duration_est   = duration_est,
-            quality_score  = report.score,
-            fact_check_ok  = fact_check_ok,
-            provider_used  = provider_used,
-            body           = story_spec.model_dump()
+            user_id=user_id_val,
+            idea_id=idea_id_val,
+            full_text=full_text,
+            duration_est=duration_est,
+            quality_score=report.score,
+            fact_check_ok=fact_check_ok,
+            provider_used=provider_used,
+            body=story_spec.model_dump(),
         )
         save_db.add(script)
+
+        # Record cost event
+        if cost_data:
+            cost_event = CostEvent(
+                user_id=user_id_val,
+                channel_id=channel.id,
+                stage="SCRIPT",
+                provider=cost_data.get("provider"),
+                model=cost_data.get("model"),
+                tokens=cost_data.get("tokens", 0),
+                estimated_cost=cost_data.get("estimated_cost", 0.0),
+                operation="generate_script",
+            )
+            save_db.add(cost_event)
+
         await save_db.flush()
 
         # Create Scene rows from LLM output
@@ -175,13 +225,19 @@ async def generate_script_for_idea(
             )
             save_db.add(scene_obj)
 
-        current_idea = await save_db.get(Idea, idea_id_val)
+        current_idea = await save_db.scalar(
+            select(Idea).where(Idea.id == idea_id_val, Idea.user_id == user.id)
+        )
         if current_idea:
             current_idea.status = IdeaStatus.promoted
         await save_db.commit()
 
         # Reload with scenes
-        q = select(Script).where(Script.id == script.id).options(selectinload(Script.scenes), selectinload(Script.videos))
+        q = (
+            select(Script)
+            .where(Script.id == script.id)
+            .options(selectinload(Script.scenes), selectinload(Script.videos))
+        )
         res = await save_db.execute(q)
         saved_script = res.scalars().first()
 
@@ -190,12 +246,18 @@ async def generate_script_for_idea(
 
 @router.get("/{script_id}", response_model=ScriptOut)
 async def get_script(
-    script_id: str, 
+    script_id: str,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     user_id_val = user.id
-    q = select(Script).join(Idea).join(Channel).where(Channel.user_id == user_id_val, Script.id == script_id).options(selectinload(Script.scenes), selectinload(Script.videos))
+    q = (
+        select(Script)
+        .join(Idea)
+        .join(Channel)
+        .where(Channel.user_id == user_id_val, Script.id == script_id)
+        .options(selectinload(Script.scenes), selectinload(Script.videos))
+    )
     res = await db.execute(q)
     s = res.scalars().first()
     if not s:
@@ -205,20 +267,28 @@ async def get_script(
 
 @router.patch("/{script_id}", response_model=ScriptOut)
 async def update_script(
-    script_id: str, 
-    body: ScriptUpdateIn, 
+    script_id: str,
+    body: ScriptUpdateIn,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Inline editing of script text and individual scenes."""
     user_id_val = user.id
-    q = select(Script).join(Idea).join(Channel).where(Channel.user_id == user_id_val, Script.id == script_id).options(selectinload(Script.scenes), selectinload(Script.videos))
+    q = (
+        select(Script)
+        .join(Idea)
+        .join(Channel)
+        .where(Channel.user_id == user_id_val, Script.id == script_id)
+        .options(selectinload(Script.scenes), selectinload(Script.videos))
+    )
     res = await db.execute(q)
     s = res.scalars().first()
     if not s:
         raise HTTPException(404, "Script not found")
     if s.status == ScriptStatus.used_in_render:
-        raise HTTPException(400, "Cannot edit a script that is already used in a render.")
+        raise HTTPException(
+            400, "Cannot edit a script that is already used in a render."
+        )
 
     if body.full_text is not None:
         s.full_text = body.full_text
@@ -226,14 +296,14 @@ async def update_script(
     if body.scenes:
         scene_map = {sc.id: sc for sc in s.scenes}
         s_body = s.body or {}
-        
+
         if isinstance(s_body, list):
             spec_scenes = s_body
             is_list_body = True
         else:
             spec_scenes = s_body.get("scenes", [])
             is_list_body = False
-        
+
         for patch in body.scenes:
             scene_id = patch.get("id")
             scene = scene_map.get(scene_id)
@@ -243,12 +313,14 @@ async def update_script(
                 scene.narration = patch["narration"]
             if "visual_description" in patch:
                 scene.visual_description = patch["visual_description"]
-            
+
             # Update the JSON body as well for advanced fields
             for i, spec_scene in enumerate(spec_scenes):
                 if spec_scene.get("scene_number") == scene.scene_number:
                     if "preferred_visual_mode" in patch:
-                        spec_scenes[i]["preferred_visual_mode"] = patch["preferred_visual_mode"]
+                        spec_scenes[i]["preferred_visual_mode"] = patch[
+                            "preferred_visual_mode"
+                        ]
                     if "generation_prompt" in patch:
                         spec_scenes[i]["generation_prompt"] = patch["generation_prompt"]
                     if "visual_intent" in patch:
@@ -258,15 +330,19 @@ async def update_script(
                     if "narration" in patch:
                         spec_scenes[i]["narration"] = patch["narration"]
                     break
-                        
+
         if is_list_body:
             s.body = spec_scenes
         else:
             s_body["scenes"] = spec_scenes
             s.body = s_body
-        
+
         # Rebuild full_text from scenes
-        s.full_text = " ".join(sc.narration for sc in sorted(s.scenes, key=lambda x: x.scene_number) if sc.narration)
+        s.full_text = " ".join(
+            sc.narration
+            for sc in sorted(s.scenes, key=lambda x: x.scene_number)
+            if sc.narration
+        )
 
     await db.flush()
     return _fmt(s)
@@ -274,19 +350,26 @@ async def update_script(
 
 @router.post("/{script_id}/regenerate", response_model=ScriptOut)
 async def regenerate_script(
-    script_id: str, 
+    script_id: str,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
-    q = select(Script).join(Idea).join(Channel).where(Channel.user_id == user.id, Script.id == script_id)
+    q = (
+        select(Script)
+        .join(Idea)
+        .join(Channel)
+        .where(Channel.user_id == user.id, Script.id == script_id)
+    )
     res = await db.execute(q)
     old_script = res.scalars().first()
-    
+
     if not old_script:
         raise HTTPException(404, "Script not found")
     if old_script.status == ScriptStatus.used_in_render:
-        raise HTTPException(400, "Cannot regenerate a script that is already used in a render.")
-    
+        raise HTTPException(
+            400, "Cannot regenerate a script that is already used in a render."
+        )
+
     old_script.status = ScriptStatus.discarded
     await db.flush()
 
@@ -295,28 +378,35 @@ async def regenerate_script(
 
 @router.post("/{script_id}/discard", response_model=ScriptOut)
 async def discard_script(
-    script_id: str, 
+    script_id: str,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     user_id_val = user.id
-    q = select(Script).join(Idea).join(Channel).where(Channel.user_id == user_id_val, Script.id == script_id).options(selectinload(Script.scenes), selectinload(Script.videos))
+    q = (
+        select(Script)
+        .join(Idea)
+        .join(Channel)
+        .where(Channel.user_id == user_id_val, Script.id == script_id)
+        .options(selectinload(Script.scenes), selectinload(Script.videos))
+    )
     res = await db.execute(q)
     s = res.scalars().first()
     if not s:
         raise HTTPException(404, "Script not found")
     if s.status == ScriptStatus.used_in_render:
-        raise HTTPException(400, "Cannot discard a script that is already used in a render.")
-    
+        raise HTTPException(
+            400, "Cannot discard a script that is already used in a render."
+        )
+
     s.status = ScriptStatus.discarded
     await db.flush()
     return _fmt(s)
 
 
-
 def _fmt(s: Script) -> dict:
     scenes = []
-    
+
     spec_scenes = {}
     language = "en"
     locale = "US"
@@ -332,40 +422,50 @@ def _fmt(s: Script) -> dict:
             for sc in s.body:
                 if isinstance(sc, dict):
                     spec_scenes[sc.get("scene_number")] = sc
-            
+
     if hasattr(s, "scenes") and s.scenes:
         for sc in sorted(s.scenes, key=lambda x: x.scene_number):
             spec_sc = spec_scenes.get(sc.scene_number, {})
-            scenes.append({
-                "id": sc.id,
-                "scene_number": sc.scene_number,
-                "narration": sc.narration or "",
-                "visual_description": sc.visual_description or "",
-                "asset_id": sc.asset_id,
-                "preferred_visual_mode": spec_sc.get("preferred_visual_mode", "STOCK"),
-                "generation_prompt": spec_sc.get("generation_prompt", ""),
-                "visual_intent": spec_sc.get("visual_intent", ""),
-                "stock_query": spec_sc.get("stock_query", "")
-            })
-            
+            scenes.append(
+                {
+                    "id": sc.id,
+                    "scene_number": sc.scene_number,
+                    "narration": sc.narration or "",
+                    "visual_description": sc.visual_description or "",
+                    "asset_id": sc.asset_id,
+                    "preferred_visual_mode": spec_sc.get(
+                        "preferred_visual_mode", "STOCK"
+                    ),
+                    "generation_prompt": spec_sc.get("generation_prompt", ""),
+                    "visual_intent": spec_sc.get("visual_intent", ""),
+                    "stock_query": spec_sc.get("stock_query", ""),
+                }
+            )
+
     latest_vid = None
     if hasattr(s, "videos") and s.videos:
         latest_vid = sorted(s.videos, key=lambda v: v.created_at, reverse=True)[0]
-        
+
     return {
-        "id":             s.id,
-        "idea_id":        s.idea_id,
-        "scenes":         scenes,
-        "full_text":      s.full_text,
-        "duration_est":   s.duration_est,
-        "quality_score":  s.quality_score if s.quality_score is not None else 0.0,
-        "fact_check_ok":  s.fact_check_ok if s.fact_check_ok is not None else False,
-        "provider_used":  s.provider_used,
-        "status":         s.status.value if hasattr(s.status, "value") else (s.status or "draft"),
-        "created_at":     str(s.created_at),
-        "language":       language,
-        "locale":         locale,
-        "claims":         claims,
-        "latest_video_status": latest_vid.status.value if (latest_vid and hasattr(latest_vid.status, "value")) else (latest_vid.status if latest_vid else None),
-        "latest_video_error": latest_vid.notes if latest_vid else None
+        "id": s.id,
+        "idea_id": s.idea_id,
+        "scenes": scenes,
+        "full_text": s.full_text,
+        "duration_est": s.duration_est,
+        "quality_score": s.quality_score if s.quality_score is not None else 0.0,
+        "fact_check_ok": s.fact_check_ok if s.fact_check_ok is not None else False,
+        "provider_used": s.provider_used,
+        "status": (
+            s.status.value if hasattr(s.status, "value") else (s.status or "draft")
+        ),
+        "created_at": str(s.created_at),
+        "language": language,
+        "locale": locale,
+        "claims": claims,
+        "latest_video_status": (
+            latest_vid.status.value
+            if (latest_vid and hasattr(latest_vid.status, "value"))
+            else (latest_vid.status if latest_vid else None)
+        ),
+        "latest_video_error": latest_vid.notes if latest_vid else None,
     }

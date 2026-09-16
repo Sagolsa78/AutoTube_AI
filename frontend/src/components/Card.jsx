@@ -4,20 +4,20 @@ import React from 'react';
  * Card Component Primitives
  * Styled according to Section 5 tokens (Surface #111318, Border #262A32, Elevated #171A20)
  */
-export function Card({ 
-  children, 
-  className = '', 
-  variant = 'surface', 
-  hoverable = false, 
+export function Card({
+  children,
+  className = '',
+  variant = 'surface',
+  hoverable = false,
   onClick,
-  ...props 
+  ...props
 }) {
   const bgClass = variant === 'elevated' ? 'bg-elevated' : 'bg-surface';
   const hoverClass = hoverable ? 'hover:border-border-strong transition-colors duration-150' : '';
   const clickableClass = onClick ? 'cursor-pointer select-none' : '';
 
   return (
-    <div 
+    <div
       className={`${bgClass} border border-border rounded-xl p-5 shadow-card-subtle ${hoverClass} ${clickableClass} ${className}`}
       onClick={onClick}
       role={onClick ? 'button' : undefined}

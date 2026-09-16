@@ -1,7 +1,7 @@
 # AutoTube AI — Current Architecture State
 
-> Audit performed: 2026-09-11  
-> Auditor: Architecture Review (Phase 0)  
+> Audit performed: 2026-09-11
+> Auditor: Architecture Review (Phase 0)
 > Repository: `Sagolsa78/AutoTube_AI` branch `v1`
 
 ---

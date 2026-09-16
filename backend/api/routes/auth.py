@@ -2,22 +2,25 @@
 Authentication & Multi-User Management Router.
 Provides native registration, login, profile retrieval, and AI model preferences.
 """
+
 from __future__ import annotations
-import os
+
 import hashlib
 import logging
-from datetime import datetime, timezone, timedelta
+import os
+from datetime import datetime, timedelta, timezone
 from typing import Optional
+
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.auth.dependencies import get_current_user
 from backend.core.config import settings
 from backend.db.database import get_db
-from backend.models.models import User, Channel
-from backend.auth.dependencies import get_current_user
+from backend.models.models import Channel, User
 from integrations.providers.ai_providers import get_available_models
 
 log = logging.getLogger(__name__)
@@ -25,17 +28,24 @@ router = APIRouter()
 
 # ── Password Utilities ─────────────────────────────────────────────────────────
 
+
 def hash_password(password: str) -> str:
     salt = os.urandom(16).hex()
-    dk = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 100000)
+    dk = hashlib.pbkdf2_hmac(
+        "sha256", password.encode("utf-8"), salt.encode("utf-8"), 100000
+    )
     return f"{salt}:{dk.hex()}"
+
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     if not hashed_password or ":" not in hashed_password:
         return False
     salt, stored_hash = hashed_password.split(":", 1)
-    dk = hashlib.pbkdf2_hmac("sha256", plain_password.encode("utf-8"), salt.encode("utf-8"), 100000)
+    dk = hashlib.pbkdf2_hmac(
+        "sha256", plain_password.encode("utf-8"), salt.encode("utf-8"), 100000
+    )
     return dk.hex() == stored_hash
+
 
 def create_access_token(user_id: str, email: str, expires_days: int = 30) -> str:
     now = datetime.now(timezone.utc)
@@ -50,6 +60,7 @@ def create_access_token(user_id: str, email: str, expires_days: int = 30) -> str
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
+
 class RegisterIn(BaseModel):
     email: str
     password: str
@@ -57,9 +68,11 @@ class RegisterIn(BaseModel):
     channel_name: Optional[str] = "My Shorts Channel"
     niche: Optional[str] = "science_wow"
 
+
 class LoginIn(BaseModel):
     email: str
     password: str
+
 
 class UserOut(BaseModel):
     id: str
@@ -69,10 +82,12 @@ class UserOut(BaseModel):
     preferred_ai_provider: Optional[str] = "gemini"
     preferred_ai_model: Optional[str] = "gemini-3.5-flash-lite"
 
+
 class AuthResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserOut
+
 
 class AiSettingsIn(BaseModel):
     provider: str
@@ -81,17 +96,24 @@ class AiSettingsIn(BaseModel):
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
-@router.post("/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
+
+@router.post(
+    "/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED
+)
 async def register(body: RegisterIn, db: AsyncSession = Depends(get_db)):
     """Register a new user account with default channel."""
     if len(body.password) < 6:
-        raise HTTPException(status_code=400, detail="Password must be at least 6 characters long")
+        raise HTTPException(
+            status_code=400, detail="Password must be at least 6 characters long"
+        )
 
     # Check if email is taken
     q = select(User).where(User.email == body.email.lower().strip())
     existing = (await db.execute(q)).scalars().first()
     if existing:
-        raise HTTPException(status_code=400, detail="An account with this email already exists")
+        raise HTTPException(
+            status_code=400, detail="An account with this email already exists"
+        )
 
     # Create User
     pwd_hash = hash_password(body.password)
@@ -127,9 +149,10 @@ async def register(body: RegisterIn, db: AsyncSession = Depends(get_db)):
             email=new_user.email,
             display_name=new_user.display_name,
             channel_name=new_user.channel_name,
-            preferred_ai_provider=new_user.preferred_ai_provider or settings.DEFAULT_AI_PROVIDER,
+            preferred_ai_provider=new_user.preferred_ai_provider
+            or settings.DEFAULT_AI_PROVIDER,
             preferred_ai_model=new_user.preferred_ai_model or settings.DEFAULT_AI_MODEL,
-        )
+        ),
     )
 
 
@@ -142,7 +165,10 @@ async def login(body: LoginIn, db: AsyncSession = Depends(get_db)):
 
     # If no account exists and running in dev mode with default user requested
     if not user:
-        if email_clean in ("default@local.dev", "admin@autotube.ai", "user@local.dev") and settings.AUTH_DISABLED:
+        if (
+            email_clean in ("default@local.dev", "admin@autotube.ai", "user@local.dev")
+            and settings.AUTH_DISABLED
+        ):
             # Auto-provision local dev user
             user = User(
                 email=email_clean,
@@ -153,7 +179,9 @@ async def login(body: LoginIn, db: AsyncSession = Depends(get_db)):
             db.add(user)
             await db.flush()
             # Default channel
-            ch = Channel(user_id=user.id, name="Dev Studio Channel", niche="science_wow")
+            ch = Channel(
+                user_id=user.id, name="Dev Studio Channel", niche="science_wow"
+            )
             db.add(ch)
             await db.commit()
             await db.refresh(user)
@@ -171,9 +199,10 @@ async def login(body: LoginIn, db: AsyncSession = Depends(get_db)):
             email=user.email,
             display_name=user.display_name,
             channel_name=user.channel_name,
-            preferred_ai_provider=user.preferred_ai_provider or settings.DEFAULT_AI_PROVIDER,
+            preferred_ai_provider=user.preferred_ai_provider
+            or settings.DEFAULT_AI_PROVIDER,
             preferred_ai_model=user.preferred_ai_model or settings.DEFAULT_AI_MODEL,
-        )
+        ),
     )
 
 
@@ -185,7 +214,8 @@ async def get_me(user: User = Depends(get_current_user)):
         email=user.email,
         display_name=user.display_name,
         channel_name=user.channel_name,
-        preferred_ai_provider=user.preferred_ai_provider or settings.DEFAULT_AI_PROVIDER,
+        preferred_ai_provider=user.preferred_ai_provider
+        or settings.DEFAULT_AI_PROVIDER,
         preferred_ai_model=user.preferred_ai_model or settings.DEFAULT_AI_MODEL,
     )
 
@@ -197,7 +227,8 @@ async def list_available_models(user: User = Depends(get_current_user)):
     return {
         "providers": providers,
         "user_preference": {
-            "preferred_ai_provider": user.preferred_ai_provider or settings.DEFAULT_AI_PROVIDER,
+            "preferred_ai_provider": user.preferred_ai_provider
+            or settings.DEFAULT_AI_PROVIDER,
             "preferred_ai_model": user.preferred_ai_model or settings.DEFAULT_AI_MODEL,
         },
         "default_provider": settings.DEFAULT_AI_PROVIDER,
@@ -209,7 +240,7 @@ async def list_available_models(user: User = Depends(get_current_user)):
 async def update_ai_settings(
     body: AiSettingsIn,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Save user's preferred AI provider and model."""
     user.preferred_ai_provider = body.provider

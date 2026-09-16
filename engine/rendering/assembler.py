@@ -2,13 +2,19 @@
 Video assembly — stitches clips, burns styled captions, overlays watermark,
 mixes audio using FFmpeg.  Output: 1080×1920 MP4, H.264/AAC, 30fps.
 """
+
 from __future__ import annotations
+
 import logging
 import os
 import subprocess
 import uuid
 from functools import lru_cache
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from engine.story.timeline import RenderTimeline
 
 from backend.settings import RENDER_DIR
 from engine.captions.styles import build_karaoke_ass
@@ -19,16 +25,17 @@ log = logging.getLogger(__name__)
 
 from backend.services.media.encoder import select_video_encoder
 
-TARGET_W = 1080
-TARGET_H = 1920
-
 
 def _ffprobe_duration(path: str) -> float:
     """Return clip duration in seconds via ffprobe."""
     cmd = [
-        "ffprobe", "-v", "error",
-        "-show_entries", "format=duration",
-        "-of", "default=noprint_wrappers=1:nokey=1",
+        "ffprobe",
+        "-v",
+        "error",
+        "-show_entries",
+        "format=duration",
+        "-of",
+        "default=noprint_wrappers=1:nokey=1",
         path,
     ]
     result = subprocess.run(cmd, capture_output=True, text=True)
@@ -49,7 +56,9 @@ def _validate_subtitle_content(sub_path: str) -> bool:
     """Return True if subtitle is valid, False if it should be skipped."""
     p = Path(sub_path)
     if not p.exists():
-        log.warning(f"Subtitle file not found: {sub_path}. Proceeding without captions.")
+        log.warning(
+            f"Subtitle file not found: {sub_path}. Proceeding without captions."
+        )
         return False
     text = p.read_text(encoding="utf-8").strip()
 
@@ -61,11 +70,15 @@ def _validate_subtitle_content(sub_path: str) -> bool:
     if is_ass:
         dialogue_count = text.count("Dialogue:")
         if dialogue_count < 1:
-            log.warning(f"ASS subtitle has no Dialogue line(s): {sub_path}. Proceeding without captions.")
+            log.warning(
+                f"ASS subtitle has no Dialogue line(s): {sub_path}. Proceeding without captions."
+            )
             return False
     else:
         if "-->" not in text:
-            log.warning(f"SRT has no timing cues: {sub_path}. Proceeding without captions.")
+            log.warning(
+                f"SRT has no timing cues: {sub_path}. Proceeding without captions."
+            )
             return False
 
     return True
@@ -73,23 +86,30 @@ def _validate_subtitle_content(sub_path: str) -> bool:
 
 def _build_filtergraph(
     timeline: "RenderTimeline" = None,
-    n_clips: int = 0, # legacy
+    n_clips: int = 0,  # legacy
     audio_dur: float = 0.0,
     sub_path: str = "",
     watermark_path: str | None = None,
     watermark_opacity: float = 0.4,
     watermark_position: str = "bottom_right",
     watermark_scale: float = 0.12,
+    bgm_path: str | None = None,
+    orientation: str = "9:16",
 ) -> str:
     """
     Construct FFmpeg filtergraph using precise timeline durations.
     """
+    if orientation == "16:9":
+        target_w, target_h = 1920, 1080
+    else:
+        target_w, target_h = 1080, 1920
+
     fade_dur = 0.3
     parts: list[str] = []
-    
+
     has_timeline = timeline and timeline.scenes
     clips_count = len(timeline.scenes) if has_timeline else n_clips
-    
+
     if not has_timeline:
         # Legacy fallback
         if clips_count > 1:
@@ -98,7 +118,10 @@ def _build_filtergraph(
             seg = audio_dur
         durations = [seg] * clips_count
     else:
-        durations = [scene.duration + fade_dur if i < clips_count - 1 else scene.duration for i, scene in enumerate(timeline.scenes)]
+        durations = [
+            scene.duration + fade_dur if i < clips_count - 1 else scene.duration
+            for i, scene in enumerate(timeline.scenes)
+        ]
 
     # -- Per-clip processing --------------------------------------------------
     for i in range(clips_count):
@@ -107,8 +130,8 @@ def _build_filtergraph(
             f"[{i}:v]"
             f"fps=30,"
             f"format=yuv420p,"
-            f"scale={TARGET_W}:{TARGET_H}:force_original_aspect_ratio=increase,"
-            f"crop={TARGET_W}:{TARGET_H},"
+            f"scale={target_w}:{target_h}:force_original_aspect_ratio=increase,"
+            f"crop={target_w}:{target_h},"
             f"trim=duration={seg:.3f},"
             f"setpts=PTS-STARTPTS,"
             f"eq=contrast=1.05:brightness=0.02:saturation=1.1"
@@ -124,10 +147,10 @@ def _build_filtergraph(
         current_offset = 0.0
         for i in range(1, clips_count):
             if has_timeline:
-                current_offset += timeline.scenes[i-1].duration
+                current_offset += timeline.scenes[i - 1].duration
             else:
                 current_offset = i * durations[0] - i * fade_dur
-                
+
             out_name = f"[v_fade_{i}]" if i < clips_count - 1 else after_concat
             parts.append(
                 f"{last_out}[v{i}]xfade=transition=fade:duration={fade_dur}:offset={current_offset:.3f}{out_name};"
@@ -139,23 +162,22 @@ def _build_filtergraph(
         safe_sub = _escape_sub_path(sub_path)
         after_subs = "subbed"
         parts.append(
-            f"{after_concat}subtitles=filename='{safe_sub}'"
-            f"[{after_subs}];"
+            f"{after_concat}subtitles=filename='{safe_sub}'" f"[{after_subs}];"
         )
     else:
         after_subs = after_concat.strip("[]")
 
     # -- Watermark overlay (optional) -----------------------------------------
     if watermark_path and Path(watermark_path).exists():
-        wm_input_idx = clips_count + 1   # audio is n_clips, watermark is n_clips+1
-        wm_w = int(TARGET_W * watermark_scale)
+        wm_input_idx = clips_count + 1 if not bgm_path else clips_count + 2
+        wm_w = int(target_w * watermark_scale)
 
         # Position mapping
         pos_map = {
             "bottom_right": (f"W-w-30", f"H-h-30"),
-            "bottom_left":  ("30",       f"H-h-30"),
-            "top_right":    (f"W-w-30", "30"),
-            "top_left":     ("30",       "30"),
+            "bottom_left": ("30", f"H-h-30"),
+            "top_right": (f"W-w-30", "30"),
+            "top_left": ("30", "30"),
         }
         ox, oy = pos_map.get(watermark_position, pos_map["bottom_right"])
 
@@ -166,19 +188,34 @@ def _build_filtergraph(
             f"colorchannelmixer=aa={watermark_opacity:.2f}"
             f"[wm];"
         )
-        parts.append(
-            f"[{after_subs}][wm]overlay={ox}:{oy}[out]"
-        )
+        parts.append(f"[{after_subs}][wm]overlay={ox}:{oy}[out]")
     else:
         # No watermark — just alias the output
-        parts.append(f"[{after_subs}]copy[out]")
+        parts.append(f"[{after_subs}]copy[out_v];")
+
+    # -- Audio Mixing & Ducking -----------------------------------------------
+    # tts audio is at clips_count
+    tts_idx = clips_count
+    if bgm_path and Path(bgm_path).exists():
+        bgm_idx = tts_idx + 1
+        # Ducking filtergraph: sidechain compress the BGM using the TTS signal
+        # [bgm]volume=0.2[bgm_vol]
+        # [bgm_vol][tts]sidechaincompress[ducked_bgm]
+        # [tts][ducked_bgm]amix[out_a]
+        parts.append(
+            f"[{bgm_idx}:a]volume=0.2[bgm_vol];"
+            f"[bgm_vol][{tts_idx}:a]sidechaincompress=threshold=0.04:ratio=4:attack=50:release=300[ducked_bgm];"
+            f"[{tts_idx}:a][ducked_bgm]amix=inputs=2:duration=first:dropout_transition=2[out_a]"
+        )
+    else:
+        parts.append(f"[{tts_idx}:a]copy[out_a]")
 
     return "".join(parts)
 
 
 def assemble_video(
     timeline: "RenderTimeline" = None,
-    clip_paths: list[str] = None, # legacy
+    clip_paths: list[str] = None,  # legacy
     audio_path: str = "",
     srt_path: str = "",
     out_path: str | None = None,
@@ -189,6 +226,8 @@ def assemble_video(
     watermark_opacity: float = 0.4,
     watermark_position: str = "bottom_right",
     watermark_scale: float = 0.12,
+    bgm_path: str | None = None,
+    orientation: str = "9:16",
 ) -> str:
     """
     Build the final MP4 with styled captions and optional watermark.
@@ -208,20 +247,32 @@ def assemble_video(
     # ── Check for existing output (Idempotency) ───────────────────────────
     if Path(out_path).exists() and Path(out_path).stat().st_size > 0:
         try:
-            cmd = ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", out_path]
+            cmd = [
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                out_path,
+            ]
             dur_out = subprocess.check_output(cmd).decode().strip()
             if float(dur_out) > 0:
-                log.info("Bypassing FFmpeg assembly: Valid output video already exists.")
+                log.info(
+                    "Bypassing FFmpeg assembly: Valid output video already exists."
+                )
                 return out_path
         except Exception:
-            pass # Invalid existing file, proceed with render
+            pass  # Invalid existing file, proceed with render
 
     # ── Generate / regenerate ASS with the correct caption style ─────────
     if word_boundaries:
         # Derive .ass path next to the audio
         sub_path = str(Path(srt_path).with_suffix(".ass"))
         build_karaoke_ass(
-            word_boundaries, sub_path,
+            word_boundaries,
+            sub_path,
             style_key=caption_style,
         )
         log.info("Built ASS subtitle with style='%s' → %s", caption_style, sub_path)
@@ -244,7 +295,11 @@ def assemble_video(
     input_flags: list[str] = []
     for cp in clip_paths:
         input_flags += ["-stream_loop", "-1", "-t", str(audio_dur + 0.5), "-i", cp]
+
     input_flags += ["-i", audio_path]
+
+    if bgm_path and Path(bgm_path).exists():
+        input_flags += ["-stream_loop", "-1", "-i", bgm_path]
 
     if watermark_path and Path(watermark_path).exists():
         input_flags += ["-i", watermark_path]
@@ -259,6 +314,8 @@ def assemble_video(
         watermark_opacity=watermark_opacity,
         watermark_position=watermark_position,
         watermark_scale=watermark_scale,
+        bgm_path=bgm_path,
+        orientation=orientation,
     )
 
     # Detect best available encoder (GPU or CPU fallback)
@@ -266,36 +323,56 @@ def assemble_video(
     log.info("Using video encoder: %s", video_codec)
 
     cmd = [
-        "ffmpeg", "-y",
+        "ffmpeg",
+        "-y",
         *input_flags,
-        "-filter_complex", fg,
-        "-map", "[out]",
-        "-map", f"{len(clip_paths)}:a",
-        "-c:v", video_codec,
+        "-filter_complex",
+        fg,
+        "-map",
+        "[out_v]",
+        "-map",
+        "[out_a]",
+        "-c:v",
+        video_codec,
         *codec_args,
-        "-c:a", "aac",
-        "-b:a", "128k",
-        "-r", "30",
-        "-t", str(audio_dur + 0.5),
-        "-movflags", "+faststart",
-        "-pix_fmt", "yuv420p",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "128k",
+        "-r",
+        "30",
+        "-t",
+        str(audio_dur + 0.5),
+        "-movflags",
+        "+faststart",
+        "-pix_fmt",
+        "yuv420p",
         out_path,
     ]
 
-    log.info("Running FFmpeg assembly (caption=%s, watermark=%s)...",
-             caption_style, "yes" if watermark_path else "no")
+    log.info(
+        "Running FFmpeg assembly (caption=%s, watermark=%s)...",
+        caption_style,
+        "yes" if watermark_path else "no",
+    )
     result = subprocess.run(cmd, capture_output=True, text=True)
-    
+
     # Post-render verification step
     stderr = result.stderr.lower()
-    has_filter_error = "error initializing filters" in stderr or "error while filtering" in stderr
-    
+    has_filter_error = (
+        "error initializing filters" in stderr or "error while filtering" in stderr
+    )
+
     if result.returncode != 0 or has_filter_error:
         log.error("FFmpeg stderr: %s", result.stderr[-2000:])
-        raise RuntimeError(f"FFmpeg failed (code {result.returncode}): {result.stderr[-500:]}")
+        raise RuntimeError(
+            f"FFmpeg failed (code {result.returncode}): {result.stderr[-500:]}"
+        )
 
     if not Path(out_path).exists() or Path(out_path).stat().st_size == 0:
-        log.error("FFmpeg failed to produce an output file. Stderr: %s", result.stderr[-2000:])
+        log.error(
+            "FFmpeg failed to produce an output file. Stderr: %s", result.stderr[-2000:]
+        )
         raise RuntimeError("FFmpeg assembly failed: No output file generated.")
 
     log.info("Video assembled → %s", out_path)
@@ -304,29 +381,30 @@ def assemble_video(
 
 import asyncio
 
+
 async def async_assemble_video(**kwargs) -> str:
     """Async wrapper — runs FFmpeg in a thread pool to avoid blocking the event loop."""
     return await asyncio.to_thread(assemble_video, **kwargs)
 
+
 def assemble_job(job: RenderJob) -> str:
     """Assemble a video using a RenderJob object."""
     from engine.story.timeline import align_scenes_to_audio
-    
-    job.output_path = job.output_path or str(RENDER_DIR / f"short_{uuid.uuid4().hex[:8]}.mp4")
-    
+
+    job.output_path = job.output_path or str(
+        RENDER_DIR / f"short_{uuid.uuid4().hex[:8]}.mp4"
+    )
+
     # 1. Build the timeline
     timeline = align_scenes_to_audio(
-        job.story_spec,
-        job.word_boundaries,
-        job.audio_path,
-        job.sub_path
+        job.story_spec, job.word_boundaries, job.audio_path, job.sub_path
     )
-    
+
     # If the timeline has fewer scenes than clips, just fall back to passing the raw clips
     # to avoid index out-of-bounds in ffmpeg.
     if len(timeline.scenes) != len(job.clip_paths):
         timeline = None
-        
+
     out_path = assemble_video(
         timeline=timeline,
         clip_paths=job.clip_paths,
@@ -340,9 +418,12 @@ def assemble_job(job: RenderJob) -> str:
         watermark_opacity=job.watermark_opacity,
         watermark_position=job.watermark_position,
         watermark_scale=job.watermark_scale,
+        bgm_path=getattr(job, "bgm_path", None),
+        orientation=getattr(job, "orientation", "9:16"),
     )
     job.output_path = out_path
     return out_path
+
 
 async def async_assemble_job(job: RenderJob) -> str:
     """Async wrapper for assemble_job."""

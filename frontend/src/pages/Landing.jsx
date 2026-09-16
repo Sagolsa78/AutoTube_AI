@@ -245,17 +245,17 @@ export default function Landing() {
   const [heroSceneIndex, setHeroSceneIndex] = useState(0);
   const [captionStyle, setCaptionStyle] = useState('bold_yellow'); // 'bold_yellow', 'neon_glow', 'clean_white'
   const [isPlayingHero, setIsPlayingHero] = useState(true);
-  
+
   // Local compute 3-state routing simulation ('local', 'burst', 'queue')
   const [computeMode, setComputeMode] = useState('local');
-  
+
   // Mobile Triage State
   const [mobileDecision, setMobileDecision] = useState('pending');
-  
+
   // Command Center Interactive Filters & Approval Simulation
   const [commandFilter, setCommandFilter] = useState('ALL');
   const [approvedVideoIds, setApprovedVideoIds] = useState(new Set());
-  
+
   // Studio Interactive 3-Pane Workstation State
   const [selectedStudioScene, setSelectedStudioScene] = useState(0);
   const [studioScenes, setStudioScenes] = useState([
