@@ -45,3 +45,11 @@ Add the following secrets to GitHub Repository Settings -> Secrets and variables
    python -m backend.worker.main --job-id "${{ inputs.job_id }}"
    ```
 6. **Output**: Assembled video is uploaded directly to Cloudflare R2, PostgreSQL status is updated to `ready`, and runner exits cleanly.
+
+## 4. Backend GitHub token permissions
+
+The backend calls the GitHub REST API endpoint
+`POST /repos/{owner}/{repo}/actions/workflows/video-worker.yml/dispatches`.
+`GITHUB_TOKEN` must be a classic PAT with the `workflow` scope, or a fine-grained
+token with **Actions: Read and write** access to this repository. The API
+returns HTTP 204 when the workflow has been accepted.

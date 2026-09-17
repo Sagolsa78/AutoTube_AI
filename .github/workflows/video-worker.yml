@@ -7,6 +7,11 @@ on:
         description: "The Job ID (or Video ID) to render"
         required: true
         type: string
+      worker_git_ref:
+        description: "Git ref to run the worker from"
+        required: false
+        default: "main"
+        type: string
 
 permissions:
   contents: read
@@ -20,8 +25,7 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          submodules: false
+
 
       - name: Set up Python
         uses: actions/setup-python@v5

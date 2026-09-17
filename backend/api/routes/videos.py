@@ -24,6 +24,7 @@ from backend.models.models import (
     Scene,
     Script,
     ScriptStatus,
+    JobStatus,
     User,
     Video,
     VideoStatus,
@@ -276,7 +277,7 @@ async def render_video(
         id=job_id,
         user_id=user.id,
         capability="RENDER",
-        status="dispatching",
+        status=JobStatus.CREATED,
         payload=job_payload,
         worker_type=_settings.WORKER_BACKEND,
         cost_usd=0.0,
@@ -302,8 +303,12 @@ async def render_video(
         await db.refresh(new_db_job)
     except Exception as e:
         log.exception(f"Failed to dispatch job {job_id}")
-        new_db_job.status = "failed"
+        new_db_job.status = JobStatus.FAILED
         new_db_job.error_message = f"Dispatch failed: {str(e)}"
+        video.status = VideoStatus.failed
+        video.render_stage = "failed"
+        video.render_progress = 0
+        video.notes = f"Dispatch failed: {str(e)}"
         await db.commit()
 
     return _fmt(video)
@@ -426,11 +431,20 @@ async def preview_video(
                 log.info(f"Self-healed video {v.id} path in DB: {v.path}")
                 break
 
-    if resolved_path and os.path.exists(resolved_path):
+    if resolved_path and os.path.isfile(resolved_path):
+        file_size = os.path.getsize(resolved_path)
+        if file_size <= 0:
+            raise HTTPException(404, "Video file is empty")
         return FileResponse(
             resolved_path,
             media_type="video/mp4",
-            headers={"Cache-Control": "no-store", "Accept-Ranges": "bytes"},
+            filename=f"{video_id}.mp4",
+            content_disposition_type="inline",
+            headers={
+                "Cache-Control": "private, no-store",
+                "Accept-Ranges": "bytes",
+                "X-Content-Type-Options": "nosniff",
+            },
         )
 
     # 3. Remote storage key (S3/R2) — stream directly to avoid CORS/latency
