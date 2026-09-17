@@ -13,101 +13,76 @@ on:
         default: "main"
         type: string
 
+# Keep this workflow manually dispatchable.
+# The production backend should call workflow_dispatch with job_id.
+
 permissions:
   contents: read
 
 jobs:
   render_video:
+    name: Render video
     runs-on: ubuntu-latest
-    environment: Production
-    timeout-minutes: 15
+    timeout-minutes: 30
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+<<<<<<< HEAD
         with:
           submodules: false
           ref: ${{ inputs.worker_git_ref || 'main' }}
+=======
+>>>>>>> e289989b6b2bae6cdafc8d35de0b73c3250316e7
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          cache: pip
-          cache-dependency-path: requirements.txt
+          cache: "pip"
 
-      # Fail quickly before spending minutes installing dependencies
-      - name: Validate required configuration
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          ffmpeg -version
+          ffprobe -version
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Validate required secrets
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           S3_ENDPOINT_URL: ${{ secrets.S3_ENDPOINT_URL }}
           S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
           S3_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
           S3_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
+          R2_PUBLIC_DOMAIN: ${{ secrets.R2_PUBLIC_DOMAIN }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
         run: |
-          python - <<'PY'
-          import os
-          from urllib.parse import urlparse
+          set -e
 
-          required = [
-              "DATABASE_URL",
-              "S3_ENDPOINT_URL",
-              "S3_BUCKET_NAME",
-              "S3_ACCESS_KEY_ID",
-              "S3_SECRET_ACCESS_KEY",
-              "GEMINI_API_KEY",
-              "PEXELS_API_KEY",
-          ]
+          for name in \
+            DATABASE_URL \
+            S3_ENDPOINT_URL \
+            S3_BUCKET_NAME \
+            S3_ACCESS_KEY_ID \
+            S3_SECRET_ACCESS_KEY \
+            R2_PUBLIC_DOMAIN
+          do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Required secret $name is missing"
+              exit 1
+            fi
+          done
 
-          missing = [key for key in required if not os.environ.get(key)]
+          echo "Required production secrets are present."
 
-          if missing:
-              print("Missing required secrets:")
-              for key in missing:
-                  print(f"  - {key}")
-              raise SystemExit(1)
-
-          db_url = os.environ["DATABASE_URL"]
-          parsed = urlparse(db_url)
-
-          print("DATABASE_URL: configured")
-          print(f"Database scheme: {parsed.scheme or '<missing>'}")
-          print(f"Database host: {'configured' if parsed.hostname else '<missing>'}")
-
-          if parsed.scheme not in ("postgres", "postgresql", "postgresql+asyncpg"):
-              raise SystemExit(
-                  f"Invalid DATABASE_URL scheme: {parsed.scheme!r}"
-              )
-
-          if not parsed.hostname:
-              raise SystemExit(
-                  "DATABASE_URL does not contain a valid database host"
-              )
-
-          print("Configuration validation passed.")
-          PY
-
-      - name: Check FFmpeg and Fonts
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y fonts-liberation fonts-noto
-          if command -v ffmpeg >/dev/null 2>&1; then
-            echo "FFmpeg already available"
-            ffmpeg -version | head -n 1
-          else
-            echo "FFmpeg not found. Installing..."
-            sudo apt-get install -y ffmpeg
-            ffmpeg -version | head -n 1
-          fi
-
-      - name: Install Python dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
-
-      - name: Execute Render Job
+      - name: Execute render job
         env:
           APP_ENV: production
           APP_MODE: cloud
@@ -127,4 +102,81 @@ jobs:
           JOB_ID: ${{ inputs.job_id }}
 
         run: |
+          set -euo pipefail
+
+          if [ -z "${JOB_ID:-}" ]; then
+            echo "::error::JOB_ID was not supplied"
+            exit 1
+          fi
+
+          echo "Starting render for job: ${JOB_ID}"
+
           python -m backend.worker.main --job-id "$JOB_ID"
+
+      - name: Find rendered MP4 files
+        if: always()
+        run: |
+          echo "Searching workspace for MP4 files..."
+
+          find . \
+            -type f \
+            \( -iname "*.mp4" -o -iname "*.m4v" \) \
+            -not -path "./.git/*" \
+            -print \
+            | tee /tmp/mp4-files.txt
+
+      - name: Validate rendered MP4 files
+        if: success()
+        run: |
+          set -euo pipefail
+
+          if [ ! -s /tmp/mp4-files.txt ]; then
+            echo "::error::No MP4 file was produced by the render worker."
+            exit 1
+          fi
+
+          while IFS= read -r file; do
+            echo ""
+            echo "========================================"
+            echo "Validating: $file"
+            echo "========================================"
+
+            if [ ! -s "$file" ]; then
+              echo "::error::MP4 file is empty: $file"
+              exit 1
+            fi
+
+            ffprobe \
+              -v error \
+              -show_entries format=format_name,duration,size \
+              -show_entries stream=index,codec_type,codec_name,pix_fmt,width,height \
+              -of json \
+              "$file"
+
+            # Verify that ffprobe can actually decode/read the container.
+            ffmpeg \
+              -v error \
+              -i "$file" \
+              -map 0:v:0 \
+              -f null \
+              -
+
+            echo "MP4 validation passed: $file"
+          done < /tmp/mp4-files.txt
+
+      - name: Render summary
+        if: always()
+        run: |
+          echo "### Video Render" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Job ID:** \`${{ inputs.job_id }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          if [ -s /tmp/mp4-files.txt ]; then
+            echo "**MP4 files found:**" >> "$GITHUB_STEP_SUMMARY"
+            while IFS= read -r file; do
+              echo "- \`$file\`" >> "$GITHUB_STEP_SUMMARY"
+            done < /tmp/mp4-files.txt
+          else
+            echo "**No MP4 files found in the runner workspace.**" >> "$GITHUB_STEP_SUMMARY"
+          fi
