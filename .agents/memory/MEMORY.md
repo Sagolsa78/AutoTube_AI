@@ -1,0 +1,1 @@
+- [GitHub render dispatch contract](github-render-dispatch.md) — keep the REST dispatch payload and workflow checkout inputs synchronized.
