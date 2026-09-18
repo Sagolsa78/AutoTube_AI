@@ -78,8 +78,9 @@ class Settings(BaseSettings):
     
     # GitHub Actions (for cloud worker)
     GITHUB_TOKEN: Optional[str] = None
-    GITHUB_REPOSITORY: Optional[str] = None
-    WORKER_GIT_REF: str = "main"  # git ref used by GitHub Actions worker
+    GITHUB_REPOSITORY: Optional[str] = None  # legacy alias
+    GITHUB_WORKFLOW_FILE: str = "video-worker.yml"
+    WORKER_GIT_REF: str = "v2"  # git ref used by GitHub Actions worker
     WORKER_SECRET: Optional[str] = None  # shared secret for worker-API authentication
     
     # ── AI Providers ──────────────────────────────────────────────────────────

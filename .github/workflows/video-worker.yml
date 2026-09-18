@@ -36,15 +36,14 @@ jobs:
       PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
       AUTOTUBE_API_URL: ${{ secrets.AUTOTUBE_API_URL }}
       WORKER_SECRET: ${{ secrets.WORKER_SECRET }}
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Python 3.12
+      - name: Setup Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.11"
           cache: pip
 
       - name: Install DB preflight dependency

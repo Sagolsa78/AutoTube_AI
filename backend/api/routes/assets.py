@@ -92,30 +92,50 @@ async def generate_asset(
         "mode": mode
     }
     
-    # Dispatch via Worker Router
-    route_meta = await dispatch_job(
-        job_id=job_id,
-        capability=capability,
-        payload=payload,
-        db=db
-    )
-    
-    # Store the DB Job
+    # Create the canonical DB Job BEFORE dispatching. Cloud workers can start
+    # immediately after workflow_dispatch, so the row must already be visible
+    # in the shared database.
     from backend.models.models import Job as DBJob
     from datetime import datetime
-    
+
     new_db_job = DBJob(
         id=job_id,
         user_id=user.id,
         capability=capability.value,
-        status=route_meta["status"],
+        status="dispatching",
         payload=payload,
-        worker_id=route_meta.get("worker_id"),
-        worker_type=route_meta.get("worker_type", "local"),
+        worker_type="local",
         cost_usd=0.0,
-        created_at=datetime.utcnow()
+        created_at=datetime.utcnow(),
     )
     db.add(new_db_job)
     await db.commit()
-    
+
+    try:
+        route_meta = await dispatch_job(
+            job_id=job_id,
+            capability=capability,
+            payload=payload,
+            db=db,
+        )
+
+        # Persist the router's decision for local/cloud telemetry. The GitHub
+        # executor may already have set status=dispatched; do not overwrite a
+        # terminal state on a successful cloud dispatch.
+        await db.refresh(new_db_job)
+        if new_db_job.status not in {"dispatched", "running"}:
+            new_db_job.status = route_meta.get("status", "dispatched")
+        new_db_job.worker_id = route_meta.get("worker_id")
+        new_db_job.worker_type = route_meta.get("worker_type", "local")
+        await db.commit()
+    except Exception as exc:
+        await db.rollback()
+        # A failed dispatch must be visible to polling clients.
+        async with db.begin():
+            failed_job = await db.get(DBJob, job_id)
+            if failed_job:
+                failed_job.status = "failed"
+                failed_job.error_message = f"Dispatch failed: {exc}"
+        raise HTTPException(status_code=502, detail=f"Asset job dispatch failed: {exc}") from exc
+
     return {"status": "success", "job_id": job_id, "message": "Asset generation job dispatched"}

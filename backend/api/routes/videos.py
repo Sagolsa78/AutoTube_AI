@@ -275,10 +275,16 @@ async def render_video(
         await executor.submit(job_id, job_payload)
         await db.refresh(new_db_job)
     except Exception as e:
-        log.exception(f"Failed to dispatch job {job_id}")
+        error_message = f"Dispatch failed: {str(e)}"
+        log.exception("Failed to dispatch job %s", job_id)
         new_db_job.status = "failed"
-        new_db_job.error_message = f"Dispatch failed: {str(e)}"
+        new_db_job.error_message = error_message
+        video.status = VideoStatus.failed
+        video.render_stage = "failed"
+        video.render_progress = 0
+        video.notes = error_message
         await db.commit()
+        raise HTTPException(status_code=502, detail=error_message) from e
 
     return _fmt(video)
 
