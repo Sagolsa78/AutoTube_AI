@@ -95,14 +95,14 @@ async def generate_asset(
     # Create the canonical DB Job BEFORE dispatching. Cloud workers can start
     # immediately after workflow_dispatch, so the row must already be visible
     # in the shared database.
-    from backend.models.models import Job as DBJob
+    from backend.models.models import Job as DBJob, JobStatus
     from datetime import datetime
 
     new_db_job = DBJob(
         id=job_id,
         user_id=user.id,
         capability=capability.value,
-        status="dispatching",
+        status=JobStatus.queued,
         payload=payload,
         worker_type="local",
         cost_usd=0.0,

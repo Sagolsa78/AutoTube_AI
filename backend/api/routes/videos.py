@@ -14,7 +14,10 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db.database import get_db, AsyncSessionLocal
-from backend.models.models import Video, VideoStatus, Script, Channel, Idea, User, ScriptStatus, Scene
+from backend.models.models import (
+    Video, VideoStatus, Script, Channel, Idea, User,
+    ScriptStatus, Scene, JobStatus
+)
 from engine.models import RenderJob
 from backend.auth.dependencies import get_current_user, get_optional_current_user
 from backend.services.rendering_service import run_job as _run_render
@@ -252,7 +255,7 @@ async def render_video(
         id=job_id,
         user_id=user.id,
         capability="RENDER",
-        status="dispatching",
+        status=JobStatus.queued,
         payload=job_payload,
         worker_type=_settings.WORKER_BACKEND,
         cost_usd=0.0,
@@ -277,7 +280,7 @@ async def render_video(
     except Exception as e:
         error_message = f"Dispatch failed: {str(e)}"
         log.exception("Failed to dispatch job %s", job_id)
-        new_db_job.status = "failed"
+        new_db_job.status = JobStatus.failed
         new_db_job.error_message = error_message
         video.status = VideoStatus.failed
         video.render_stage = "failed"

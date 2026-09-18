@@ -306,7 +306,17 @@ class Job(Base):
     id            = Column(String, primary_key=True, default=_uuid)
     user_id       = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     capability    = Column(String, nullable=False, index=True)
-    status        = Column(String, default="queued", index=True)
+    status        = Column(
+        SAEnum(
+            JobStatus,
+            name="jobstatus",
+            native_enum=True,
+            values_callable=lambda enum_cls: [member.value for member in enum_cls],
+        ),
+        default=JobStatus.queued,
+        nullable=False,
+        index=True,
+    )
     payload       = Column(JSON, default=dict)
     result        = Column(JSON, default=dict)
     worker_id     = Column(String, nullable=True)

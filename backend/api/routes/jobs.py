@@ -142,7 +142,7 @@ async def create_job(
         id=job_id,
         user_id=user.id,
         capability=request.capability.value,
-        status="dispatching",
+        status=JobStatus.queued,
         payload=request.payload,
         worker_type="local",
         cost_usd=0.0,
@@ -160,7 +160,7 @@ async def create_job(
         new_job.worker_type = route_meta.get("worker_type", "local")
     except Exception as e:
         log.exception(f"Failed to dispatch job {job_id}")
-        new_job.status = "failed"
+        new_job.status = JobStatus.failed
         new_job.error_message = f"Dispatch failed: {str(e)}"
 
     await db.commit()
