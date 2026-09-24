@@ -141,7 +141,7 @@ def _build_filtergraph(
     # -- Concatenation with xfade ---------------------------------------------
     after_concat = "[base]"
     if clips_count <= 1:
-        parts.append(f"[v0]copy{after_concat};")
+        parts.append(f"[v0]null{after_concat};")
     else:
         last_out = "[v0]"
         current_offset = 0.0
@@ -188,10 +188,10 @@ def _build_filtergraph(
             f"colorchannelmixer=aa={watermark_opacity:.2f}"
             f"[wm];"
         )
-        parts.append(f"[{after_subs}][wm]overlay={ox}:{oy}[out]")
+        parts.append(f"[{after_subs}][wm]overlay={ox}:{oy}[out_v];")
     else:
         # No watermark — just alias the output
-        parts.append(f"[{after_subs}]copy[out_v];")
+        parts.append(f"[{after_subs}]null[out_v];")
 
     # -- Audio Mixing & Ducking -----------------------------------------------
     # tts audio is at clips_count
@@ -208,7 +208,7 @@ def _build_filtergraph(
             f"[{tts_idx}:a][ducked_bgm]amix=inputs=2:duration=first:dropout_transition=2[out_a]"
         )
     else:
-        parts.append(f"[{tts_idx}:a]copy[out_a]")
+        parts.append(f"[{tts_idx}:a]anull[out_a]")
 
     return "".join(parts)
 

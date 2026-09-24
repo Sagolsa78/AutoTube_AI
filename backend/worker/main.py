@@ -119,7 +119,7 @@ async def execute_job(job_id: str) -> bool:
             # Check video outcome
             async with AsyncSessionLocal() as db:
                 video = await db.get(Video, video_id)
-                if video and video.status == VideoStatus.ready:
+                if video and video.status in (VideoStatus.ready, VideoStatus.uploaded):
                     success = True
                 else:
                     success = False

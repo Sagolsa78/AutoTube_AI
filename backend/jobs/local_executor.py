@@ -21,7 +21,7 @@ class LocalJobExecutor(JobExecutor):
             if not job:
                 raise ValueError(f"Job {job_id} not found")
 
-            job.status = JobStatus.queued
+            job.status = JobStatus.QUEUED
             job.payload = payload
             await session.commit()
 
@@ -32,11 +32,11 @@ class LocalJobExecutor(JobExecutor):
         async with AsyncSessionLocal() as session:
             job = await session.get(Job, job_id)
             if job and job.status in [
-                JobStatus.queued,
-                JobStatus.running,
-                JobStatus.dispatched,
+                JobStatus.QUEUED,
+                JobStatus.RUNNING,
+                JobStatus.CLAIMED,
             ]:
-                job.status = JobStatus.cancelled
+                job.status = JobStatus.CANCELLED
                 await session.commit()
                 log.info(f"Job {job_id} cancelled")
 

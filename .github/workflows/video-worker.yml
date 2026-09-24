@@ -105,6 +105,7 @@ jobs:
         env:
           APP_ENV: production
           APP_MODE: cloud
+          WORKER_BACKEND: local
 
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
@@ -117,6 +118,8 @@ jobs:
 
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+
+          WORKER_SECRET: ${{ secrets.WORKER_SECRET }}
 
           JOB_ID: ${{ inputs.job_id }}
 

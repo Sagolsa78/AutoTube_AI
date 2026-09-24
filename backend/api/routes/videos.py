@@ -21,6 +21,7 @@ from backend.db.database import AsyncSessionLocal, get_db
 from backend.models.models import (
     Channel,
     Idea,
+    JobStatus,
     Scene,
     Script,
     ScriptStatus,
@@ -276,7 +277,7 @@ async def render_video(
         id=job_id,
         user_id=user.id,
         capability="RENDER",
-        status="dispatching",
+        status=JobStatus.CREATED,
         payload=job_payload,
         worker_type=_settings.WORKER_BACKEND,
         cost_usd=0.0,
@@ -302,7 +303,7 @@ async def render_video(
         await db.refresh(new_db_job)
     except Exception as e:
         log.exception(f"Failed to dispatch job {job_id}")
-        new_db_job.status = "failed"
+        new_db_job.status = JobStatus.FAILED
         new_db_job.error_message = f"Dispatch failed: {str(e)}"
         await db.commit()
 

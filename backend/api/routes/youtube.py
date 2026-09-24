@@ -54,6 +54,9 @@ async def youtube_auth_url(request: Request, user: User = Depends(get_current_us
 
         flow = get_oauth_flow(redirect_uri)
 
+        # Generate PKCE verifier by calling authorization_url once before state encoding
+        flow.authorization_url(access_type="offline", prompt="consent")
+
         # State encoding including user_id, timestamp, and PKCE code_verifier
         import time
 

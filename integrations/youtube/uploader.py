@@ -23,11 +23,6 @@ log = logging.getLogger(__name__)
 async def _get_credentials(user_id: str) -> Credentials:
     """Fetch user credentials from the database and refresh if needed."""
     async with AsyncSessionLocal() as db:
-        conn = await db.get(
-            YouTubeConnection, user_id
-        )  # user_id is NOT the primary key! wait!
-
-        # user_id is indexed, not primary key. Need to query it.
         from sqlalchemy import select
 
         q = select(YouTubeConnection).where(YouTubeConnection.user_id == user_id)
