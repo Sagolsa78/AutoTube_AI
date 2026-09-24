@@ -9,8 +9,8 @@ from __future__ import annotations
 import logging
 import os
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,6 +34,71 @@ from engine.models import RenderJob
 
 router = APIRouter()
 log = logging.getLogger(__name__)
+
+
+# ── Range-aware video streaming ───────────────────────────────────────────────
+
+
+def _iter_file_range(path: str, start: int, end: int, chunk_size: int = 1024 * 1024):
+    """Yield byte chunks from a file within [start, end] inclusive."""
+    with open(path, "rb") as f:
+        f.seek(start)
+        remaining = end - start + 1
+        while remaining > 0:
+            read_size = min(chunk_size, remaining)
+            data = f.read(read_size)
+            if not data:
+                break
+            remaining -= len(data)
+            yield data
+
+
+def _stream_video_with_range(request: Request, file_path: str):
+    """
+    Stream a video file with HTTP Range Request support.
+    Returns 206 Partial Content when Range header is present,
+    200 OK otherwise. This is required for browsers to play and seek in video.
+    """
+    file_size = os.path.getsize(file_path)
+    range_header = request.headers.get("range")
+
+    start = 0
+    end = file_size - 1
+    status_code = 200
+    headers = {
+        "accept-ranges": "bytes",
+        "content-type": "video/mp4",
+        "content-encoding": "identity",
+        "cache-control": "no-store",
+    }
+
+    if range_header:
+        try:
+            range_val = range_header.replace("bytes=", "").split("-")
+            start = int(range_val[0]) if range_val[0] else 0
+            end = (
+                int(range_val[1])
+                if len(range_val) > 1 and range_val[1]
+                else file_size - 1
+            )
+        except (ValueError, IndexError):
+            pass
+
+        # Clamp values
+        start = max(0, min(start, file_size - 1))
+        end = max(start, min(end, file_size - 1))
+
+        status_code = 206
+        headers["content-range"] = f"bytes {start}-{end}/{file_size}"
+
+    headers["content-length"] = str(end - start + 1)
+
+    return StreamingResponse(
+        _iter_file_range(file_path, start, end),
+        status_code=status_code,
+        headers=headers,
+        media_type="video/mp4",
+    )
 
 
 # ── Render stage definitions ──────────────────────────────────────────────────
@@ -369,6 +434,7 @@ async def generate_metadata_endpoint(
 @router.get("/{video_id}/preview")
 async def preview_video(
     video_id: str,
+    request: Request,
     user: User | None = Depends(get_optional_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -428,11 +494,7 @@ async def preview_video(
                 break
 
     if resolved_path and os.path.exists(resolved_path):
-        return FileResponse(
-            resolved_path,
-            media_type="video/mp4",
-            headers={"Cache-Control": "no-store", "Accept-Ranges": "bytes"},
-        )
+        return _stream_video_with_range(request, resolved_path)
 
     # 3. Remote storage key (S3/R2) — stream directly to avoid CORS/latency
     if settings.STORAGE_BACKEND in ["s3", "r2"] and v.path:

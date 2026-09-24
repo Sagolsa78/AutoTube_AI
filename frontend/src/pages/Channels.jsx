@@ -44,13 +44,26 @@ export default function Channels() {
   const [ytStatus, setYtStatus] = useState(null);
   const [ytLoading, setYtLoading] = useState(false);
 
+  const [ytConfig, setYtConfig] = useState(null);
+  const [voices, setVoices] = useState([]);
+
+  useEffect(() => {
+      if (modalOpen) {
+          api.getVoices(form.language).then(setVoices).catch(console.error);
+      }
+  }, [modalOpen, form.language]);
+
   useEffect(() => {
     const load = async () => {
         setLoading(true);
         await refreshChannels();
         try {
-            const yt = await api.getYoutubeStatus();
-            setYtStatus(yt);
+            const [yt, config] = await Promise.all([
+                api.getYoutubeStatus().catch(() => null),
+                api.getYoutubeConfigStatus().catch(() => null)
+            ]);
+            if (yt) setYtStatus(yt);
+            if (config) setYtConfig(config);
         } catch (e) {
             console.error("Failed to fetch YT status", e);
         }
@@ -65,10 +78,19 @@ export default function Channels() {
           toast.success("Successfully connected to YouTube!");
           searchParams.delete('youtube');
           setSearchParams(searchParams, { replace: true });
+
+          // Refresh status after connection
+          api.getYoutubeStatus().then(yt => {
+              if (yt) setYtStatus(yt);
+          }).catch(console.error);
       }
   }, [searchParams, setSearchParams]);
 
   const handleConnectYoutube = async () => {
+      if (ytConfig && !ytConfig.configured) {
+          toast.error("YouTube is not configured. Please add client_secret.json to the backend.");
+          return;
+      }
       setYtLoading(true);
       try {
           const res = await api.getYoutubeAuthUrl();
@@ -76,7 +98,7 @@ export default function Channels() {
               window.location.href = res.authorization_url;
           }
       } catch (e) {
-          toast.error("Failed to initiate YouTube connection.");
+          toast.error(e.message || "Failed to initiate YouTube connection.");
           setYtLoading(false);
       }
   };
@@ -220,6 +242,12 @@ export default function Channels() {
             <p className="text-sm text-text-secondary mt-1">
               Connect your YouTube account to enable direct publishing and fetch real-time channel analytics.
             </p>
+            {ytConfig && !ytConfig.configured && (
+              <div className="mt-2 text-xs text-warning bg-warning/10 border border-warning/20 p-2 rounded-lg inline-flex items-center gap-2">
+                <Icon name="alert-triangle" size={14} />
+                Backend not configured. Missing client_secret.json.
+              </div>
+            )}
             {ytStatus && ytStatus.connected && (
               <div className="mt-3 flex flex-wrap gap-4 items-center text-sm">
                 <span className="flex items-center gap-1.5 text-success">
@@ -238,25 +266,39 @@ export default function Channels() {
               </div>
             )}
           </div>
-          <div>
+          <div className="flex items-center gap-3">
             {ytStatus && ytStatus.connected ? (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleDisconnectYoutube}
-                disabled={ytLoading}
-                className="whitespace-nowrap"
-              >
-                {ytLoading ? "Disconnecting..." : "Disconnect"}
-              </Button>
+              <>
+                {ytStatus.is_expired && (
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    icon="refresh-cw"
+                    onClick={handleConnectYoutube}
+                    disabled={ytLoading}
+                    className="whitespace-nowrap"
+                  >
+                    Re-authorize
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDisconnectYoutube}
+                  disabled={ytLoading}
+                  className="whitespace-nowrap"
+                >
+                  {ytLoading ? "Disconnecting..." : "Disconnect"}
+                </Button>
+              </>
             ) : (
               <Button
                 variant="primary"
                 size="sm"
                 icon="youtube"
                 onClick={handleConnectYoutube}
-                disabled={ytLoading}
-                className="bg-brand-red hover:bg-brand-red/90 text-white shadow-brand-glow whitespace-nowrap"
+                disabled={ytLoading || (ytConfig && !ytConfig.configured)}
+                className="bg-brand-red hover:bg-brand-red/90 text-white shadow-brand-glow whitespace-nowrap disabled:opacity-50"
               >
                 {ytLoading ? "Connecting..." : "Connect YouTube"}
               </Button>
@@ -533,13 +575,21 @@ export default function Channels() {
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                             <div>
-                                <label className="block text-xs font-semibold text-text-secondary mb-1">Default Voice ID</label>
-                                <input
+                                <label className="block text-xs font-semibold text-text-secondary mb-1">Default Voice</label>
+                                <select
                                     className="w-full bg-surface-input border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:border-brand-red focus:outline-none"
-                                    placeholder="e.g. en-US-ChristopherNeural"
                                     value={form.default_voice_id}
                                     onChange={e => setForm({ ...form, default_voice_id: e.target.value })}
-                                />
+                                >
+                                    {voices.map(v => (
+                                        <option key={v.id} value={v.id}>
+                                            {v.name} ({v.gender}) - {v.description}
+                                        </option>
+                                    ))}
+                                    {voices.length === 0 && (
+                                        <option value={form.default_voice_id}>{form.default_voice_id || 'Loading...'}</option>
+                                    )}
+                                </select>
                             </div>
                             <div>
                                 <label className="block text-xs font-semibold text-text-secondary mb-1">Hashtags (comma separated)</label>

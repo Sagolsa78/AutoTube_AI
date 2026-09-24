@@ -1,25 +1,25 @@
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { supabase } from './lib/supabase';
 import { setAuthToken } from './services/api';
 import { ChannelProvider } from './contexts/ChannelContext';
 import { JobsProvider } from './hooks/useJobs';
-import Landing from './pages/Landing';
-import Login from './pages/Login';
-import Register from './pages/Register';
-import Dashboard from './pages/Dashboard';
-import StudioShell from './pages/Studio/StudioShell';
-import Ideas from './pages/Ideas';
-import Scripts from './pages/Scripts';
-import Videos from './pages/Videos';
-import JobDetail from './pages/JobDetail';
-import Profile from './pages/Profile';
-import Channels from './pages/Channels';
-import Publications from './pages/Publications';
-import Analytics from './pages/Analytics';
-import Costs from './pages/Costs';
-import Logs from './pages/Logs';
-import Health from './pages/Health';
+const Landing = lazy(() => import('./pages/Landing'));
+const Login = lazy(() => import('./pages/Login'));
+const Register = lazy(() => import('./pages/Register'));
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const StudioShell = lazy(() => import('./pages/Studio/StudioShell'));
+const Ideas = lazy(() => import('./pages/Ideas'));
+const Scripts = lazy(() => import('./pages/Scripts'));
+const Videos = lazy(() => import('./pages/Videos'));
+const JobDetail = lazy(() => import('./pages/JobDetail'));
+const Profile = lazy(() => import('./pages/Profile'));
+const Channels = lazy(() => import('./pages/Channels'));
+const Publications = lazy(() => import('./pages/Publications'));
+const Analytics = lazy(() => import('./pages/Analytics'));
+const Costs = lazy(() => import('./pages/Costs'));
+const Logs = lazy(() => import('./pages/Logs'));
+const Health = lazy(() => import('./pages/Health'));
 import AppShell from './components/layout/AppShell';
 import ErrorBoundary from './components/ErrorBoundary';
 import { Toaster } from 'sonner';
@@ -78,32 +78,34 @@ export default function App() {
     <>
     <ErrorBoundary>
       <Toaster position="bottom-right" richColors theme="dark" />
-      <Routes>
-        <Route path="/" element={<Landing />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
+      <Suspense fallback={<div className="min-h-screen bg-canvas flex items-center justify-center text-text-muted">Loading app...</div>}>
+        <Routes>
+          <Route path="/" element={<Landing />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
 
-        {/* Protected Application Routes */}
-        <Route element={<ProtectedRoute />}>
-            <Route path="/app" element={<AppShell />}>
-              <Route index element={<Dashboard />} />
-          <Route path="create" element={<StudioShell />} />
-          <Route path="ideas" element={<Ideas />} />
-          <Route path="scripts" element={<Scripts />} />
-          <Route path="videos" element={<Videos />} />
-          <Route path="jobs/:id" element={<JobDetail />} />
-          <Route path="best" element={<Videos filter="best" />} />
-          <Route path="publications" element={<Publications />} />
-          <Route path="analytics" element={<Analytics />} />
-          <Route path="costs" element={<Costs />} />
-          <Route path="channels" element={<Channels />} />
-          <Route path="logs" element={<Logs />} />
-          <Route path="health" element={<Health />} />
-              <Route path="profile" element={<Profile />} />
-            </Route>
-        </Route>
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+          {/* Protected Application Routes */}
+          <Route element={<ProtectedRoute />}>
+              <Route path="/app" element={<AppShell />}>
+                <Route index element={<Dashboard />} />
+            <Route path="create" element={<StudioShell />} />
+            <Route path="ideas" element={<Ideas />} />
+            <Route path="scripts" element={<Scripts />} />
+            <Route path="videos" element={<Videos />} />
+            <Route path="jobs/:id" element={<JobDetail />} />
+            <Route path="best" element={<Videos filter="best" />} />
+            <Route path="publications" element={<Publications />} />
+            <Route path="analytics" element={<Analytics />} />
+            <Route path="costs" element={<Costs />} />
+            <Route path="channels" element={<Channels />} />
+            <Route path="logs" element={<Logs />} />
+            <Route path="health" element={<Health />} />
+                <Route path="profile" element={<Profile />} />
+              </Route>
+          </Route>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
     </ErrorBoundary>
     </>
   );
