@@ -17,11 +17,13 @@ const CustomPlayer = ({ src }) => {
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [videoError, setVideoError] = useState(false);
+  const [buffering, setBuffering] = useState(true);
 
   const togglePlay = () => {
-    if (!videoRef.current) return;
+    if (!videoRef.current || videoError) return;
     if (videoRef.current.paused) {
-      videoRef.current.play();
+      videoRef.current.play().catch(() => setVideoError(true));
       setPlaying(true);
     } else {
       videoRef.current.pause();
@@ -53,6 +55,33 @@ const CustomPlayer = ({ src }) => {
     }
   };
 
+  // Reset error/loading states when src changes
+  useEffect(() => {
+    setVideoError(false);
+    setBuffering(true);
+    setPlaying(false);
+    setProgress(0);
+  }, [src]);
+
+  if (videoError) {
+    return (
+      <div className="relative w-full aspect-[9/16] max-h-[580px] sm:max-h-[640px] bg-black rounded-xl overflow-hidden shadow-2xl border border-border flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3 text-center p-6">
+          <Icon name="alert-triangle" size={36} className="text-danger" />
+          <span className="text-sm font-bold text-text-primary">Video Unavailable</span>
+          <span className="text-xs text-text-muted max-w-[200px]">This video could not be loaded. It may still be processing or the file is unavailable.</span>
+          <button
+            type="button"
+            className="btn btn-secondary text-xs px-4 py-2 mt-2"
+            onClick={() => { setVideoError(false); setBuffering(true); }}
+          >
+            <Icon name="refresh-cw" size={14} className="mr-1" /> Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="relative w-full aspect-[9/16] max-h-[580px] sm:max-h-[640px] bg-black rounded-xl overflow-hidden shadow-2xl border border-border group select-none">
       <video
@@ -61,10 +90,23 @@ const CustomPlayer = ({ src }) => {
         className="w-full h-full object-cover cursor-pointer"
         onTimeUpdate={handleTimeUpdate}
         onEnded={() => setPlaying(false)}
+        onLoadedData={() => setBuffering(false)}
+        onWaiting={() => setBuffering(true)}
+        onPlaying={() => setBuffering(false)}
+        onError={() => setVideoError(true)}
         muted={muted}
         onClick={togglePlay}
         playsInline
+        preload="auto"
+        crossOrigin="anonymous"
       />
+
+      {/* Buffering spinner */}
+      {buffering && !playing && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <Icon name="loader" size={32} className="text-white/70 animate-spin" />
+        </div>
+      )}
 
       {/* Controls Overlay */}
       <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-4 pointer-events-none">
@@ -112,7 +154,7 @@ const CustomPlayer = ({ src }) => {
       </div>
 
       {/* Centered Play Button when paused */}
-      {!playing && (
+      {!playing && !buffering && (
         <div
           className="absolute inset-0 flex items-center justify-center cursor-pointer pointer-events-none"
         >
@@ -124,6 +166,7 @@ const CustomPlayer = ({ src }) => {
     </div>
   );
 };
+
 
 export default function Videos({ filter }) {
   const [videos, setVideos] = useState([]);

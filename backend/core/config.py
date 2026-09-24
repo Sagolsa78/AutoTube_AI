@@ -114,6 +114,8 @@ class Settings(BaseSettings):
     OPENROUTER_API_KEY: Optional[str] = None
 
     # ── Stock Footage Providers ───────────────────────────────────────────────
+    STOCK_PROVIDER_ORDER: str = "pexels,coverr,pixabay"
+    COVERR_ENABLED: bool = True
     PEXELS_API_KEY: Optional[str] = None
     PIXABAY_API_KEY: Optional[str] = None
 
@@ -129,6 +131,7 @@ class Settings(BaseSettings):
     # Fernet key for encrypting OAuth tokens at rest (32 url-safe base64 bytes).
     # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
     ENCRYPTION_KEY: Optional[str] = None
+    YOUTUBE_REDIRECT_URI: Optional[str] = None
 
     # ── Default Active AI Model ───────────────────────────────────────────────
     DEFAULT_AI_PROVIDER: str = "gemini"
@@ -163,6 +166,17 @@ class Settings(BaseSettings):
         seen = set()
         order = []
         for p in self.SCRIPT_PROVIDER_ORDER.split(","):
+            cleaned = p.strip()
+            if cleaned and cleaned not in seen:
+                seen.add(cleaned)
+                order.append(cleaned)
+        return order
+
+    @property
+    def parsed_stock_provider_order(self) -> list[str]:
+        seen = set()
+        order = []
+        for p in self.STOCK_PROVIDER_ORDER.split(","):
             cleaned = p.strip()
             if cleaned and cleaned not in seen:
                 seen.add(cleaned)

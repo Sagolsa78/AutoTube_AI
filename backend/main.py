@@ -27,6 +27,7 @@ from backend.api.routes import (
     profile,
     scripts,
     videos,
+    voices,
     youtube,
 )
 from backend.core.config import settings
@@ -84,6 +85,7 @@ app.include_router(assets.router)
 app.include_router(analytics.router, prefix="/api/analytics", tags=["analytics"])
 app.include_router(jobs.router, prefix="/api/jobs", tags=["jobs"])
 app.include_router(youtube.router, prefix="/api/youtube", tags=["youtube"])
+app.include_router(voices.router, prefix="/api/voices", tags=["voices"])
 app.include_router(costs.router, prefix="/api/costs", tags=["costs"])
 app.include_router(health.router, prefix="/api/system/health", tags=["health"])
 

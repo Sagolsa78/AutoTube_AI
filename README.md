@@ -59,6 +59,11 @@ Start the FastAPI server:
 uvicorn backend.main:app --reload --port 8000
 ```
 
+DB Alembic mirgartion
+```
+alembic upgrade head
+```
+
 ### 2. Frontend Setup
 
 In a new terminal window:
@@ -89,7 +94,7 @@ docker-compose up -d --build
 To enable direct multi-tenant uploading:
 1. Go to the [Google Cloud Console](https://console.cloud.google.com/).
 2. Create a project and enable the **YouTube Data API v3**.
-3. Create OAuth 2.0 Client IDs (Web Application type). Add `http://localhost:8080/api/youtube/callback` to the redirect URIs.
+3. Create OAuth 2.0 Client IDs (Web Application type). Add `http://localhost:8000/api/youtube/callback` and `http://127.0.0.1:8000/api/youtube/callback` to the **Authorized redirect URIs**.
 4. Download the JSON and save it as `client_secrets.json` in the `secrets/` directory.
 
 ## 🤝 Contributing

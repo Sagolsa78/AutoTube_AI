@@ -398,7 +398,7 @@ Respond ONLY with a JSON object in this exact format (no markdown):
   "hashtags": ["tag1", "tag2", "tag3"]
 }}"""
             try:
-                meta_res, _ = generate_with_fallback(meta_prompt)
+                meta_res = generate_with_fallback(meta_prompt)
                 cleaned_meta = (
                     re.sub(r"```(?:json)?", "", meta_res).strip().rstrip("```").strip()
                 )

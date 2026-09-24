@@ -50,7 +50,9 @@ async def youtube_auth_url(request: Request, user: User = Depends(get_current_us
         # Use incoming request host for callback URL
         host = request.headers.get("host", "localhost:8000")
         scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
-        redirect_uri = f"{scheme}://{host}/api/youtube/callback"
+        redirect_uri = (
+            settings.YOUTUBE_REDIRECT_URI or f"{scheme}://{host}/api/youtube/callback"
+        )
 
         flow = get_oauth_flow(redirect_uri)
 
@@ -80,7 +82,16 @@ async def youtube_auth_url(request: Request, user: User = Depends(get_current_us
         return {"authorization_url": authorization_url}
     except Exception as e:
         log.error(f"Failed to generate YouTube auth URL: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        error_msg = str(e)
+        if "client_secrets.json" in error_msg or "not configured" in error_msg.lower():
+            raise HTTPException(
+                status_code=500,
+                detail="YouTube client_secret.json is missing or improperly configured. Please follow the setup guide.",
+            )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to initiate YouTube connection: {error_msg}",
+        )
 
 
 @router.get("/callback")
@@ -117,7 +128,9 @@ async def youtube_auth_callback(
     try:
         host = request.headers.get("host", "localhost:8000")
         scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
-        redirect_uri = f"{scheme}://{host}/api/youtube/callback"
+        redirect_uri = (
+            settings.YOUTUBE_REDIRECT_URI or f"{scheme}://{host}/api/youtube/callback"
+        )
 
         flow = get_oauth_flow(redirect_uri)
         if code_verifier:
@@ -164,6 +177,20 @@ async def youtube_auth_callback(
     except Exception as e:
         log.error(f"YouTube OAuth callback failed: {e}")
         raise HTTPException(status_code=400, detail=f"OAuth failed: {str(e)}")
+
+
+@router.get("/config-status")
+async def youtube_config_status():
+    """Check if the backend has YouTube OAuth properly configured."""
+    has_secret = settings.YOUTUBE_CLIENT_SECRETS.exists()
+    return {
+        "configured": has_secret,
+        "message": (
+            "Configured"
+            if has_secret
+            else "client_secret.json not found in root directory."
+        ),
+    }
 
 
 @router.get("/status")

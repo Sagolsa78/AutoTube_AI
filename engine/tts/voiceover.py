@@ -24,6 +24,154 @@ NICHE_VOICES: dict[str, str] = {
 }
 DEFAULT_VOICE = "en-US-GuyNeural"
 
+# Full catalog of supported voices with metadata for the UI
+VOICE_CATALOG = [
+    {
+        "id": "en-US-GuyNeural",
+        "name": "Guy",
+        "language": "en",
+        "locale": "en-US",
+        "gender": "Male",
+        "description": "Natural, enthusiastic male",
+    },
+    {
+        "id": "en-US-AnaNeural",
+        "name": "Ana",
+        "language": "en",
+        "locale": "en-US",
+        "gender": "Female",
+        "description": "Warm, child-friendly female",
+    },
+    {
+        "id": "en-US-ChristopherNeural",
+        "name": "Christopher",
+        "language": "en",
+        "locale": "en-US",
+        "gender": "Male",
+        "description": "Reliable, clear male",
+    },
+    {
+        "id": "en-US-AriaNeural",
+        "name": "Aria",
+        "language": "en",
+        "locale": "en-US",
+        "gender": "Female",
+        "description": "Professional female",
+    },
+    {
+        "id": "en-GB-RyanNeural",
+        "name": "Ryan",
+        "language": "en",
+        "locale": "en-GB",
+        "gender": "Male",
+        "description": "British tech feel",
+    },
+    {
+        "id": "en-GB-SoniaNeural",
+        "name": "Sonia",
+        "language": "en",
+        "locale": "en-GB",
+        "gender": "Female",
+        "description": "Clear British female",
+    },
+    {
+        "id": "en-IN-PrabhatNeural",
+        "name": "Prabhat",
+        "language": "en",
+        "locale": "en-IN",
+        "gender": "Male",
+        "description": "Indian English male",
+    },
+    {
+        "id": "en-IN-NeerjaNeural",
+        "name": "Neerja",
+        "language": "en",
+        "locale": "en-IN",
+        "gender": "Female",
+        "description": "Indian English female",
+    },
+    {
+        "id": "en-IN-NeerjaExpressiveNeural",
+        "name": "Neerja (Expressive)",
+        "language": "en",
+        "locale": "en-IN",
+        "gender": "Female",
+        "description": "Expressive Indian English female",
+    },
+    {
+        "id": "hi-IN-MadhurNeural",
+        "name": "Madhur",
+        "language": "hi",
+        "locale": "hi-IN",
+        "gender": "Male",
+        "description": "Natural, warm male",
+    },
+    {
+        "id": "hi-IN-SwaraNeural",
+        "name": "Swara",
+        "language": "hi",
+        "locale": "hi-IN",
+        "gender": "Female",
+        "description": "Natural, warm female",
+    },
+    {
+        "id": "es-ES-AlvaroNeural",
+        "name": "Alvaro",
+        "language": "es",
+        "locale": "es-ES",
+        "gender": "Male",
+        "description": "Spanish male",
+    },
+    {
+        "id": "es-ES-ElviraNeural",
+        "name": "Elvira",
+        "language": "es",
+        "locale": "es-ES",
+        "gender": "Female",
+        "description": "Spanish female",
+    },
+    {
+        "id": "fr-FR-HenriNeural",
+        "name": "Henri",
+        "language": "fr",
+        "locale": "fr-FR",
+        "gender": "Male",
+        "description": "French male",
+    },
+    {
+        "id": "fr-FR-DeniseNeural",
+        "name": "Denise",
+        "language": "fr",
+        "locale": "fr-FR",
+        "gender": "Female",
+        "description": "French female",
+    },
+    {
+        "id": "de-DE-KillianNeural",
+        "name": "Killian",
+        "language": "de",
+        "locale": "de-DE",
+        "gender": "Male",
+        "description": "German male",
+    },
+    {
+        "id": "de-DE-AmalaNeural",
+        "name": "Amala",
+        "language": "de",
+        "locale": "de-DE",
+        "gender": "Female",
+        "description": "German female",
+    },
+]
+
+
+def get_voice_catalog(language: str | None = None) -> list[dict]:
+    """Return the catalog of available voices, optionally filtered by language."""
+    if language:
+        lang_base = language.split("-")[0]
+        return [v for v in VOICE_CATALOG if v["language"] == lang_base]
+    return VOICE_CATALOG
+
 
 def get_tts_provider() -> EdgeTTSProvider:
     """Factory to get the configured TTS Provider. Defaults to EdgeTTS."""

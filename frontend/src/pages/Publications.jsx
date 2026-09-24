@@ -94,7 +94,7 @@ export default function Publications() {
                         src={api.getVideoPreviewUrl(v.id)}
                         className="w-full h-full object-cover"
                         muted
-                        preload="metadata"
+                        preload="auto"
                       />
                     </div>
 
