@@ -132,6 +132,45 @@ class S3StorageBackend(StorageBackend):
             )
             return url
 
+    async def get_stream(self, remote_key: str, range_header: Optional[str] = None):
+        """
+        Stream an object directly from S3/R2 with optional Range header support.
+        Returns a tuple of (status_code, content_length, content_range, content_type, async_generator).
+        Keeps S3 client open while body chunks are yielded, then closes it.
+        """
+        clean_key = remote_key.lstrip("/")
+        s3_ctx = self.session.client(
+            "s3", endpoint_url=self.endpoint_url, config=self.s3_config
+        )
+        s3 = await s3_ctx.__aenter__()
+        try:
+            kwargs = {"Bucket": self.bucket, "Key": clean_key}
+            if range_header:
+                kwargs["Range"] = range_header
+            resp = await s3.get_object(**kwargs)
+            content_length = resp.get("ContentLength")
+            content_range = resp.get("ContentRange")
+            content_type = resp.get("ContentType", "video/mp4")
+            status_code = 206 if content_range else 200
+
+            async def body_gen():
+                try:
+                    async for chunk in resp["Body"].iter_chunks(chunk_size=64 * 1024):
+                        yield chunk
+                finally:
+                    await s3_ctx.__aexit__(None, None, None)
+
+            return status_code, content_length, content_range, content_type, body_gen()
+        except Exception as err:
+            await s3_ctx.__aexit__(None, None, None)
+            from botocore.exceptions import ClientError
+
+            if isinstance(err, ClientError):
+                error_code = err.response.get("Error", {}).get("Code")
+                if error_code in ("InvalidRange", "416"):
+                    return 416, 0, None, "video/mp4", None
+            raise
+
 
 # Backward-compatibility alias
 S3Storage = S3StorageBackend

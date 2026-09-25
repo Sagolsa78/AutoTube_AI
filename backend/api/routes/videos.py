@@ -9,7 +9,14 @@ from __future__ import annotations
 import logging
 import os
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Request,
+    Response,
+)
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -452,9 +459,30 @@ async def preview_video(
 
     # 1. If path is a public HTTP(S) URL (e.g. R2 public CDN domain)
     if v.path and (v.path.startswith("http://") or v.path.startswith("https://")):
-        from fastapi.responses import RedirectResponse
+        # If it's a Cloudflare R2 / S3 direct URL without CORS, extract key to stream directly
+        is_direct_storage_url = False
+        if settings.S3_ENDPOINT_URL and settings.S3_ENDPOINT_URL in v.path:
+            is_direct_storage_url = True
+        elif "r2.cloudflarestorage.com" in v.path:
+            is_direct_storage_url = True
 
-        return RedirectResponse(url=v.path, status_code=307)
+        if not is_direct_storage_url:
+            from fastapi.responses import RedirectResponse
+
+            return RedirectResponse(url=v.path, status_code=307)
+        else:
+            from urllib.parse import urlparse
+
+            parsed = urlparse(v.path)
+            path_parts = parsed.path.lstrip("/").split("/")
+            if (
+                settings.S3_BUCKET_NAME
+                and path_parts
+                and path_parts[0] == settings.S3_BUCKET_NAME
+            ):
+                v.path = "/".join(path_parts[1:])
+            else:
+                v.path = parsed.path.lstrip("/")
 
     # 2. Local file exists or storage file resolution
     resolved_path = None
@@ -502,6 +530,37 @@ async def preview_video(
             from backend.storage import get_storage
 
             storage = get_storage()
+
+            if hasattr(storage, "get_stream"):
+                range_header = request.headers.get("range")
+                status_code, content_length, content_range, content_type, body_gen = (
+                    await storage.get_stream(v.path, range_header=range_header)
+                )
+
+                if status_code == 416:
+                    return Response(
+                        status_code=416,
+                        headers={"content-range": "bytes */*"},
+                    )
+
+                headers = {
+                    "accept-ranges": "bytes",
+                    "content-type": content_type or "video/mp4",
+                    "content-encoding": "identity",
+                    "cache-control": "no-store",
+                }
+                if content_length is not None:
+                    headers["content-length"] = str(content_length)
+                if content_range:
+                    headers["content-range"] = content_range
+
+                return StreamingResponse(
+                    body_gen,
+                    status_code=status_code,
+                    headers=headers,
+                    media_type=content_type or "video/mp4",
+                )
+
             public_url = await storage.get_public_url(v.path)
             if public_url:
                 from fastapi.responses import RedirectResponse
@@ -512,7 +571,7 @@ async def preview_video(
 
             return RedirectResponse(url=signed_url, status_code=307)
         except Exception as e:
-            log.error(f"Failed to generate url for storage {v.path}: {e}")
+            log.error(f"Failed to stream video from storage {v.path}: {e}")
             raise HTTPException(500, f"Video could not be retrieved from storage: {e}")
 
     raise HTTPException(404, f"Video file not found: {v.path or video_id}")
