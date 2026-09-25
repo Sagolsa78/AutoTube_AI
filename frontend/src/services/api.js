@@ -159,6 +159,7 @@ export const api = {
   getYoutubeAuthUrl: () => request('/youtube/auth'),
   getYoutubeStatus: () => request('/youtube/status'),
   getYoutubeConfigStatus: () => request('/youtube/config-status'),
+  refreshYoutubeToken: () => request('/youtube/refresh', { method: 'POST' }),
   disconnectYoutube: () => request('/youtube/disconnect', { method: 'DELETE' }),
 
   // ── TTS Voices ────────────────────────────────────
