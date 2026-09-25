@@ -46,12 +46,20 @@ export default function Channels() {
 
   const [ytConfig, setYtConfig] = useState(null);
   const [voices, setVoices] = useState([]);
+  const [previewingVoice, setPreviewingVoice] = useState(false);
+  const [audioElem, setAudioElem] = useState(null);
 
   useEffect(() => {
       if (modalOpen) {
           api.getVoices(form.language).then(setVoices).catch(console.error);
+      } else {
+          // Cleanup audio if modal closes
+          if (audioElem) {
+              audioElem.pause();
+              setAudioElem(null);
+          }
       }
-  }, [modalOpen, form.language]);
+  }, [modalOpen, form.language, audioElem]);
 
   useEffect(() => {
     const load = async () => {
@@ -103,6 +111,24 @@ export default function Channels() {
       }
   };
 
+  const handleRefreshYoutube = async () => {
+      setYtLoading(true);
+      try {
+          const res = await api.refreshYoutubeToken();
+          if (res && res.status === 'success') {
+              toast.success("Token refreshed successfully.");
+              // Update status
+              api.getYoutubeStatus().then(yt => {
+                  if (yt) setYtStatus(yt);
+              }).catch(console.error);
+          }
+      } catch (e) {
+          toast.error(e.message || "Failed to refresh token. Please re-connect.");
+      } finally {
+          setYtLoading(false);
+      }
+  };
+
   const handleDisconnectYoutube = async () => {
       setYtLoading(true);
       try {
@@ -140,6 +166,34 @@ export default function Channels() {
         hashtag_set: Array.isArray(channel.hashtag_set) ? channel.hashtag_set.join(', ') : ''
     });
     setModalOpen(true);
+  };
+
+  const handlePreviewVoice = async () => {
+      if (!form.default_voice_id || previewingVoice) return;
+
+      if (audioElem) {
+          audioElem.pause();
+      }
+
+      setPreviewingVoice(true);
+      try {
+          // Pointing directly to the backend URL for streaming response
+          const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+          const audio = new Audio(`${baseUrl}/voices/preview/${form.default_voice_id}`);
+          setAudioElem(audio);
+
+          audio.onended = () => setPreviewingVoice(false);
+          audio.onerror = () => {
+              toast.error("Failed to load voice preview.");
+              setPreviewingVoice(false);
+          };
+
+          await audio.play();
+      } catch (e) {
+          console.error(e);
+          toast.error("Could not play preview.");
+          setPreviewingVoice(false);
+      }
   };
 
   const handleSave = async (e) => {
@@ -245,7 +299,7 @@ export default function Channels() {
             {ytConfig && !ytConfig.configured && (
               <div className="mt-2 text-xs text-warning bg-warning/10 border border-warning/20 p-2 rounded-lg inline-flex items-center gap-2">
                 <Icon name="alert-triangle" size={14} />
-                Backend not configured. Missing client_secret.json.
+                YouTube OAuth not configured. Provide client_secret.json or ENV vars.
               </div>
             )}
             {ytStatus && ytStatus.connected && (
@@ -274,11 +328,11 @@ export default function Channels() {
                     variant="primary"
                     size="sm"
                     icon="refresh-cw"
-                    onClick={handleConnectYoutube}
+                    onClick={handleRefreshYoutube}
                     disabled={ytLoading}
                     className="whitespace-nowrap"
                   >
-                    Re-authorize
+                    Refresh Token
                   </Button>
                 )}
                 <Button
@@ -485,6 +539,7 @@ export default function Channels() {
                                     <option value="professional">Professional</option>
                                     <option value="dramatic">Dramatic</option>
                                     <option value="funny">Funny</option>
+                                    <option value="engaging">Engaging / Energetic</option>
                                 </select>
                             </div>
                             <div>
@@ -575,7 +630,18 @@ export default function Channels() {
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                             <div>
-                                <label className="block text-xs font-semibold text-text-secondary mb-1">Default Voice</label>
+                                <label className="block text-xs font-semibold text-text-secondary mb-1 flex justify-between items-center">
+                                    Default Voice
+                                    <button
+                                        type="button"
+                                        onClick={handlePreviewVoice}
+                                        disabled={previewingVoice || !form.default_voice_id}
+                                        className="text-brand-red hover:text-white hover:bg-brand-red/90 border border-brand-red/50 rounded px-1.5 py-0.5 flex items-center gap-1 transition-colors disabled:opacity-50"
+                                    >
+                                        <Icon name={previewingVoice ? "loader" : "play-circle"} size={12} className={previewingVoice ? "animate-spin" : ""} />
+                                        {previewingVoice ? "Previewing..." : "Preview"}
+                                    </button>
+                                </label>
                                 <select
                                     className="w-full bg-surface-input border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:border-brand-red focus:outline-none"
                                     value={form.default_voice_id}

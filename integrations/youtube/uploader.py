@@ -33,14 +33,33 @@ async def _get_credentials(user_id: str) -> Credentials:
             raise RuntimeError(f"No valid YouTube credentials found for user {user_id}")
 
         import json
+        import os
 
-        client_secrets = {}
+        client_id = ""
+        client_secret = ""
+
+        # 1. Try loading from client_secret.json (supports both "web" and "installed" formats)
         if settings.YOUTUBE_CLIENT_SECRETS.exists():
             with open(settings.YOUTUBE_CLIENT_SECRETS, "r") as f:
                 client_secrets = json.load(f)
+            # Google OAuth client_secret.json can use either "web" or "installed" as the top-level key
+            secret_data = (
+                client_secrets.get("web") or client_secrets.get("installed") or {}
+            )
+            client_id = secret_data.get("client_id", "")
+            client_secret = secret_data.get("client_secret", "")
 
-        client_id = client_secrets.get("installed", {}).get("client_id", "")
-        client_secret = client_secrets.get("installed", {}).get("client_secret", "")
+        # 2. Fallback to environment variables (for cloud deployments like Vercel/Render)
+        if not client_id:
+            client_id = os.getenv("YOUTUBE_CLIENT_ID", "")
+        if not client_secret:
+            client_secret = os.getenv("YOUTUBE_CLIENT_SECRET", "")
+
+        if not client_id or not client_secret:
+            log.error(
+                "YouTube OAuth client credentials not found. "
+                "Provide client_secret.json or set YOUTUBE_CLIENT_ID and YOUTUBE_CLIENT_SECRET env vars."
+            )
 
         from backend.security import decrypt_value
 

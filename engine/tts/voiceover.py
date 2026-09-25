@@ -26,13 +26,14 @@ DEFAULT_VOICE = "en-US-GuyNeural"
 
 # Full catalog of supported voices with metadata for the UI
 VOICE_CATALOG = [
+    # ── English (US) ──────────────────────────────────────────────────────────
     {
         "id": "en-US-GuyNeural",
         "name": "Guy",
         "language": "en",
         "locale": "en-US",
         "gender": "Male",
-        "description": "Natural, enthusiastic male",
+        "description": "Natural, enthusiastic male — great for narrations",
     },
     {
         "id": "en-US-AnaNeural",
@@ -48,7 +49,7 @@ VOICE_CATALOG = [
         "language": "en",
         "locale": "en-US",
         "gender": "Male",
-        "description": "Reliable, clear male",
+        "description": "Reliable, clear male — ideal for tutorials",
     },
     {
         "id": "en-US-AriaNeural",
@@ -56,15 +57,53 @@ VOICE_CATALOG = [
         "language": "en",
         "locale": "en-US",
         "gender": "Female",
-        "description": "Professional female",
+        "description": "Professional female — perfect for explainers",
     },
+    # ── Multilingual (support Hindi, English, and many more) ──────────────────
+    {
+        "id": "en-US-AndrewMultilingualNeural",
+        "name": "Andrew (Multilingual)",
+        "language": "multi",
+        "locale": "en-US",
+        "gender": "Male",
+        "description": "Fluent in Hindi, English & 10+ languages — deep, engaging male",
+        "tags": ["hindi", "multilingual", "premium"],
+    },
+    {
+        "id": "en-US-AvaMultilingualNeural",
+        "name": "Ava (Multilingual)",
+        "language": "multi",
+        "locale": "en-US",
+        "gender": "Female",
+        "description": "Fluent in Hindi, English & 10+ languages — warm, expressive female",
+        "tags": ["hindi", "multilingual", "premium"],
+    },
+    {
+        "id": "en-US-BrianMultilingualNeural",
+        "name": "Brian (Multilingual)",
+        "language": "multi",
+        "locale": "en-US",
+        "gender": "Male",
+        "description": "Fluent in Hindi, English & 10+ languages — authoritative male",
+        "tags": ["hindi", "multilingual", "premium"],
+    },
+    {
+        "id": "en-US-EmmaMultilingualNeural",
+        "name": "Emma (Multilingual)",
+        "language": "multi",
+        "locale": "en-US",
+        "gender": "Female",
+        "description": "Fluent in Hindi, English & 10+ languages — friendly, natural female",
+        "tags": ["hindi", "multilingual", "premium"],
+    },
+    # ── English (British) ─────────────────────────────────────────────────────
     {
         "id": "en-GB-RyanNeural",
         "name": "Ryan",
         "language": "en",
         "locale": "en-GB",
         "gender": "Male",
-        "description": "British tech feel",
+        "description": "British tech feel — cool and authoritative",
     },
     {
         "id": "en-GB-SoniaNeural",
@@ -72,15 +111,16 @@ VOICE_CATALOG = [
         "language": "en",
         "locale": "en-GB",
         "gender": "Female",
-        "description": "Clear British female",
+        "description": "Clear British female — polished delivery",
     },
+    # ── English (Indian) ──────────────────────────────────────────────────────
     {
         "id": "en-IN-PrabhatNeural",
         "name": "Prabhat",
         "language": "en",
         "locale": "en-IN",
         "gender": "Male",
-        "description": "Indian English male",
+        "description": "Indian English male — natural desi accent",
     },
     {
         "id": "en-IN-NeerjaNeural",
@@ -88,7 +128,7 @@ VOICE_CATALOG = [
         "language": "en",
         "locale": "en-IN",
         "gender": "Female",
-        "description": "Indian English female",
+        "description": "Indian English female — clear and professional",
     },
     {
         "id": "en-IN-NeerjaExpressiveNeural",
@@ -96,15 +136,17 @@ VOICE_CATALOG = [
         "language": "en",
         "locale": "en-IN",
         "gender": "Female",
-        "description": "Expressive Indian English female",
+        "description": "Expressive Indian English female — animated storytelling",
     },
+    # ── Hindi ─────────────────────────────────────────────────────────────────
     {
         "id": "hi-IN-MadhurNeural",
         "name": "Madhur",
         "language": "hi",
         "locale": "hi-IN",
         "gender": "Male",
-        "description": "Natural, warm male",
+        "description": "Natural Hindi male — warm and engaging voice",
+        "tags": ["hindi", "native"],
     },
     {
         "id": "hi-IN-SwaraNeural",
@@ -112,15 +154,126 @@ VOICE_CATALOG = [
         "language": "hi",
         "locale": "hi-IN",
         "gender": "Female",
-        "description": "Natural, warm female",
+        "description": "Natural Hindi female — smooth and expressive",
+        "tags": ["hindi", "native"],
     },
+    # ── Indian Regional Languages ─────────────────────────────────────────────
+    {
+        "id": "bn-IN-BashkarNeural",
+        "name": "Bashkar",
+        "language": "bn",
+        "locale": "bn-IN",
+        "gender": "Male",
+        "description": "Bengali male — clear and articulate",
+        "tags": ["bengali", "indian"],
+    },
+    {
+        "id": "bn-IN-TanishaaNeural",
+        "name": "Tanishaa",
+        "language": "bn",
+        "locale": "bn-IN",
+        "gender": "Female",
+        "description": "Bengali female — warm and natural",
+        "tags": ["bengali", "indian"],
+    },
+    {
+        "id": "gu-IN-DhwaniNeural",
+        "name": "Dhwani",
+        "language": "gu",
+        "locale": "gu-IN",
+        "gender": "Female",
+        "description": "Gujarati female — pleasant and clear",
+        "tags": ["gujarati", "indian"],
+    },
+    {
+        "id": "gu-IN-NiranjanNeural",
+        "name": "Niranjan",
+        "language": "gu",
+        "locale": "gu-IN",
+        "gender": "Male",
+        "description": "Gujarati male — confident and steady",
+        "tags": ["gujarati", "indian"],
+    },
+    {
+        "id": "mr-IN-AarohiNeural",
+        "name": "Aarohi",
+        "language": "mr",
+        "locale": "mr-IN",
+        "gender": "Female",
+        "description": "Marathi female — lively and expressive",
+        "tags": ["marathi", "indian"],
+    },
+    {
+        "id": "mr-IN-ManoharNeural",
+        "name": "Manohar",
+        "language": "mr",
+        "locale": "mr-IN",
+        "gender": "Male",
+        "description": "Marathi male — deep and resonant",
+        "tags": ["marathi", "indian"],
+    },
+    {
+        "id": "ta-IN-PallaviNeural",
+        "name": "Pallavi",
+        "language": "ta",
+        "locale": "ta-IN",
+        "gender": "Female",
+        "description": "Tamil female — melodic and clear",
+        "tags": ["tamil", "indian"],
+    },
+    {
+        "id": "ta-IN-ValluvarNeural",
+        "name": "Valluvar",
+        "language": "ta",
+        "locale": "ta-IN",
+        "gender": "Male",
+        "description": "Tamil male — authoritative narrator",
+        "tags": ["tamil", "indian"],
+    },
+    {
+        "id": "te-IN-ShrutiNeural",
+        "name": "Shruti",
+        "language": "te",
+        "locale": "te-IN",
+        "gender": "Female",
+        "description": "Telugu female — soft and pleasant",
+        "tags": ["telugu", "indian"],
+    },
+    {
+        "id": "te-IN-MohanNeural",
+        "name": "Mohan",
+        "language": "te",
+        "locale": "te-IN",
+        "gender": "Male",
+        "description": "Telugu male — clear and steady",
+        "tags": ["telugu", "indian"],
+    },
+    {
+        "id": "ur-IN-GulNeural",
+        "name": "Gul",
+        "language": "ur",
+        "locale": "ur-IN",
+        "gender": "Female",
+        "description": "Urdu female — elegant and poetic",
+        "tags": ["urdu", "indian"],
+    },
+    {
+        "id": "ur-IN-SalmanNeural",
+        "name": "Salman",
+        "language": "ur",
+        "locale": "ur-IN",
+        "gender": "Male",
+        "description": "Urdu male — rich and expressive",
+        "tags": ["urdu", "indian"],
+    },
+    # ── Spanish ───────────────────────────────────────────────────────────────
     {
         "id": "es-ES-AlvaroNeural",
         "name": "Alvaro",
         "language": "es",
         "locale": "es-ES",
         "gender": "Male",
-        "description": "Spanish male",
+        "description": "Spanish male — warm and conversational",
     },
     {
         "id": "es-ES-ElviraNeural",
@@ -128,15 +281,16 @@ VOICE_CATALOG = [
         "language": "es",
         "locale": "es-ES",
         "gender": "Female",
-        "description": "Spanish female",
+        "description": "Spanish female — clear and professional",
     },
+    # ── French ────────────────────────────────────────────────────────────────
     {
         "id": "fr-FR-HenriNeural",
         "name": "Henri",
         "language": "fr",
         "locale": "fr-FR",
         "gender": "Male",
-        "description": "French male",
+        "description": "French male — smooth and sophisticated",
     },
     {
         "id": "fr-FR-DeniseNeural",
@@ -144,15 +298,16 @@ VOICE_CATALOG = [
         "language": "fr",
         "locale": "fr-FR",
         "gender": "Female",
-        "description": "French female",
+        "description": "French female — elegant and natural",
     },
+    # ── German ────────────────────────────────────────────────────────────────
     {
         "id": "de-DE-KillianNeural",
         "name": "Killian",
         "language": "de",
         "locale": "de-DE",
         "gender": "Male",
-        "description": "German male",
+        "description": "German male — precise and authoritative",
     },
     {
         "id": "de-DE-AmalaNeural",
@@ -160,16 +315,23 @@ VOICE_CATALOG = [
         "language": "de",
         "locale": "de-DE",
         "gender": "Female",
-        "description": "German female",
+        "description": "German female — clear and professional",
     },
 ]
 
 
 def get_voice_catalog(language: str | None = None) -> list[dict]:
-    """Return the catalog of available voices, optionally filtered by language."""
+    """Return the catalog of available voices, optionally filtered by language.
+    Multilingual voices are always included when filtering by any language,
+    since they support Hindi, English, and 10+ languages natively.
+    """
     if language:
         lang_base = language.split("-")[0]
-        return [v for v in VOICE_CATALOG if v["language"] == lang_base]
+        return [
+            v
+            for v in VOICE_CATALOG
+            if v["language"] == lang_base or v["language"] == "multi"
+        ]
     return VOICE_CATALOG
 
 
@@ -204,6 +366,12 @@ async def generate_voiceover(
         "pt": "pt-BR-AntonioNeural",
         "hi-IN": "hi-IN-MadhurNeural",
         "hi": "hi-IN-MadhurNeural",
+        "bn": "bn-IN-BashkarNeural",
+        "gu": "gu-IN-NiranjanNeural",
+        "mr": "mr-IN-ManoharNeural",
+        "ta": "ta-IN-ValluvarNeural",
+        "te": "te-IN-MohanNeural",
+        "ur": "ur-IN-SalmanNeural",
         "ja": "ja-JP-KeitaNeural",
         "ko": "ko-KR-InJoonNeural",
         "zh": "zh-CN-YunxiNeural",
@@ -212,19 +380,23 @@ async def generate_voiceover(
     # User selected voice or niche default
     selected_voice = voice or NICHE_VOICES.get(niche, DEFAULT_VOICE)
 
+    # Multilingual voices can handle any language — skip language-mismatch overrides
+    is_multilingual = "Multilingual" in selected_voice
+
     # Extract lang base (e.g., "en" from "en-US")
     requested_lang_base = language.split("-")[0]
     voice_lang_base = selected_voice.split("-")[0]
 
     # If the voice's language doesn't match the requested language, override it
     # Edge-TTS cannot synthesize non-compatible language scripts (e.g., Hindi with an English voice)
+    # Exception: multilingual voices can handle any language natively
     is_default = (
         (voice is None)
         or (voice == NICHE_VOICES.get(niche))
         or (voice == DEFAULT_VOICE)
     )
 
-    if requested_lang_base != voice_lang_base:
+    if not is_multilingual and requested_lang_base != voice_lang_base:
         fallback_voice = LANG_VOICES.get(language, LANG_VOICES.get(requested_lang_base))
         if fallback_voice:
             if not is_default:
@@ -237,7 +409,7 @@ async def generate_voiceover(
                     fallback_voice,
                 )
             selected_voice = fallback_voice
-    elif language == "en-IN" and is_default:
+    elif not is_multilingual and language == "en-IN" and is_default:
         # Specific override for Indian English if default is en-US
         selected_voice = LANG_VOICES["en-IN"]
 
