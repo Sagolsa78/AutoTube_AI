@@ -1,6 +1,5 @@
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import React, { useState, useEffect, Suspense, lazy } from 'react';
-import { supabase } from './lib/supabase';
 import { setAuthToken } from './services/api';
 import { ChannelProvider } from './contexts/ChannelContext';
 import { JobsProvider } from './hooks/useJobs';
@@ -37,23 +36,6 @@ function ProtectedRoute() {
       setIsAuthenticated(true);
       setLoading(false);
       return;
-    }
-
-    // 2. Supabase fallback check
-    if (supabase) {
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        setIsAuthenticated(!!session);
-        if (session?.access_token) setAuthToken(session.access_token);
-        setLoading(false);
-      });
-
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-        setIsAuthenticated(!!session);
-        if (session?.access_token) setAuthToken(session.access_token);
-        else setAuthToken(null);
-      });
-
-      return () => subscription.unsubscribe();
     }
 
     setIsAuthenticated(false);

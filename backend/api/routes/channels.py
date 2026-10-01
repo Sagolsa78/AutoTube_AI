@@ -32,6 +32,13 @@ class ChannelCreate(BaseModel):
     title_style_preference: str | None = None
     hashtag_set: list[str] | None = None
     auto_approve: bool | None = None
+    # Channel Intelligence (Phase 1)
+    content_pillars: list[str] | None = None
+    target_audience: str | None = None
+    excluded_topics: list[str] | None = None
+    excluded_keywords: list[str] | None = None
+    preferred_content_formats: list[str] | None = None
+    visual_preferences: dict | None = None
 
 
 class ChannelUpdate(BaseModel):
@@ -50,6 +57,13 @@ class ChannelUpdate(BaseModel):
     title_style_preference: str | None = None
     hashtag_set: list[str] | None = None
     auto_approve: bool | None = None
+    # Channel Intelligence (Phase 1)
+    content_pillars: list[str] | None = None
+    target_audience: str | None = None
+    excluded_topics: list[str] | None = None
+    excluded_keywords: list[str] | None = None
+    preferred_content_formats: list[str] | None = None
+    visual_preferences: dict | None = None
 
 
 class ChannelOut(BaseModel):
@@ -69,6 +83,13 @@ class ChannelOut(BaseModel):
     title_style_preference: str
     hashtag_set: list[str]
     auto_approve: bool
+    # Channel Intelligence
+    content_pillars: list[str] = []
+    target_audience: str = ""
+    excluded_topics: list[str] = []
+    excluded_keywords: list[str] = []
+    preferred_content_formats: list[str] = ["short"]
+    visual_preferences: dict = {}
     created_at: str
 
     class Config:
@@ -163,5 +184,13 @@ def _fmt(c: Channel) -> dict:
         "title_style_preference": c.title_style_preference or "curiosity",
         "hashtag_set": c.hashtag_set or ["shorts", "viral"],
         "auto_approve": c.auto_approve if c.auto_approve is not None else False,
+        # Channel Intelligence
+        "content_pillars": getattr(c, "content_pillars", None) or [],
+        "target_audience": getattr(c, "target_audience", None) or "",
+        "excluded_topics": getattr(c, "excluded_topics", None) or [],
+        "excluded_keywords": getattr(c, "excluded_keywords", None) or [],
+        "preferred_content_formats": getattr(c, "preferred_content_formats", None)
+        or ["short"],
+        "visual_preferences": getattr(c, "visual_preferences", None) or {},
         "created_at": str(c.created_at),
     }

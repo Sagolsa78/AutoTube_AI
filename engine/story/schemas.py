@@ -57,6 +57,9 @@ class SceneSpec(BaseModel):
     start_time: Optional[float] = None
     end_time: Optional[float] = None
     duration: Optional[float] = None
+    custom_duration: Optional[float] = Field(
+        default=None, description="Phase 5: User-defined strict duration for this scene"
+    )
 
     # Scoring/Budget
     importance: Literal["low", "medium", "high"] = Field(default="medium")

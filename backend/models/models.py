@@ -56,6 +56,17 @@ class VideoStatus(str, enum.Enum):
     publish_failed = "publish_failed"
 
 
+class RenderErrorCode(str, enum.Enum):
+    dispatch_failed = "dispatch_failed"
+    tts_failed = "tts_failed"
+    visual_failed = "visual_failed"
+    assembly_failed = "assembly_failed"
+    storage_failed = "storage_failed"
+    metadata_failed = "metadata_failed"
+    upload_failed = "upload_failed"
+    quality_gate_failed = "quality_gate_failed"
+
+
 class PrivacyStatus(str, enum.Enum):
     private = "private"
     unlisted = "unlisted"
@@ -141,6 +152,20 @@ class Channel(Base):
     title_style_preference = Column(String, default="curiosity")
     hashtag_set = Column(JSON, default=lambda: ["shorts", "viral"])
     auto_approve = Column(Boolean, default=False)
+
+    # ── Channel Intelligence (Phase 1) ────────────────────────────────────────
+    content_pillars = Column(JSON, default=list)  # e.g. ["aviation", "science"]
+    target_audience = Column(String, default="")
+    excluded_topics = Column(JSON, default=list)  # e.g. ["celebrity gossip"]
+    excluded_keywords = Column(JSON, default=list)
+    recent_topics = Column(JSON, default=list)  # rolling window of produced topics
+    previously_used_topics = Column(JSON, default=list)
+    preferred_content_formats = Column(JSON, default=lambda: ["short"])
+    visual_preferences = Column(
+        JSON, default=dict
+    )  # e.g. {"default_strategy": "balanced"}
+    topic_fingerprints = Column(JSON, default=list)  # normalized topic embeddings
+    performance_metrics = Column(JSON, default=dict)  # aggregated channel-level metrics
 
     created_at = Column(DateTime(timezone=True), default=utc_now)
 
@@ -271,12 +296,26 @@ class Video(Base):
 
     render_stage = Column(String, default="queued")
     render_progress = Column(Float, default=0.0)
+    error_code = Column(String, nullable=True)  # RenderErrorCode value
 
     title_candidates = Column(JSON, default=list)
     selected_title = Column(String)
     description = Column(Text)
     hashtags = Column(JSON, default=list)
     voice_override = Column(String)
+
+    # ── Format settings (Phase 4) ─────────────────────────────────────────────
+    content_type = Column(String, default="short")  # short | long_form
+    target_duration_seconds = Column(Integer, nullable=True)  # user-requested target
+    orientation = Column(String, default="9:16")  # 9:16 | 16:9
+    visual_strategy = Column(
+        String, default="auto"
+    )  # auto | stock_first | balanced | ai_first | manual
+    duration_mode = Column(String, default="auto")  # auto | target | exact
+
+    # ── Render metadata (Phase 21) ────────────────────────────────────────────
+    render_metadata = Column(JSON, default=dict)  # ffprobe output, quality gate results
+    selected_voice = Column(String, nullable=True)  # actual voice used in render
 
     created_at = Column(DateTime(timezone=True), default=utc_now)
 

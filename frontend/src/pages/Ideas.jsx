@@ -16,6 +16,8 @@ export default function Ideas() {
   const [ideas, setIdeas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [recommendation, setRecommendation] = useState(null);
+  const [loadingRec, setLoadingRec] = useState(false);
   const { activeChannelId, activeChannel } = useChannel();
   const [activeTab, setActiveTab] = useState('pending');
   const navigate = useNavigate();
@@ -56,6 +58,37 @@ export default function Ideas() {
       toast.error(`Generation failed: ${e.message}`);
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const getRecommendation = async () => {
+    if (!activeChannelId) return;
+    setLoadingRec(true);
+    try {
+      const data = await api.getRecommendedIdea(activeChannelId);
+      if (data && data.recommended_topic) {
+        setRecommendation(data);
+      } else {
+        toast.info("No strong recommendations right now.");
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to fetch recommendation");
+    } finally {
+      setLoadingRec(false);
+    }
+  };
+
+  const dismissRecommendation = async (reason = "not interested") => {
+    if (!recommendation?.idea_id) return;
+    try {
+      await api.dismissIdea(recommendation.idea_id, { reason });
+      setRecommendation(null);
+      await loadIdeas();
+      toast.success("Recommendation dismissed");
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to dismiss");
     }
   };
 
@@ -107,19 +140,72 @@ export default function Ideas() {
           title="Concept Generator"
           description="Brainstorm, curate, and promote viral hook concepts to the scriptwriting studio."
           actions={
-            <Button
-              variant="primary"
-              size="sm"
-              icon={generating ? 'loader' : 'sparkles'}
-              onClick={generate}
-              disabled={generating}
-              loading={generating}
-              className="shadow-brand-glow"
-            >
-              {generating ? 'Brainstorming...' : 'Generate 5 Ideas'}
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={loadingRec ? 'loader' : 'zap'}
+                onClick={getRecommendation}
+                disabled={loadingRec || generating}
+              >
+                {loadingRec ? 'Analyzing...' : 'Recommend Next'}
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                icon={generating ? 'loader' : 'sparkles'}
+                onClick={generate}
+                disabled={generating || loadingRec}
+                className="shadow-brand-glow"
+              >
+                {generating ? 'Brainstorming...' : 'Generate 5 Ideas'}
+              </Button>
+            </div>
           }
         />
+
+        {/* AI Recommendation Banner */}
+        {recommendation && (
+          <div className="bg-brand-blue/10 border border-brand-blue/30 rounded-xl p-5 shadow-lg relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-brand-blue/20 blur-3xl rounded-full -mr-10 -mt-10 pointer-events-none"></div>
+            <div className="flex items-start gap-4">
+              <div className="shrink-0 mt-1 text-brand-blue">
+                <Icon name="zap" className="w-8 h-8" />
+              </div>
+              <div className="flex-1 space-y-2">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-lg font-bold text-text-primary">AI Strategy Recommendation</h3>
+                  <span className="bg-brand-blue/20 text-brand-blue text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded">High Confidence</span>
+                </div>
+                <h4 className="text-xl font-bold text-text-primary mt-1">{recommendation.recommended_topic}</h4>
+                <p className="text-sm text-text-secondary leading-relaxed">
+                  <strong>Why?</strong> {recommendation.reason}
+                </p>
+                <div className="flex items-center gap-3 pt-3">
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    icon="film"
+                    onClick={() => {
+                      developInStudio(recommendation.idea_id);
+                      setRecommendation(null);
+                    }}
+                  >
+                    Develop this concept
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-text-muted hover:text-text-primary"
+                    onClick={() => dismissRecommendation("not interested")}
+                  >
+                    Dismiss
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Tab Strip */}
         <FilterBar tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />

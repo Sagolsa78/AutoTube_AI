@@ -291,7 +291,8 @@ def build_karaoke_ass(
         parts: list[str] = []
         for w in group:
             cs = max(1, int(w["duration"] * 100))
-            parts.append(f"{{\\kf{cs}}}{w['text']} ")
+            safe_text = w["text"].replace("{", "").replace("}", "").replace("\\", "")
+            parts.append(f"{{\\kf{cs}}}{safe_text} ")
 
         text = f"{{\\an5\\pos(540,1350)\\fad(100,100)}}" + "".join(parts).rstrip()
         lines.append(f"Dialogue: 0,{_ts(start)},{_ts(end)},Default,,0,0,0,,{text}")

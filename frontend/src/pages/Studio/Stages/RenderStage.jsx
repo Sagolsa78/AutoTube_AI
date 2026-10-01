@@ -12,6 +12,7 @@ export default function RenderStage({
   selectedStyle, setSelectedStyle,
   selectedCaption, setSelectedCaption,
   selectedVoice, setSelectedVoice,
+  selectedVisualStrategy, setSelectedVisualStrategy,
   onBack
 }) {
   const navigate = useNavigate();
@@ -59,7 +60,7 @@ export default function RenderStage({
     setRenderProgress(null);
     try {
       const video = await api.renderVideo(
-        script.id, selectedStyle, selectedCaption, null, selectedVoice
+        script.id, selectedStyle, selectedCaption, null, selectedVoice, selectedVisualStrategy
       );
       setVideoId(video.id);
       toast.info('Rendering pipeline started...');
@@ -259,6 +260,22 @@ export default function RenderStage({
                 {(captionStyles || []).map(cs => (
                   <option key={cs.key} value={cs.key}>{cs.name}</option>
                 ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-text-muted mb-1.5">
+                Visual Strategy Override (Phase 6)
+              </label>
+              <select
+                className="w-full bg-surface-input border border-border rounded-lg px-3 py-2 text-xs text-text-primary focus:border-brand-red focus:outline-none"
+                value={selectedVisualStrategy || 'auto'}
+                onChange={e => setSelectedVisualStrategy(e.target.value)}
+              >
+                <option value="auto">Auto (Scene Defined)</option>
+                <option value="stock_first">Stock First (Fastest)</option>
+                <option value="ai_first">AI First (ComfyUI)</option>
+                <option value="balanced">Balanced (Alternate)</option>
               </select>
             </div>
           </CardContent>

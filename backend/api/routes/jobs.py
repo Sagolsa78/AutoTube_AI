@@ -61,11 +61,21 @@ async def verify_worker_auth(
     (acceptable for local dev where only the local worker calls them).
     """
     worker_secret = settings.WORKER_SECRET
-    if worker_secret:
+    if settings.APP_ENV == "production":
+        if not worker_secret:
+            raise HTTPException(
+                status_code=500, detail="Worker secret is not configured in production"
+            )
         if not x_worker_secret or x_worker_secret != worker_secret:
             raise HTTPException(
                 status_code=403, detail="Invalid or missing X-Worker-Secret header"
             )
+    else:
+        if worker_secret:
+            if not x_worker_secret or x_worker_secret != worker_secret:
+                raise HTTPException(
+                    status_code=403, detail="Invalid or missing X-Worker-Secret header"
+                )
     # If no WORKER_SECRET configured, allow (local dev mode)
     return True
 
@@ -325,7 +335,11 @@ async def worker_poll(
         query = select(Job).where(Job.status.in_([JobStatus.QUEUED]))
         if cap_list:
             query = query.where(Job.capability.in_(cap_list))
-        query = query.order_by(Job.created_at.asc()).limit(1)
+        query = (
+            query.order_by(Job.created_at.asc())
+            .limit(1)
+            .with_for_update(skip_locked=True)
+        )
 
         result = await db.execute(query)
         db_job = result.scalar_one_or_none()
@@ -377,6 +391,8 @@ async def complete_job(
     job = res.scalar_one_or_none()
     if not job:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+    if job.worker_id and job.worker_id != req.worker_id:
+        raise HTTPException(status_code=403, detail="Worker ID mismatch")
 
     job.transition_to(JobStatus.SUCCEEDED)
     job.result = req.result
@@ -411,6 +427,8 @@ async def fail_job(
     job = res.scalar_one_or_none()
     if not job:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+    if job.worker_id and job.worker_id != req.worker_id:
+        raise HTTPException(status_code=403, detail="Worker ID mismatch")
 
     job.transition_to(JobStatus.FAILED)
     job.error_message = req.error_message

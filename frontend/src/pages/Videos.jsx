@@ -477,24 +477,23 @@ export default function Videos({ filter }) {
                   <button
                     type="button"
                     className="btn btn-success flex-1 py-3 text-sm font-bold shadow-md"
-                    onClick={() => action(activeVideo.id, 'approve')}
+                    onClick={() => {
+                        action(activeVideo.id, 'approve');
+                        setUploadModal(activeVideo);
+                    }}
                   >
-                    <Icon name="check" size={16} /> Approve <span className="text-[11px] opacity-60 ml-1 hidden sm:inline">[A]</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-primary flex-1 py-3 text-sm font-bold shadow-brand-glow"
-                    onClick={() => setUploadModal(activeVideo)}
-                  >
-                    <Icon name="upload" size={16} /> Publish <span className="text-[11px] opacity-75 ml-1 hidden sm:inline">to YouTube</span>
+                    <Icon name="check" size={16} /> Approve & Publish <span className="text-[11px] opacity-60 ml-1 hidden sm:inline">[A]</span>
                   </button>
                   <button
                     type="button"
                     className="btn btn-danger py-3 px-3 text-sm font-bold shadow-md"
-                    onClick={() => action(activeVideo.id, 'reject')}
-                    title="Reject Short"
+                    onClick={() => {
+                        action(activeVideo.id, 'reject');
+                        toast.info("Video rejected. You can generate a new one from the Studio.");
+                    }}
+                    title="Reject & Regenerate"
                   >
-                    <Icon name="x" size={16} />
+                    <Icon name="x" size={16} /> Reject & Regenerate
                   </button>
                 </>
               )}
@@ -629,6 +628,18 @@ export default function Videos({ filter }) {
                     </span>
                     <div className="bg-elevated/40 p-3.5 rounded-xl border border-border max-h-36 overflow-y-auto text-xs text-text-secondary leading-relaxed font-sans">
                       {activeScript.full_text || 'No script text available.'}
+                    </div>
+                  </div>
+                )}
+
+                {/* AI Notes */}
+                {activeVideo.notes && (
+                  <div>
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted block mb-2">
+                      AI Notes / Generation Log
+                    </span>
+                    <div className="bg-elevated/40 p-3.5 rounded-xl border border-border max-h-36 overflow-y-auto text-xs text-text-secondary font-mono leading-relaxed">
+                      {activeVideo.notes}
                     </div>
                   </div>
                 )}

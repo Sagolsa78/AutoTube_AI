@@ -103,28 +103,41 @@ async def generate_asset(
     job_id = str(uuid.uuid4())
     payload = {"prompt": prompt, "mode": mode}
 
-    # Dispatch via Worker Router
-    route_meta = await dispatch_job(
-        job_id=job_id, capability=capability, payload=payload, user_id=user.id, db=db
-    )
-
-    # Store the DB Job
     from datetime import datetime
 
     from backend.models.models import Job as DBJob
+    from backend.models.models import JobStatus
 
     new_db_job = DBJob(
         id=job_id,
         user_id=user.id,
         capability=capability.value,
-        status=route_meta["status"],
+        status=JobStatus.CREATED,
         payload=payload,
-        worker_id=route_meta.get("worker_id"),
-        worker_type=route_meta.get("worker_type", "local"),
+        worker_type="local",
         cost_usd=0.0,
         created_at=datetime.utcnow(),
     )
     db.add(new_db_job)
+    await db.commit()
+    await db.refresh(new_db_job)
+
+    # Dispatch via Worker Router
+    try:
+        route_meta = await dispatch_job(
+            job_id=job_id,
+            capability=capability,
+            payload=payload,
+            user_id=user.id,
+            db=db,
+        )
+        new_db_job.status = route_meta.get("status", JobStatus.QUEUED)
+        new_db_job.worker_id = route_meta.get("worker_id")
+        new_db_job.worker_type = route_meta.get("worker_type", "local")
+    except Exception as e:
+        new_db_job.status = JobStatus.FAILED
+        new_db_job.error_message = str(e)
+
     await db.commit()
 
     return {

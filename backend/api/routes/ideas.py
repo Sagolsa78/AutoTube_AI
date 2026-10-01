@@ -260,6 +260,107 @@ async def discard_idea(
     return _fmt(idea)
 
 
+@router.get("/recommend-next")
+async def recommend_next_idea(
+    channel_id: str | None = None,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Phase 3: AI-powered content recommendation.
+    Uses channel history, performance data, and exclusions to suggest
+    the best next video topic.
+    """
+    from backend.services.content_intelligence import ContentIntelligenceService
+
+    if not channel_id:
+        # Find first channel
+        ch = await db.scalar(select(Channel).where(Channel.user_id == user.id).limit(1))
+        if not ch:
+            raise HTTPException(404, "No channels found")
+        channel_id = ch.id
+    else:
+        ch = await db.scalar(
+            select(Channel).where(Channel.id == channel_id, Channel.user_id == user.id)
+        )
+        if not ch:
+            raise HTTPException(404, "Channel not found")
+
+    preferred_prov = user.preferred_ai_provider or settings.DEFAULT_AI_PROVIDER
+    preferred_mod = user.preferred_ai_model or settings.DEFAULT_AI_MODEL
+
+    result = await ContentIntelligenceService.recommend_next(
+        channel_id=channel_id,
+        user_id=user.id,
+        db=db,
+        preferred_provider=preferred_prov,
+        preferred_model=preferred_mod,
+    )
+
+    if not result.get("error") and result.get("recommended_topic"):
+        # Save it to the DB so it can be dismissed or approved
+        idea = Idea(
+            user_id=user.id,
+            channel_id=channel_id,
+            title=result["recommended_topic"],
+            topic=result["recommended_topic"],
+            angle=result.get("reason"),
+            status=IdeaStatus.pending,
+            score=result.get("confidence", 0.85) * 100,
+            notes=f"AI Recommendation: {result.get('reason')}",
+        )
+        db.add(idea)
+        await db.commit()
+        await db.refresh(idea)
+        result["idea_id"] = idea.id
+
+    return result
+
+
+class DismissIdeaIn(BaseModel):
+    reason: str | None = None
+
+
+@router.post("/{idea_id}/dismiss")
+async def dismiss_idea(
+    idea_id: str,
+    body: DismissIdeaIn | None = None,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Phase 3: Dismiss a recommended idea with optional reason.
+    Stores the feedback signal for future recommendations.
+    """
+    idea = await db.scalar(
+        select(Idea).where(Idea.id == idea_id, Idea.user_id == user.id)
+    )
+    if not idea:
+        raise HTTPException(404, "Idea not found")
+
+    idea.status = IdeaStatus.discarded
+    if body and body.reason:
+        idea.notes = (idea.notes or "") + f" [Dismissed: {body.reason}]"
+
+    # Store dismissal signal in channel intelligence
+    channel = await db.get(Channel, idea.channel_id)
+    if channel and channel.user_id == user.id:
+        excluded = channel.excluded_topics or []
+        # If a reason is provided suggesting a topic ban, add it
+        if (
+            body
+            and body.reason
+            and body.reason.lower() in ["duplicate", "off-topic", "not interested"]
+        ):
+            # Record the topic so the intelligence service avoids it
+            recent = channel.recent_topics or []
+            recent.append(idea.topic)
+            channel.recent_topics = recent[-50:]  # rolling window
+
+    await db.commit()
+    return _fmt(idea)
+
+
 def _fmt(i: Idea) -> dict:
     return {
         "id": i.id,

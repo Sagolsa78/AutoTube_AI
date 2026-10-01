@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import jwt
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -100,7 +100,9 @@ class AiSettingsIn(BaseModel):
 @router.post(
     "/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED
 )
-async def register(body: RegisterIn, db: AsyncSession = Depends(get_db)):
+async def register(
+    body: RegisterIn, response: Response, db: AsyncSession = Depends(get_db)
+):
     """Register a new user account with default channel."""
     if len(body.password) < 6:
         raise HTTPException(
@@ -142,6 +144,14 @@ async def register(body: RegisterIn, db: AsyncSession = Depends(get_db)):
     await db.refresh(new_user)
 
     token = create_access_token(new_user.id, new_user.email)
+    response.set_cookie(
+        key="autotube_session",
+        value=token,
+        httponly=True,
+        secure=settings.APP_ENV == "production",
+        samesite="lax",
+        max_age=30 * 24 * 3600,
+    )
     return AuthResponse(
         access_token=token,
         user=UserOut(
@@ -157,7 +167,7 @@ async def register(body: RegisterIn, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/login", response_model=AuthResponse)
-async def login(body: LoginIn, db: AsyncSession = Depends(get_db)):
+async def login(body: LoginIn, response: Response, db: AsyncSession = Depends(get_db)):
     """Authenticate with email and password."""
     email_clean = body.email.lower().strip()
     q = select(User).where(User.email == email_clean)
@@ -192,6 +202,14 @@ async def login(body: LoginIn, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     token = create_access_token(user.id, user.email or email_clean)
+    response.set_cookie(
+        key="autotube_session",
+        value=token,
+        httponly=True,
+        secure=settings.APP_ENV == "production",
+        samesite="lax",
+        max_age=30 * 24 * 3600,
+    )
     return AuthResponse(
         access_token=token,
         user=UserOut(

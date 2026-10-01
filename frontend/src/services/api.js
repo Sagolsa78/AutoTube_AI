@@ -1,4 +1,3 @@
-import { supabase } from '../lib/supabase';
 
 const API_URL = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || '';
 const BASE = API_URL ? `${API_URL.replace(/\/$/, '')}/api` : '/api';
@@ -13,6 +12,9 @@ export const setAuthToken = (token) => {
     localStorage.removeItem('autotube_auth_token');
   }
 };
+
+/** Return the resolved API base URL (for diagnostics / boot checks). */
+export const getApiBase = () => BASE;
 
 async function request(endpoint, options = {}) {
   const url = `${BASE}${endpoint}`;
@@ -42,9 +44,7 @@ async function request(endpoint, options = {}) {
 
     if (!res.ok) {
       if (res.status === 401) {
-        if (supabase) {
-            await supabase.auth.signOut();
-        }
+
         setAuthToken(null);
         window.location.href = '/login';
         return;
@@ -89,6 +89,10 @@ export const api = {
   generateIdeas:  (channelId, count, niche) => request('/ideas/generate', { method: 'POST', body: JSON.stringify({ channel_id: channelId, count, niche }), timeout: 120000 }),
   discardIdea:    (id) => request(`/ideas/${id}/discard`, { method: 'POST' }),
 
+  // ── Content Intelligence (Phase 2/3) ─────────────
+  getRecommendedIdea: (channelId) => request(`/ideas/recommend-next${channelId ? '?channel_id=' + channelId : ''}`, { timeout: 120000 }),
+  dismissIdea: (id, reason) => request(`/ideas/${id}/dismiss`, { method: 'POST', body: JSON.stringify({ reason }) }),
+
   // ── Scripts ──────────────────────────────────────
   getScripts:     (param1, param2) => {
       let channelId = typeof param1 === 'string' ? param1 : (param1?.channelId || param1?.channel_id);
@@ -108,16 +112,25 @@ export const api = {
   // ── Videos ───────────────────────────────────────
   getVideos:      (channelId) => request(`/videos/${channelId ? '?channel_id=' + channelId : ''}`),
   getVideo:       (id) => request(`/videos/${id}`),
-  getVideoPreviewUrl: (id) => {
-    const token = authToken || localStorage.getItem('autotube_auth_token');
-    return token ? `${BASE}/videos/${id}/preview?token=${encodeURIComponent(token)}` : `${BASE}/videos/${id}/preview`;
-  },
+  getVideoPreviewUrl: (id) => request(`/videos/${id}/preview-url`),
   previewVideo:   (id) => request(`/videos/${id}/preview`),
   getVideoProgress: (id) => request(`/videos/${id}/progress`),
-  renderVideo:    (scriptId, style, captionStyle, customCta, voiceOverride) => request('/videos/render', {
+  renderVideo:    (scriptId, style, captionStyle, customCta, voiceOverride, visualStrategy = "auto") => request('/videos/render', {
     method: 'POST',
-    body: JSON.stringify({ script_id: scriptId, style, caption_style: captionStyle, custom_cta: customCta, voice_override: voiceOverride }),
+    body: JSON.stringify({ script_id: scriptId, style, caption_style: captionStyle, custom_cta: customCta, voice_override: voiceOverride, visual_strategy: visualStrategy }),
   }),
+  /** Full format-aware render (Phase 4) */
+  renderVideoFull: (opts) => request('/videos/render', {
+    method: 'POST',
+    body: JSON.stringify(opts),
+  }),
+  /** Download video file (Phase 10) — returns a fetch Response for blob download */
+  downloadVideo:  (id) => {
+    const token = localStorage.getItem('autotube_auth_token');
+    return fetch(`${BASE}/videos/${id}/download`, {
+      headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+    });
+  },
   updateVideo:    (id, data) => request(`/videos/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   generateVideoMetadata: (id) => request(`/videos/${id}/generate-metadata`, { method: 'POST', timeout: 120000 }),
   approveVideo:   (id, data = null) => {
@@ -149,6 +162,7 @@ export const api = {
 
   // ── System & Compute Plane ────────────────────────
   getSystemHealth: () => request('/system/health'),
+  getSystemRuntime: () => request('/system/runtime'),
   getComputeTelemetry: () => request('/jobs/telemetry'),
   getJobs:        (params = '') => request(`/jobs/${params}`),
   getJob:         (id) => request(`/jobs/${id}`),

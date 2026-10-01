@@ -26,9 +26,13 @@ class GitHubActionsJobExecutor(JobExecutor):
     """
 
     def __init__(self):
-        self.token = settings.GITHUB_TOKEN
-        self.repo = settings.GITHUB_REPO
-        self.ref = settings.WORKER_GIT_REF or "main"
+        raw_token = (settings.GITHUB_TOKEN or "").strip()
+        # Remove 'Bearer ' prefix if accidentally provided in environment variable
+        if raw_token.lower().startswith("bearer "):
+            raw_token = raw_token[7:].strip()
+        self.token = raw_token if raw_token else None
+        self.repo = (settings.GITHUB_REPO or "Sagolsa78/AutoTube_AI").strip()
+        self.ref = (settings.WORKER_GIT_REF or "main").strip()
 
         if not self.token:
             log.warning("[GitHubExecutor] GITHUB_TOKEN not set — dispatches will fail.")
@@ -37,7 +41,7 @@ class GitHubActionsJobExecutor(JobExecutor):
         """Trigger the video-worker.yml workflow with the job_id input."""
         if not self.token:
             raise RuntimeError(
-                "GITHUB_TOKEN is not configured. Cannot dispatch to GitHub Actions."
+                "GITHUB_TOKEN is not configured in the environment. Cannot dispatch to GitHub Actions."
             )
 
         url = (
@@ -58,8 +62,21 @@ class GitHubActionsJobExecutor(JobExecutor):
             resp = await client.post(url, headers=headers, json=body)
 
         if resp.status_code not in (204, 200):
+            err_msg = resp.text
+            if resp.status_code == 401:
+                err_msg = (
+                    f"GitHub API returned 401 Unauthorized (Bad Credentials). "
+                    f"Please verify that GITHUB_TOKEN is valid, unexpired, and has 'repo' or 'workflow' / 'actions:write' permissions. "
+                    f"Details: {resp.text}"
+                )
+            elif resp.status_code == 404:
+                err_msg = (
+                    f"GitHub API returned 404 Not Found. "
+                    f"Please verify that repo '{self.repo}' exists and workflow file 'video-worker.yml' exists on branch '{self.ref}'. "
+                    f"Details: {resp.text}"
+                )
             raise RuntimeError(
-                f"GitHub Actions dispatch failed ({resp.status_code}): {resp.text}"
+                f"GitHub Actions dispatch failed ({resp.status_code}): {err_msg}"
             )
 
         # Transition job to QUEUED in the database

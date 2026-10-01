@@ -514,6 +514,26 @@ export default function EditorStage({ idea, script, setScript, editingScenes, se
                                     </div>
                                 </div>
 
+                                <div className="flex gap-4">
+                                    <div className="flex-1">
+                                        <label className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1.5">
+                                        Scene Duration (Seconds)
+                                        </label>
+                                        <input
+                                            type="number"
+                                            step="0.1"
+                                            min="0"
+                                            className="w-full bg-surface-input border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:border-brand-red focus:outline-none"
+                                            placeholder="Auto (TTS length)"
+                                            value={activeScene.custom_duration || ''}
+                                            onChange={e => updateScene(activeSceneIdx, 'custom_duration', e.target.value ? parseFloat(e.target.value) : null)}
+                                        />
+                                        <p className="text-[9px] text-text-muted mt-1 leading-tight">
+                                            Override the automatic TTS timing. Leave empty to fit audio.
+                                        </p>
+                                    </div>
+                                </div>
+
                                 <div className="pt-4 mt-4 border-t border-border">
                                     <label className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1.5">
                                     Current Source

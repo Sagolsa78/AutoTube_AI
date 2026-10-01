@@ -26,6 +26,7 @@ from backend.api.routes import (
     jobs,
     profile,
     scripts,
+    system,
     videos,
     voices,
     youtube,
@@ -57,11 +58,23 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+origins = settings.parsed_cors_origins if settings.parsed_cors_origins else []
+
+if settings.APP_ENV == "production" and (not origins or "*" in origins):
+    raise RuntimeError(
+        "CORS origins must be strictly configured in production. Wildcards are not allowed."
+    )
+
+if not origins:
+    origins = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+    ]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=(
-        settings.parsed_cors_origins if settings.parsed_cors_origins else ["*"]
-    ),
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -88,6 +101,7 @@ app.include_router(youtube.router, prefix="/api/youtube", tags=["youtube"])
 app.include_router(voices.router, prefix="/api/voices", tags=["voices"])
 app.include_router(costs.router, prefix="/api/costs", tags=["costs"])
 app.include_router(health.router, prefix="/api/system/health", tags=["health"])
+app.include_router(system.router, prefix="/api/system", tags=["system"])
 
 
 @app.get("/", tags=["health"])

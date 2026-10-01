@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Literal, Optional
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
-from pydantic import AliasChoices, Field, field_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -94,7 +94,10 @@ class Settings(BaseSettings):
 
     # GitHub Actions (for cloud worker)
     GITHUB_TOKEN: Optional[str] = None
-    GITHUB_REPOSITORY: Optional[str] = None
+    GITHUB_REPO: str = Field(
+        default="Sagolsa78/AutoTube_AI",
+        validation_alias=AliasChoices("GITHUB_REPO", "GITHUB_REPOSITORY"),
+    )
     WORKER_GIT_REF: str = "main"  # git ref used by GitHub Actions worker
     WORKER_SECRET: Optional[str] = None  # shared secret for worker-API authentication
 
@@ -116,6 +119,7 @@ class Settings(BaseSettings):
     # ── Stock Footage Providers ───────────────────────────────────────────────
     STOCK_PROVIDER_ORDER: str = "pexels,coverr,pixabay"
     COVERR_ENABLED: bool = True
+    COVERR_API_KEY: Optional[str] = None
     PEXELS_API_KEY: Optional[str] = None
     PIXABAY_API_KEY: Optional[str] = None
 
@@ -126,7 +130,7 @@ class Settings(BaseSettings):
     # Determines if API endpoints require authentication
     AUTH_DISABLED: bool = False
     AUTOTUBE_API_KEY: Optional[str] = None
-    JWT_SECRET: str = "autotube-super-secret-jwt-signing-key-2026"
+    JWT_SECRET: Optional[str] = None
     JWT_ALGORITHM: str = "HS256"
     # Fernet key for encrypting OAuth tokens at rest (32 url-safe base64 bytes).
     # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
@@ -137,12 +141,34 @@ class Settings(BaseSettings):
     DEFAULT_AI_PROVIDER: str = "gemini"
     DEFAULT_AI_MODEL: str = "gemini-3.5-flash-lite"
 
-    # ── GitHub / Cloud Worker ─────────────────────────────────────────────────
-    GITHUB_REPO: str = "Sagolsa78/AutoTube_AI"  # owner/repo for dispatch
-
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )
+
+    @model_validator(mode="after")
+    def validate_production_secrets(self) -> "Settings":
+        if self.APP_ENV == "production":
+            missing = []
+            if (
+                not self.JWT_SECRET
+                or self.JWT_SECRET == "autotube-super-secret-jwt-signing-key-2026"
+            ):
+                missing.append("JWT_SECRET")
+            if not self.ENCRYPTION_KEY:
+                missing.append("ENCRYPTION_KEY")
+            if not self.WORKER_SECRET:
+                missing.append("WORKER_SECRET")
+            if not self.DATABASE_URL:
+                missing.append("DATABASE_URL")
+            if self.DATABASE_URL and "sqlite" in self.DATABASE_URL.lower():
+                missing.append("DATABASE_URL (SQLite is not allowed in production)")
+            if self.CORS_ORIGINS == "*":
+                missing.append("CORS_ORIGINS (cannot be '*' in production)")
+            if missing:
+                raise ValueError(
+                    f"Missing or invalid mandatory production secrets: {', '.join(missing)}"
+                )
+        return self
 
     @property
     def STORAGE_PROVIDER(self) -> str:
@@ -182,6 +208,37 @@ class Settings(BaseSettings):
                 seen.add(cleaned)
                 order.append(cleaned)
         return order
+
+    @property
+    def db_identity_hash(self) -> str:
+        """Non-secret hash derived from DB connection identity for local/live diagnostics."""
+        import hashlib
+
+        url = self.DATABASE_URL or ""
+        if "sqlite" in url.lower():
+            # For SQLite, use the file path as identity
+            return hashlib.sha256(f"sqlite:{url}".encode()).hexdigest()[:16]
+        parsed = urlparse(url)
+        identity = f"{parsed.hostname}:{parsed.port or 5432}/{parsed.path}"
+        return hashlib.sha256(identity.encode()).hexdigest()[:16]
+
+    @property
+    def git_commit(self) -> str:
+        """Return current git commit hash if available."""
+        import subprocess as _sp
+
+        try:
+            return (
+                _sp.check_output(
+                    ["git", "rev-parse", "--short", "HEAD"],
+                    stderr=_sp.DEVNULL,
+                    cwd=str(Path(__file__).resolve().parent.parent.parent),
+                )
+                .decode()
+                .strip()
+            )
+        except Exception:
+            return "unknown"
 
 
 # Global settings instance

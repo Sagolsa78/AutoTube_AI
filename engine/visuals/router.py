@@ -16,9 +16,12 @@ class VisualRouter:
     Supported modes: STOCK, GENERATED_IMAGE, GENERATED_VIDEO, MOTION_GRAPHIC, SOURCE_FOOTAGE.
     """
 
-    def __init__(self, visual_dir: str, user_id: str = "default-user"):
+    def __init__(
+        self, visual_dir: str, user_id: str = "default-user", strategy: str = "auto"
+    ):
         self.visual_dir = visual_dir
         self.user_id = user_id
+        self.strategy = strategy
 
     async def resolve_asset(
         self, scene_data: dict, idea_topic: str = "", used_source_ids: set = None
@@ -31,13 +34,31 @@ class VisualRouter:
             used_source_ids = set()
 
         mode = scene_data.get("preferred_visual_mode", "STOCK")
+        scene_num = scene_data.get("scene_number", 1)
+
+        # Apply strategy override
+        if self.strategy == "stock_first":
+            mode = "STOCK"
+        elif self.strategy == "ai_first":
+            mode = "GENERATED_IMAGE"
+        elif self.strategy == "balanced":
+            # Alternate between stock and generated based on scene number
+            mode = "STOCK" if scene_num % 2 != 0 else "GENERATED_IMAGE"
+        elif self.strategy == "auto":
+            # Keep original preferred mode if specified, else AUTO logic
+            mode = scene_data.get("preferred_visual_mode", "AUTO")
 
         log.info(
-            f"VisualRouter: resolving scene {scene_data.get('scene_number')} using mode {mode}"
+            f"VisualRouter: resolving scene {scene_num} using mode {mode} (Strategy: {self.strategy})"
         )
 
         if mode == "STOCK":
-            return await self._resolve_stock(scene_data, idea_topic, used_source_ids)
+            # Attempt stock, if fails, fallback to generated
+            res = await self._resolve_stock(scene_data, idea_topic, used_source_ids)
+            if res:
+                return res
+            log.warning("STOCK failed, falling back to GENERATED_IMAGE.")
+            return await self._resolve_generated_image(scene_data, idea_topic)
         elif mode == "GENERATED_IMAGE":
             result = await self._resolve_generated_image(scene_data, idea_topic)
             if result:

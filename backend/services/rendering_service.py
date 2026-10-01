@@ -15,6 +15,7 @@ from backend.models.models import (
     Channel,
     Idea,
     Publication,
+    RenderErrorCode,
     Script,
     ScriptStatus,
     User,
@@ -181,6 +182,9 @@ async def run_job(video_id: str, job: RenderJob, job_id: str = None):
                 job.voice = tts["voice"]
                 job.word_boundaries = tts.get("word_boundaries", [])
 
+                # Track the actual voice used (Phase 21)
+                video.selected_voice = tts["voice"]
+
                 if "cost_data" in tts:
                     await _record_cost_event(
                         db,
@@ -253,7 +257,9 @@ async def run_job(video_id: str, job: RenderJob, job_id: str = None):
 
                             if not asset_path:
                                 router = VisualRouter(
-                                    str(visual_dir), user_id=video.user_id
+                                    str(visual_dir),
+                                    user_id=video.user_id,
+                                    strategy=getattr(video, "visual_strategy", "auto"),
                                 )
                                 scene_dict = scene_spec.model_dump()
 
@@ -398,7 +404,11 @@ Respond ONLY with a JSON object in this exact format (no markdown):
   "hashtags": ["tag1", "tag2", "tag3"]
 }}"""
             try:
-                meta_res = generate_with_fallback(meta_prompt)
+                import asyncio
+
+                meta_res, _, _ = await asyncio.to_thread(
+                    generate_with_fallback, meta_prompt
+                )
                 cleaned_meta = (
                     re.sub(r"```(?:json)?", "", meta_res).strip().rstrip("```").strip()
                 )
@@ -515,6 +525,36 @@ Respond ONLY with a JSON object in this exact format (no markdown):
                 video.render_stage = "failed"
                 video.render_progress = 0
                 video.notes = str(exc)
+
+                # Classify error code (Phase 20)
+                err_msg = str(exc).lower()
+                if "tts" in err_msg or "voiceover" in err_msg or "edge-tts" in err_msg:
+                    video.error_code = RenderErrorCode.tts_failed.value
+                elif (
+                    "stock" in err_msg
+                    or "clip" in err_msg
+                    or "visual" in err_msg
+                    or "asset" in err_msg
+                ):
+                    video.error_code = RenderErrorCode.visual_failed.value
+                elif (
+                    "ffmpeg" in err_msg or "assembly" in err_msg or "filter" in err_msg
+                ):
+                    video.error_code = RenderErrorCode.assembly_failed.value
+                elif (
+                    "storage" in err_msg
+                    or "upload" in err_msg
+                    or "s3" in err_msg
+                    or "r2" in err_msg
+                ):
+                    video.error_code = RenderErrorCode.storage_failed.value
+                elif "metadata" in err_msg:
+                    video.error_code = RenderErrorCode.metadata_failed.value
+                elif "permission" in err_msg or "tenant" in err_msg:
+                    video.error_code = RenderErrorCode.dispatch_failed.value
+                else:
+                    video.error_code = RenderErrorCode.assembly_failed.value
+
                 await db.commit()
         finally:
             # Always clean up temp workspace — success, failure, or cancellation
@@ -587,7 +627,11 @@ Respond ONLY with a JSON object in this exact format (no markdown):
   "hashtags": ["tag1", "tag2", "tag3"]
 }}"""
         try:
-            meta_res, prov, cost_data = generate_with_fallback(meta_prompt)
+            import asyncio
+
+            meta_res, prov, cost_data = await asyncio.to_thread(
+                generate_with_fallback, meta_prompt
+            )
             cleaned_meta = (
                 re.sub(r"```(?:json)?", "", meta_res).strip().rstrip("```").strip()
             )

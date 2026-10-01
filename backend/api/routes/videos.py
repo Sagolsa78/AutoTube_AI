@@ -137,6 +137,7 @@ class VideoOut(BaseModel):
     # Render progress
     render_stage: str
     render_progress: float
+    error_code: str | None = None
 
     # Metadata
     title_candidates: list[str]
@@ -144,6 +145,14 @@ class VideoOut(BaseModel):
     description: str | None
     hashtags: list[str]
     voice_override: str | None
+
+    # Format settings
+    content_type: str | None = "short"
+    target_duration_seconds: int | None = None
+    orientation: str | None = "9:16"
+    visual_strategy: str | None = "auto"
+    duration_mode: str | None = "auto"
+    selected_voice: str | None = None
 
     created_at: str
 
@@ -154,6 +163,12 @@ class RenderIn(BaseModel):
     caption_style: str | None = None  # overrides profile default
     custom_cta: str | None = None  # overrides profile default CTA
     voice_override: str | None = None  # overrides profile default voice
+    # ── Phase 4: User-controlled format ─────────────────────────────────────
+    content_type: str = "short"  # short | long_form
+    target_duration_seconds: int | None = None
+    orientation: str = "9:16"  # 9:16 | 16:9
+    visual_strategy: str = "auto"  # auto | stock_first | balanced | ai_first | manual
+    duration_mode: str = "auto"  # auto | target | exact
 
 
 class ApproveIn(BaseModel):
@@ -274,6 +289,13 @@ async def render_video(
 
     script.status = ScriptStatus.used_in_render
 
+    if body.voice_override:
+        from engine.tts.voiceover import get_voice_catalog
+
+        valid_voices = {v["id"] for v in get_voice_catalog()}
+        if body.voice_override not in valid_voices:
+            raise HTTPException(400, f"Invalid voice override: {body.voice_override}")
+
     video = Video(
         script_id=body.script_id,
         user_id=user.id,
@@ -283,6 +305,11 @@ async def render_video(
         status=VideoStatus.rendering,
         render_stage="queued",
         render_progress=0,
+        content_type=body.content_type,
+        target_duration_seconds=body.target_duration_seconds,
+        orientation=body.orientation,
+        visual_strategy=body.visual_strategy,
+        duration_mode=body.duration_mode,
     )
     db.add(video)
     await db.commit()
@@ -377,6 +404,11 @@ async def render_video(
         log.exception(f"Failed to dispatch job {job_id}")
         new_db_job.status = JobStatus.FAILED
         new_db_job.error_message = f"Dispatch failed: {str(e)}"
+
+        video.status = VideoStatus.failed
+        video.render_stage = "failed"
+        video.notes = "Dispatch failed"
+
         await db.commit()
 
     return _fmt(video)
@@ -442,7 +474,7 @@ async def generate_metadata_endpoint(
 async def preview_video(
     video_id: str,
     request: Request,
-    user: User | None = Depends(get_optional_current_user),
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     v = await db.get(Video, video_id)
@@ -577,6 +609,137 @@ async def preview_video(
     raise HTTPException(404, f"Video file not found: {v.path or video_id}")
 
 
+@router.get("/{video_id}/preview-url")
+async def get_preview_url(
+    video_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Phase 9: Secure preview URL endpoint.
+    Returns a short-lived media URL instead of embedding the JWT in the URL.
+    For R2/S3: returns a presigned URL.
+    For local: returns the authenticated streaming preview path.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    v = await db.scalar(
+        select(Video).where(Video.id == video_id, Video.user_id == user.id)
+    )
+    if not v:
+        raise HTTPException(404, "Video not found")
+    if not v.path:
+        raise HTTPException(404, "Video has no file path")
+
+    from backend.core.config import settings
+
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=30)
+
+    # For remote storage — return presigned URL
+    if (
+        settings.STORAGE_BACKEND in ["s3", "r2"]
+        and v.path
+        and not os.path.exists(v.path)
+    ):
+        try:
+            from backend.storage import get_storage
+
+            storage = get_storage()
+            signed_url = await storage.generate_signed_url(v.path, expires_in=1800)
+            return {
+                "url": signed_url,
+                "expires_at": expires_at.isoformat(),
+                "content_type": "video/mp4",
+            }
+        except Exception as e:
+            log.error(f"Failed to generate presigned URL for {v.path}: {e}")
+            raise HTTPException(500, f"Cannot generate preview URL: {e}")
+
+    # For local storage — return the authenticated streaming endpoint
+    # Frontend will use the /preview endpoint with Bearer auth
+    return {
+        "url": f"/api/videos/{video_id}/preview",
+        "expires_at": expires_at.isoformat(),
+        "content_type": "video/mp4",
+    }
+
+
+@router.get("/{video_id}/download")
+async def download_video(
+    video_id: str,
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Phase 10: Download endpoint with Content-Disposition: attachment.
+    For local: streams the file with attachment header.
+    For R2/S3: returns a presigned download URL.
+    """
+    v = await db.scalar(
+        select(Video).where(Video.id == video_id, Video.user_id == user.id)
+    )
+    if not v:
+        raise HTTPException(404, "Video not found")
+    if not v.path:
+        raise HTTPException(404, "No video file available for download")
+
+    from pathlib import Path
+
+    from backend.core.config import settings
+
+    filename = f"{v.selected_title or video_id}.mp4"
+    # Sanitize filename
+    filename = "".join(c if c.isalnum() or c in " -_." else "_" for c in filename)
+
+    # Check local file
+    resolved_path = None
+    if v.path and os.path.exists(v.path):
+        resolved_path = v.path
+    elif v.path:
+        storage_rel = Path(settings.STORAGE_ROOT) / v.path.lstrip("/")
+        if storage_rel.exists():
+            resolved_path = str(storage_rel)
+
+    if resolved_path and os.path.exists(resolved_path):
+        file_size = os.path.getsize(resolved_path)
+
+        def _iter_file():
+            with open(resolved_path, "rb") as f:
+                while chunk := f.read(1024 * 1024):
+                    yield chunk
+
+        return StreamingResponse(
+            _iter_file(),
+            media_type="video/mp4",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Length": str(file_size),
+                "Content-Type": "video/mp4",
+            },
+        )
+
+    # Remote storage — redirect to signed download URL
+    if settings.STORAGE_BACKEND in ["s3", "r2"] and v.path:
+        try:
+            from backend.storage import get_storage
+
+            storage = get_storage()
+            signed_url = await storage.generate_signed_url(
+                v.path,
+                expires_in=1800,
+                response_content_disposition=f'attachment; filename="{filename}"',
+            )
+            from fastapi.responses import RedirectResponse
+
+            return RedirectResponse(url=signed_url, status_code=307)
+        except Exception as e:
+            log.error(f"Failed to generate download URL: {e}")
+            raise HTTPException(500, f"Download failed: {e}")
+
+    raise HTTPException(404, "Video file not found")
+
+
 @router.patch("/{video_id}/approve", response_model=VideoOut)
 async def approve_video(
     video_id: str,
@@ -627,15 +790,17 @@ async def approve_video(
                 },
                 "status": {"privacyStatus": "public"},
             }
-            youtube.videos().update(part="snippet,status", body=body).execute()
+            import asyncio
+
+            await asyncio.to_thread(
+                youtube.videos().update(part="snippet,status", body=body).execute
+            )
             pub.privacy_status = "public"
             pub.status = "live"
             v.status = VideoStatus.uploaded
         except Exception as e:
-            v.status = VideoStatus.publish_failed
-            v.notes = (
-                f"Approval succeeded, but YouTube update (draft -> public) failed: {e}"
-            )
+            v.status = VideoStatus.uploaded
+            v.notes = f"Approval succeeded, but YouTube update (draft -> public) failed: {e}. Video remains private on YouTube."
             log.error("Failed to update YouTube video to public: %s", e)
 
     await db.flush()
@@ -832,10 +997,17 @@ def _fmt(v: Video) -> dict:
         "notes": v.notes,
         "render_stage": v.render_stage or "queued",
         "render_progress": v.render_progress or 0,
+        "error_code": getattr(v, "error_code", None),
         "title_candidates": v.title_candidates or [],
         "selected_title": v.selected_title,
         "description": v.description,
         "hashtags": v.hashtags or [],
         "voice_override": v.voice_override,
+        "content_type": getattr(v, "content_type", "short"),
+        "target_duration_seconds": getattr(v, "target_duration_seconds", None),
+        "orientation": getattr(v, "orientation", "9:16"),
+        "visual_strategy": getattr(v, "visual_strategy", "auto"),
+        "duration_mode": getattr(v, "duration_mode", "auto"),
+        "selected_voice": getattr(v, "selected_voice", None),
         "created_at": str(v.created_at),
     }

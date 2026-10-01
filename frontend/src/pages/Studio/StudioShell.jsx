@@ -38,6 +38,7 @@ export default function StudioShell() {
   const [selectedStyle, setSelectedStyle] = useState('fast_facts');
   const [selectedCaption, setSelectedCaption] = useState('bold_centered');
   const [selectedVoice, setSelectedVoice] = useState('en-US-ChristopherNeural');
+  const [selectedVisualStrategy, setSelectedVisualStrategy] = useState('auto');
 
   useEffect(() => {
     let isMounted = true;
@@ -193,7 +194,9 @@ export default function StudioShell() {
               setSelectedCaption={setSelectedCaption}
               selectedVoice={selectedVoice}
               setSelectedVoice={setSelectedVoice}
-              onBack={() => setStage('storyboard')}
+              selectedVisualStrategy={selectedVisualStrategy}
+              setSelectedVisualStrategy={setSelectedVisualStrategy}
+              onBack={() => setStage('editor')}
             />
           )}
         </GridContainer>

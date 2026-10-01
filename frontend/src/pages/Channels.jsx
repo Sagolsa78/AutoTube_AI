@@ -24,7 +24,12 @@ const DEFAULT_FORM = {
   title_style_preference: 'curiosity',
   auto_approve: false,
   niche_keywords: '',
-  hashtag_set: 'shorts,viral'
+  hashtag_set: 'shorts,viral',
+  // Channel Intelligence
+  content_pillars: '',
+  excluded_topics: '',
+  excluded_keywords: '',
+  preferred_content_formats: 'short',
 };
 
 export default function Channels() {
@@ -177,9 +182,10 @@ export default function Channels() {
 
       setPreviewingVoice(true);
       try {
-          // Pointing directly to the backend URL for streaming response
-          const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
-          const audio = new Audio(`${baseUrl}/voices/preview/${form.default_voice_id}`);
+          // Use the same API base URL as all other requests — never hardcode localhost
+          const apiBase = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || '';
+          const base = apiBase ? `${apiBase.replace(/\/$/, '')}/api` : '/api';
+          const audio = new Audio(`${base}/voices/preview/${form.default_voice_id}`);
           setAudioElem(audio);
 
           audio.onended = () => setPreviewingVoice(false);

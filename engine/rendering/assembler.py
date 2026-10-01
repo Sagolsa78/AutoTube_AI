@@ -118,10 +118,17 @@ def _build_filtergraph(
             seg = audio_dur
         durations = [seg] * clips_count
     else:
-        durations = [
-            scene.duration + fade_dur if i < clips_count - 1 else scene.duration
-            for i, scene in enumerate(timeline.scenes)
-        ]
+        durations = []
+        for i, scene in enumerate(timeline.scenes):
+            base_dur = (
+                scene.custom_duration
+                if scene.custom_duration is not None
+                else scene.duration
+            )
+            if i < clips_count - 1:
+                durations.append(base_dur + fade_dur)
+            else:
+                durations.append(base_dur)
 
     # -- Per-clip processing --------------------------------------------------
     for i in range(clips_count):

@@ -137,11 +137,15 @@ def get_fernet() -> Optional[Fernet]:
 
 
 def encrypt_value(value: str) -> str:
-    """Encrypt a string value. Returns plaintext if encryption is not configured."""
+    """Encrypt a string value. Returns plaintext if encryption is not configured (in dev only)."""
     if not value:
         return value
     f = get_fernet()
     if not f:
+        if APP_ENV == "production":
+            raise RuntimeError(
+                "Encryption is not configured but required in production. Cannot encrypt value."
+            )
         log.warning(
             "encrypt_value called but Fernet is not available — returning plaintext (insecure!)"
         )

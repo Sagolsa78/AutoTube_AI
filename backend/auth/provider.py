@@ -35,11 +35,9 @@ class AuthProvider:
 
         # Check for invalid token error logging
         auth_header = request.headers.get("Authorization")
-        token = None
+        token = request.cookies.get("autotube_session")
         if auth_header and auth_header.startswith("Bearer "):
             token = auth_header.split(" ")[1]
-        elif request.query_params.get("token"):
-            token = request.query_params.get("token")
 
         if token:
             raise HTTPException(status_code=401, detail="Invalid token")
@@ -53,22 +51,18 @@ class AuthProvider:
         """
         # 1. If auth is disabled, allow requests with default-user
         if self.disabled:
-            token = None
+            token = request.cookies.get("autotube_session")
             auth_header = request.headers.get("Authorization")
             if auth_header and auth_header.startswith("Bearer "):
                 token = auth_header.split(" ")[1]
-            elif request.query_params.get("token"):
-                token = request.query_params.get("token")
             sub = token if token else "default-user"
             return {"sub": sub, "email": f"{sub}@local.dev"}
 
         # 2. Check Bearer Token (header or query param)
         auth_header = request.headers.get("Authorization")
-        token = None
+        token = request.cookies.get("autotube_session")
         if auth_header and auth_header.startswith("Bearer "):
             token = auth_header.split(" ")[1]
-        elif request.query_params.get("token"):
-            token = request.query_params.get("token")
 
         # 3. Check X-API-Key if configured
         if self.api_key:
