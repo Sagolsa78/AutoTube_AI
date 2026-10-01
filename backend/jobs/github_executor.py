@@ -14,7 +14,6 @@ from backend.db.database import AsyncSessionLocal
 from backend.jobs.executor import JobExecutionHandle, JobExecutor
 from backend.models.models import Job, JobStatus
 
-log = logging.getLogger(__name__)
 
 GITHUB_API_BASE = "https://api.github.com"
 
