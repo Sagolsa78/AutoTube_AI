@@ -62,7 +62,8 @@ export default function BriefStage({ selectedIdea, setSelectedIdea, onNext }) {
 
     setGeneratingQuick(true);
     try {
-      const generated = await api.generateIdeas(activeChannelId, 3, quickTopic.trim());
+      const promptWithParams = `${quickTopic.trim()} (Format: ${contentType}, Target Duration: ${duration} seconds)`;
+      const generated = await api.generateIdeas(activeChannelId, 3, promptWithParams);
       if (generated && generated.length > 0) {
         const topIdea = generated[0];
         setSelectedIdea(topIdea);

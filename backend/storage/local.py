@@ -2,12 +2,15 @@ import os
 import shutil
 from pathlib import Path
 from typing import Optional
+
 from backend.storage.base import StorageBackend
+
 
 class LocalStorageBackend(StorageBackend):
     """
     File system based storage backend for local development.
     """
+
     def __init__(self, base_dir: str):
         self.base_dir = Path(base_dir).resolve()
         self.base_dir.mkdir(parents=True, exist_ok=True)
@@ -17,11 +20,13 @@ class LocalStorageBackend(StorageBackend):
         # Remove leading slashes to prevent absolute path injection
         clean_key = remote_key.lstrip("/")
         target_path = (self.base_dir / clean_key).resolve()
-        
+
         # Prevent directory traversal
         if not str(target_path).startswith(str(self.base_dir)):
-            raise ValueError(f"Invalid remote key (path traversal detected): {remote_key}")
-            
+            raise ValueError(
+                f"Invalid remote key (path traversal detected): {remote_key}"
+            )
+
         return target_path
 
     async def put_file(self, local_path: str | Path, remote_key: str) -> str:
@@ -34,7 +39,7 @@ class LocalStorageBackend(StorageBackend):
         source = self._get_abs_path(remote_key)
         if not source.exists():
             raise FileNotFoundError(f"File not found: {remote_key}")
-        
+
         Path(local_path).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, local_path)
         return str(local_path)
@@ -64,6 +69,6 @@ class LocalStorageBackend(StorageBackend):
         # Local doesn't support direct upload URLs natively without an API endpoint
         raise NotImplementedError("Upload URLs not supported in LocalStorageBackend")
 
+
 # Backward-compatibility alias
 LocalStorage = LocalStorageBackend
-

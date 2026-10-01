@@ -15,7 +15,7 @@ export function useJobPolling(videoId, isPolling, options = {}) {
   const [progress, setProgress] = useState(0);
   const [stage, setStage] = useState('');
   const [rawProg, setRawProg] = useState(null);
-  
+
   const lastProgressRef = useRef(progress);
   const lastAdvanceTimeRef = useRef(Date.now());
   const timerRef = useRef(null);
@@ -26,7 +26,7 @@ export function useJobPolling(videoId, isPolling, options = {}) {
     if (!videoId || !isPolling) return;
     try {
       const data = await api.getVideoProgress(videoId);
-      
+
       setStatus(data.status);
       setStage(data.render_stage || '');
       setProgress(data.render_progress || 0);
@@ -64,7 +64,7 @@ export function useJobPolling(videoId, isPolling, options = {}) {
       if (timerRef.current) clearInterval(timerRef.current);
       return;
     }
-    
+
     // Reset trackers when starting
     lastProgressRef.current = 0;
     lastAdvanceTimeRef.current = Date.now();
@@ -75,14 +75,14 @@ export function useJobPolling(videoId, isPolling, options = {}) {
         timerRef.current = setInterval(poll, intervalMs * 3);
       } else {
         clearInterval(timerRef.current);
-        poll(); 
+        poll();
         timerRef.current = setInterval(poll, intervalMs);
       }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     timerRef.current = setInterval(poll, intervalMs);
-    
+
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       if (timerRef.current) clearInterval(timerRef.current);

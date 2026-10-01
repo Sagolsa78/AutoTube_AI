@@ -2,9 +2,9 @@
 pytest configuration for AutoTube AI test suite.
 Sets asyncio_mode=auto so async test functions and fixtures work correctly.
 """
+
 import pytest
 import pytest_asyncio
-
 
 # ── Global asyncio mode ───────────────────────────────────────────────────────
 # All async tests and fixtures use the 'auto' mode to avoid needing decorators.
@@ -13,11 +13,14 @@ import pytest_asyncio
 
 def pytest_configure(config):
     """Register custom markers."""
-    config.addinivalue_line("markers", "integration: marks tests that require real services")
+    config.addinivalue_line(
+        "markers", "integration: marks tests that require real services"
+    )
     config.addinivalue_line("markers", "e2e: marks end-to-end tests")
 
 
 # ── Shared fixtures ───────────────────────────────────────────────────────────
+
 
 @pytest.fixture(scope="session")
 def anyio_backend():

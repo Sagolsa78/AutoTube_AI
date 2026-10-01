@@ -9,6 +9,7 @@ import EmptyState from '../components/EmptyState';
 import Skeleton from '../components/Skeleton';
 import { toast } from 'sonner';
 import { useChannel } from '../contexts/ChannelContext';
+import { useSearchParams } from 'react-router-dom';
 
 const DEFAULT_FORM = {
   name: '',
@@ -29,25 +30,117 @@ const DEFAULT_FORM = {
 export default function Channels() {
   const { channels, refreshChannels, activeChannelId, setActiveChannelId } = useChannel();
   const [loading, setLoading] = useState(true);
-  
+
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null); // null means "Create mode"
   const [form, setForm] = useState(DEFAULT_FORM);
   const [saving, setSaving] = useState(false);
-  
+
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [channelToDelete, setChannelToDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
+
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [ytStatus, setYtStatus] = useState(null);
+  const [ytLoading, setYtLoading] = useState(false);
+
+  const [ytConfig, setYtConfig] = useState(null);
+  const [voices, setVoices] = useState([]);
+  const [previewingVoice, setPreviewingVoice] = useState(false);
+  const [audioElem, setAudioElem] = useState(null);
+
+  useEffect(() => {
+      if (modalOpen) {
+          api.getVoices(form.language).then(setVoices).catch(console.error);
+      } else {
+          // Cleanup audio if modal closes
+          if (audioElem) {
+              audioElem.pause();
+              setAudioElem(null);
+          }
+      }
+  }, [modalOpen, form.language, audioElem]);
 
   useEffect(() => {
     const load = async () => {
         setLoading(true);
         await refreshChannels();
+        try {
+            const [yt, config] = await Promise.all([
+                api.getYoutubeStatus().catch(() => null),
+                api.getYoutubeConfigStatus().catch(() => null)
+            ]);
+            if (yt) setYtStatus(yt);
+            if (config) setYtConfig(config);
+        } catch (e) {
+            console.error("Failed to fetch YT status", e);
+        }
         setLoading(false);
     };
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+      if (searchParams.get('youtube') === 'connected') {
+          toast.success("Successfully connected to YouTube!");
+          searchParams.delete('youtube');
+          setSearchParams(searchParams, { replace: true });
+
+          // Refresh status after connection
+          api.getYoutubeStatus().then(yt => {
+              if (yt) setYtStatus(yt);
+          }).catch(console.error);
+      }
+  }, [searchParams, setSearchParams]);
+
+  const handleConnectYoutube = async () => {
+      if (ytConfig && !ytConfig.configured) {
+          toast.error("YouTube is not configured. Please add client_secret.json to the backend.");
+          return;
+      }
+      setYtLoading(true);
+      try {
+          const res = await api.getYoutubeAuthUrl();
+          if (res && res.authorization_url) {
+              window.location.href = res.authorization_url;
+          }
+      } catch (e) {
+          toast.error(e.message || "Failed to initiate YouTube connection.");
+          setYtLoading(false);
+      }
+  };
+
+  const handleRefreshYoutube = async () => {
+      setYtLoading(true);
+      try {
+          const res = await api.refreshYoutubeToken();
+          if (res && res.status === 'success') {
+              toast.success("Token refreshed successfully.");
+              // Update status
+              api.getYoutubeStatus().then(yt => {
+                  if (yt) setYtStatus(yt);
+              }).catch(console.error);
+          }
+      } catch (e) {
+          toast.error(e.message || "Failed to refresh token. Please re-connect.");
+      } finally {
+          setYtLoading(false);
+      }
+  };
+
+  const handleDisconnectYoutube = async () => {
+      setYtLoading(true);
+      try {
+          await api.disconnectYoutube();
+          setYtStatus({ connected: false });
+          toast.success("Disconnected from YouTube.");
+      } catch (e) {
+          toast.error("Failed to disconnect YouTube.");
+      } finally {
+          setYtLoading(false);
+      }
+  };
 
   const openCreateModal = () => {
     setEditingId(null);
@@ -75,12 +168,40 @@ export default function Channels() {
     setModalOpen(true);
   };
 
+  const handlePreviewVoice = async () => {
+      if (!form.default_voice_id || previewingVoice) return;
+
+      if (audioElem) {
+          audioElem.pause();
+      }
+
+      setPreviewingVoice(true);
+      try {
+          // Pointing directly to the backend URL for streaming response
+          const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+          const audio = new Audio(`${baseUrl}/voices/preview/${form.default_voice_id}`);
+          setAudioElem(audio);
+
+          audio.onended = () => setPreviewingVoice(false);
+          audio.onerror = () => {
+              toast.error("Failed to load voice preview.");
+              setPreviewingVoice(false);
+          };
+
+          await audio.play();
+      } catch (e) {
+          console.error(e);
+          toast.error("Could not play preview.");
+          setPreviewingVoice(false);
+      }
+  };
+
   const handleSave = async (e) => {
     e.preventDefault();
     if (!form.name.trim()) return;
-    
+
     setSaving(true);
-    
+
     const payload = {
         ...form,
         watermark_scale: parseFloat(form.watermark_scale),
@@ -98,8 +219,8 @@ export default function Channels() {
       }
       setModalOpen(false);
       await refreshChannels();
-    } catch (e) { 
-      console.error(e); 
+    } catch (e) {
+      console.error(e);
       toast.error('Failed to save channel: ' + e.message);
     } finally {
       setSaving(false);
@@ -117,11 +238,11 @@ export default function Channels() {
       try {
           await api.deleteChannel(channelToDelete.id);
           toast.success('Channel deleted successfully.');
-          
+
           if (activeChannelId === channelToDelete.id) {
               setActiveChannelId(null); // The Context will automatically pick the first available on reload
           }
-          
+
           setDeleteConfirmOpen(false);
           setChannelToDelete(null);
           await refreshChannels();
@@ -165,6 +286,79 @@ export default function Channels() {
             </Button>
           }
         />
+
+        <Card variant="surface" className="mb-6 p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h3 className="text-lg font-bold text-text-primary flex items-center gap-2">
+              <Icon name="youtube" className="text-brand-red" size={20} />
+              YouTube Connection
+            </h3>
+            <p className="text-sm text-text-secondary mt-1">
+              Connect your YouTube account to enable direct publishing and fetch real-time channel analytics.
+            </p>
+            {ytConfig && !ytConfig.configured && (
+              <div className="mt-2 text-xs text-warning bg-warning/10 border border-warning/20 p-2 rounded-lg inline-flex items-center gap-2">
+                <Icon name="alert-triangle" size={14} />
+                YouTube OAuth not configured. Provide client_secret.json or ENV vars.
+              </div>
+            )}
+            {ytStatus && ytStatus.connected && (
+              <div className="mt-3 flex flex-wrap gap-4 items-center text-sm">
+                <span className="flex items-center gap-1.5 text-success">
+                  <span className="w-2 h-2 rounded-full bg-success"></span>
+                  Connected as <strong>{ytStatus.channel_title}</strong>
+                </span>
+                {ytStatus.is_expired ? (
+                  <span className="text-warning text-xs border border-warning/20 bg-warning/10 px-2 py-0.5 rounded-full">
+                    Token Expired
+                  </span>
+                ) : (
+                  <span className="text-text-muted text-xs">
+                    Valid until {new Date(ytStatus.expires_at).toLocaleDateString()}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            {ytStatus && ytStatus.connected ? (
+              <>
+                {ytStatus.is_expired && (
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    icon="refresh-cw"
+                    onClick={handleRefreshYoutube}
+                    disabled={ytLoading}
+                    className="whitespace-nowrap"
+                  >
+                    Refresh Token
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDisconnectYoutube}
+                  disabled={ytLoading}
+                  className="whitespace-nowrap"
+                >
+                  {ytLoading ? "Disconnecting..." : "Disconnect"}
+                </Button>
+              </>
+            ) : (
+              <Button
+                variant="primary"
+                size="sm"
+                icon="youtube"
+                onClick={handleConnectYoutube}
+                disabled={ytLoading || (ytConfig && !ytConfig.configured)}
+                className="bg-brand-red hover:bg-brand-red/90 text-white shadow-brand-glow whitespace-nowrap disabled:opacity-50"
+              >
+                {ytLoading ? "Connecting..." : "Connect YouTube"}
+              </Button>
+            )}
+          </div>
+        </Card>
 
         {channels.length === 0 ? (
           <EmptyState
@@ -227,12 +421,12 @@ export default function Channels() {
                       <span className="capitalize text-text-secondary">{ch.content_tone}</span>
                     </div>
                   </div>
-                  
+
                   <div className="pt-3 border-t border-border/70 flex items-center justify-end gap-2">
                       <Button variant="ghost" size="xs" icon="edit" onClick={() => openEditModal(ch)}>
                           Edit
                       </Button>
-                      <button 
+                      <button
                         onClick={() => confirmDelete(ch)}
                         className="p-1.5 rounded text-text-muted hover:text-brand-red hover:bg-brand-red/10 transition-colors"
                         title="Delete Channel"
@@ -248,12 +442,12 @@ export default function Channels() {
 
         {/* Create/Edit Channel Modal */}
         {modalOpen && (
-          <div 
+          <div
             className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in"
             onClick={() => setModalOpen(false)}
           >
-            <div 
-              className="bg-surface border border-border rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]" 
+            <div
+              className="bg-surface border border-border rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
               onClick={e => e.stopPropagation()}
             >
               <div className="px-6 py-4 border-b border-border flex justify-between items-center bg-elevated/50 shrink-0">
@@ -261,18 +455,18 @@ export default function Channels() {
                   <Icon name={editingId ? "edit" : "plus"} size={16} className="text-brand-red" />
                   {editingId ? "Edit Channel" : "Create Target Channel"}
                 </h3>
-                <button 
-                  type="button" 
-                  className="p-1.5 hover:bg-surface-hover rounded-lg text-text-secondary hover:text-text-primary transition-colors" 
+                <button
+                  type="button"
+                  className="p-1.5 hover:bg-surface-hover rounded-lg text-text-secondary hover:text-text-primary transition-colors"
                   onClick={() => setModalOpen(false)}
                 >
                   <Icon name="x" size={18} />
                 </button>
               </div>
-              
+
               <div className="overflow-y-auto hide-scrollbar p-6">
                   <form id="channel-form" onSubmit={handleSave} className="space-y-8">
-                    
+
                     {/* General section */}
                     <div>
                         <h4 className="text-xs font-bold text-text-primary uppercase tracking-wider mb-4 flex items-center gap-2 border-b border-border/50 pb-2">
@@ -290,12 +484,12 @@ export default function Channels() {
                                 required
                             />
                             </div>
-                            
+
                             <div>
                             <label className="block text-xs font-semibold text-text-secondary mb-1">Primary Language</label>
-                            <select 
+                            <select
                                 className="w-full bg-surface-input border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:border-brand-red focus:outline-none"
-                                value={form.language} 
+                                value={form.language}
                                 onChange={e => setForm({ ...form, language: e.target.value })}
                             >
                                 <option value="en">English (en)</option>
@@ -332,26 +526,27 @@ export default function Channels() {
                                 />
                             </div>
                         </div>
-                        
+
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                             <div>
                                 <label className="block text-xs font-semibold text-text-secondary mb-1">Content Tone</label>
-                                <select 
+                                <select
                                     className="w-full bg-surface-input border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:border-brand-red focus:outline-none"
-                                    value={form.content_tone} 
+                                    value={form.content_tone}
                                     onChange={e => setForm({ ...form, content_tone: e.target.value })}
                                 >
                                     <option value="casual">Casual</option>
                                     <option value="professional">Professional</option>
                                     <option value="dramatic">Dramatic</option>
                                     <option value="funny">Funny</option>
+                                    <option value="engaging">Engaging / Energetic</option>
                                 </select>
                             </div>
                             <div>
                                 <label className="block text-xs font-semibold text-text-secondary mb-1">Title Style Preference</label>
-                                <select 
+                                <select
                                     className="w-full bg-surface-input border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:border-brand-red focus:outline-none"
-                                    value={form.title_style_preference} 
+                                    value={form.title_style_preference}
                                     onChange={e => setForm({ ...form, title_style_preference: e.target.value })}
                                 >
                                     <option value="curiosity">Curiosity Gap</option>
@@ -378,7 +573,7 @@ export default function Channels() {
                         <h4 className="text-xs font-bold text-text-primary uppercase tracking-wider mb-4 flex items-center gap-2 border-b border-border/50 pb-2">
                             <Icon name="image" size={14} className="text-brand-red" /> Branding
                         </h4>
-                        
+
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div>
                                 <label className="block text-xs font-semibold text-text-secondary mb-1">Brand Color</label>
@@ -397,12 +592,12 @@ export default function Channels() {
                                     />
                                 </div>
                             </div>
-                            
+
                             <div>
                                 <label className="block text-xs font-semibold text-text-secondary mb-1">Watermark Position</label>
-                                <select 
+                                <select
                                     className="w-full bg-surface-input border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:border-brand-red focus:outline-none"
-                                    value={form.watermark_position} 
+                                    value={form.watermark_position}
                                     onChange={e => setForm({ ...form, watermark_position: e.target.value })}
                                 >
                                     <option value="bottom_right">Bottom Right</option>
@@ -432,16 +627,35 @@ export default function Channels() {
                         <h4 className="text-xs font-bold text-text-primary uppercase tracking-wider mb-4 flex items-center gap-2 border-b border-border/50 pb-2">
                             <Icon name="cpu" size={14} className="text-brand-red" /> Automation Defaults
                         </h4>
-                        
+
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                             <div>
-                                <label className="block text-xs font-semibold text-text-secondary mb-1">Default Voice ID</label>
-                                <input
+                                <label className="block text-xs font-semibold text-text-secondary mb-1 flex justify-between items-center">
+                                    Default Voice
+                                    <button
+                                        type="button"
+                                        onClick={handlePreviewVoice}
+                                        disabled={previewingVoice || !form.default_voice_id}
+                                        className="text-brand-red hover:text-white hover:bg-brand-red/90 border border-brand-red/50 rounded px-1.5 py-0.5 flex items-center gap-1 transition-colors disabled:opacity-50"
+                                    >
+                                        <Icon name={previewingVoice ? "loader" : "play-circle"} size={12} className={previewingVoice ? "animate-spin" : ""} />
+                                        {previewingVoice ? "Previewing..." : "Preview"}
+                                    </button>
+                                </label>
+                                <select
                                     className="w-full bg-surface-input border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:border-brand-red focus:outline-none"
-                                    placeholder="e.g. en-US-ChristopherNeural"
                                     value={form.default_voice_id}
                                     onChange={e => setForm({ ...form, default_voice_id: e.target.value })}
-                                />
+                                >
+                                    {voices.map(v => (
+                                        <option key={v.id} value={v.id}>
+                                            {v.name} ({v.gender}) - {v.description}
+                                        </option>
+                                    ))}
+                                    {voices.length === 0 && (
+                                        <option value={form.default_voice_id}>{form.default_voice_id || 'Loading...'}</option>
+                                    )}
+                                </select>
                             </div>
                             <div>
                                 <label className="block text-xs font-semibold text-text-secondary mb-1">Hashtags (comma separated)</label>
@@ -460,8 +674,8 @@ export default function Channels() {
                                 <p className="text-xs text-text-muted">Automatically push rendering jobs to YouTube when ready.</p>
                             </div>
                             <label className="relative inline-flex items-center cursor-pointer">
-                              <input 
-                                type="checkbox" 
+                              <input
+                                type="checkbox"
                                 className="sr-only peer"
                                 checked={form.auto_approve}
                                 onChange={e => setForm({ ...form, auto_approve: e.target.checked })}
@@ -478,11 +692,11 @@ export default function Channels() {
                   <Button variant="ghost" size="sm" onClick={() => setModalOpen(false)}>
                     Cancel
                   </Button>
-                  <Button 
-                    variant="primary" 
-                    size="sm" 
-                    icon={saving ? 'loader' : 'save'} 
-                    type="submit" 
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    icon={saving ? 'loader' : 'save'}
+                    type="submit"
                     form="channel-form"
                     disabled={saving || !form.name.trim()}
                     loading={saving}
@@ -497,11 +711,11 @@ export default function Channels() {
 
         {/* Delete Confirmation Modal */}
         {deleteConfirmOpen && channelToDelete && (
-          <div 
+          <div
             className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in"
             onClick={() => setDeleteConfirmOpen(false)}
           >
-            <div 
+            <div
               className="bg-surface border border-border rounded-xl w-full max-w-sm shadow-2xl overflow-hidden p-6 text-center"
               onClick={e => e.stopPropagation()}
             >
@@ -512,14 +726,14 @@ export default function Channels() {
               <p className="text-sm text-text-muted mb-6">
                 Are you sure you want to delete <strong className="text-text-primary">{channelToDelete.name}</strong>? This action will permanently remove all associated ideas, scripts, and video records. This cannot be undone.
               </p>
-              
+
               <div className="flex gap-3 justify-center">
                 <Button variant="ghost" className="flex-1 justify-center" onClick={() => setDeleteConfirmOpen(false)}>
                   Cancel
                 </Button>
-                <Button 
-                  variant="primary" 
-                  className="flex-1 justify-center" 
+                <Button
+                  variant="primary"
+                  className="flex-1 justify-center"
                   onClick={handleDelete}
                   disabled={deleting}
                   loading={deleting}

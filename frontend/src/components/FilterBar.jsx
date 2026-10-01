@@ -29,7 +29,7 @@ export default function FilterBar({
             {tab.icon && <Icon name={tab.icon} size={15} className={isActive ? 'text-brand-red' : 'text-text-muted'} />}
             <span>{tab.label}</span>
             {tab.count !== undefined && (
-              <span 
+              <span
                 className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-mono font-bold ${
                   isActive ? 'bg-brand-red/15 text-brand-red' : 'bg-elevated text-text-muted'
                 }`}

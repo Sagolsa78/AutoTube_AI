@@ -7,25 +7,29 @@ Enforces the Control Plane / Compute Plane boundary (§5):
                                     -> YES -> Burst to RunPod
                                     -> NO  -> Queue until local worker returns
 """
+
 from __future__ import annotations
+
+import json
+import logging
 import os
 import time
-import logging
 from datetime import datetime
 from enum import Enum
-from typing import Optional, Dict, Any, List
+from typing import Any, Dict, List, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from backend.models.models import Job, JobStatus, DailyComputeSpend
-from backend.events import event_bus
+
 from backend.core.config import settings
-from backend.jobs.github_executor import GitHubActionsJobExecutor
+from backend.core.redis_client import get_redis
+from backend.events import event_bus
+from backend.models.models import DailyComputeSpend, Job, JobStatus
 
 log = logging.getLogger(__name__)
 
 DAILY_GPU_BUDGET_CAP = settings.DAILY_GPU_BUDGET_CAP
-HEARTBEAT_TIMEOUT_SECONDS = 30 # Default hardcoded or add to config if needed
+HEARTBEAT_TIMEOUT_SECONDS = 30  # Default hardcoded or add to config if needed
 
 
 class WorkerCapability(str, Enum):
@@ -48,6 +52,7 @@ class WorkerRegistry:
     In-memory registry synchronized with Redis heartbeats.
     Tracks worker status, capabilities, and health pings.
     """
+
     def __init__(self):
         self.workers: Dict[str, Dict[str, Any]] = {
             "cloud_worker": {
@@ -83,32 +88,43 @@ class WorkerRegistry:
                     WorkerCapability.VIDEO.value,
                     WorkerCapability.RENDER.value,
                 ],
-                "status": WorkerStatus.AVAILABLE.value if getattr(settings, "RUNPOD_API_KEY", None) else WorkerStatus.OFFLINE.value,
+                "status": (
+                    WorkerStatus.AVAILABLE.value
+                    if getattr(settings, "RUNPOD_API_KEY", None)
+                    else WorkerStatus.OFFLINE.value
+                ),
                 "last_heartbeat": time.time(),
-            }
+            },
         }
         # In-memory job queue for workers that poll
         self.job_queues: Dict[str, List[Dict[str, Any]]] = {
             "cloud_worker": [],
             "local_pc": [],
-            "runpod_serverless": []
+            "runpod_serverless": [],
         }
 
-    def record_heartbeat(self, worker_id: str, status: WorkerStatus = WorkerStatus.AVAILABLE, capabilities: List[str] = None):
+    def record_heartbeat(
+        self,
+        worker_id: str,
+        status: WorkerStatus = WorkerStatus.AVAILABLE,
+        capabilities: List[str] = None,
+    ):
         now = time.time()
         if worker_id not in self.workers:
             self.workers[worker_id] = {
                 "name": worker_id,
                 "capabilities": capabilities or [c.value for c in WorkerCapability],
                 "status": status.value,
-                "last_heartbeat": now
+                "last_heartbeat": now,
             }
         else:
             self.workers[worker_id]["status"] = status.value
             self.workers[worker_id]["last_heartbeat"] = now
             if capabilities:
                 self.workers[worker_id]["capabilities"] = capabilities
-        log.debug(f"[WorkerRegistry] Heartbeat from {worker_id} (status={status.value})")
+        log.debug(
+            f"[WorkerRegistry] Heartbeat from {worker_id} (status={status.value})"
+        )
 
     def is_worker_online(self, worker_id: str) -> bool:
         if worker_id == "cloud_worker":
@@ -129,13 +145,15 @@ class WorkerRegistry:
             self.job_queues[worker_id] = []
         self.job_queues[worker_id].append(job_dict)
 
-    def pop_job_for_worker(self, worker_id: str, capabilities: List[str] = None) -> Optional[Dict[str, Any]]:
+    def pop_job_for_worker(
+        self, worker_id: str, capabilities: List[str] = None
+    ) -> Optional[Dict[str, Any]]:
         queue = self.job_queues.get(worker_id, [])
         if not queue:
             return None
         if not capabilities:
             return queue.pop(0) if queue else None
-        
+
         for idx, item in enumerate(queue):
             if item.get("capability") in capabilities:
                 return queue.pop(idx)
@@ -147,18 +165,24 @@ router_registry = WorkerRegistry()
 
 # ── Daily Budget Accounting ───────────────────────────────────────────────────
 
-async def get_or_create_daily_spend(db: AsyncSession) -> DailyComputeSpend:
-    """Retrieve or initialize today's compute spend record."""
+
+async def get_or_create_daily_spend(
+    db: AsyncSession, user_id: str
+) -> DailyComputeSpend:
+    """Retrieve or initialize today's compute spend record for a user."""
     today_str = datetime.utcnow().strftime("%Y-%m-%d")
-    stmt = select(DailyComputeSpend).where(DailyComputeSpend.date == today_str)
+    stmt = select(DailyComputeSpend).where(
+        DailyComputeSpend.date == today_str, DailyComputeSpend.user_id == user_id
+    )
     result = await db.execute(stmt)
     record = result.scalar_one_or_none()
     if not record:
         record = DailyComputeSpend(
+            user_id=user_id,
             date=today_str,
             amount_spent_usd=0.0,
             budget_cap_usd=DAILY_GPU_BUDGET_CAP,
-            jobs_count=0
+            jobs_count=0,
         )
         db.add(record)
         await db.commit()
@@ -166,9 +190,9 @@ async def get_or_create_daily_spend(db: AsyncSession) -> DailyComputeSpend:
     return record
 
 
-async def record_spend(db: AsyncSession, amount_usd: float):
-    """Increment today's compute spend."""
-    record = await get_or_create_daily_spend(db)
+async def record_spend(db: AsyncSession, user_id: str, amount_usd: float):
+    """Increment today's compute spend for a user."""
+    record = await get_or_create_daily_spend(db, user_id)
     record.amount_spent_usd += max(0.0, amount_usd)
     record.jobs_count += 1
     await db.commit()
@@ -177,11 +201,13 @@ async def record_spend(db: AsyncSession, amount_usd: float):
 
 # ── Routing Decision Engine ───────────────────────────────────────────────────
 
+
 async def dispatch_job(
     job_id: str,
     capability: WorkerCapability | str,
     payload: Dict[str, Any],
-    db: Optional[AsyncSession] = None
+    user_id: str,
+    db: Optional[AsyncSession] = None,
 ) -> Dict[str, Any]:
     """
     Executes the §5 Worker Router decision tree:
@@ -190,44 +216,55 @@ async def dispatch_job(
                                     -> Under budget -> Burst to RunPod
                                     -> Over budget  -> Hold in queue for local worker
     """
-    cap_str = capability.value if isinstance(capability, WorkerCapability) else capability
+    cap_str = (
+        capability.value if isinstance(capability, WorkerCapability) else capability
+    )
     strategy = getattr(settings, "COMPUTE_STRATEGY", "local-first")
     zero_laptop_val = getattr(settings, "ZERO_LAPTOP_MODE", False)
-    zero_laptop = zero_laptop_val is True or str(zero_laptop_val).lower() in ("true", "1")
+    zero_laptop = zero_laptop_val is True or str(zero_laptop_val).lower() in (
+        "true",
+        "1",
+    )
     local_online = router_registry.is_worker_online("local_pc")
 
     chosen_worker = None
     worker_type = "local"
-    status = JobStatus.dispatched.value
+    status = JobStatus.QUEUED
 
     if strategy == "cloud-native" or zero_laptop:
         chosen_worker = "cloud_worker"
         worker_type = "cloud_container"
-        log.info(f"[WorkerRouter] Zero-laptop mode active. Routing job {job_id} ({cap_str}) to Cloud Container Engine ($0).")
+        log.info(
+            f"[WorkerRouter] Zero-laptop mode active. Routing job {job_id} ({cap_str}) to Cloud Container Engine ($0)."
+        )
     elif local_online:
         chosen_worker = "local_pc"
         worker_type = "local"
-        log.info(f"[WorkerRouter] Routing job {job_id} ({cap_str}) to Local RTX 3050 ($0).")
+        log.info(
+            f"[WorkerRouter] Routing job {job_id} ({cap_str}) to Local RTX 3050 ($0)."
+        )
     else:
         # Check budget for cloud burst
         today_spent = 0.0
         budget_cap = DAILY_GPU_BUDGET_CAP
         if db:
-            spend_record = await get_or_create_daily_spend(db)
+            spend_record = await get_or_create_daily_spend(db, user_id)
             today_spent = spend_record.amount_spent_usd
             budget_cap = spend_record.budget_cap_usd
 
         has_runpod = bool(getattr(settings, "RUNPOD_API_KEY", None))
-        has_budget = (today_spent < budget_cap)
+        has_budget = today_spent < budget_cap
 
         if has_runpod and has_budget:
             chosen_worker = "runpod_serverless"
             worker_type = "cloud_gpu"
-            log.info(f"[WorkerRouter] Local offline. Bursting job {job_id} ({cap_str}) to RunPod (spent: ${today_spent:.2f}/${budget_cap:.2f}).")
+            log.info(
+                f"[WorkerRouter] Local offline. Bursting job {job_id} ({cap_str}) to RunPod (spent: ${today_spent:.2f}/${budget_cap:.2f})."
+            )
         else:
             chosen_worker = "local_pc"
             worker_type = "local"
-            status = JobStatus.waiting_for_local_worker.value
+            status = JobStatus.QUEUED
             log.warning(
                 f"[WorkerRouter] Local offline and cloud burst unavailable (has_runpod={has_runpod}, budget_left=${max(0.0, budget_cap - today_spent):.2f}). "
                 f"Queueing job {job_id} until local worker returns."
@@ -240,16 +277,21 @@ async def dispatch_job(
         "worker_id": chosen_worker,
         "worker_type": worker_type,
         "payload": payload,
-        "dispatched_at": datetime.utcnow().isoformat()
+        "dispatched_at": datetime.utcnow().isoformat(),
     }
 
-    # Queue for worker consumption
-    router_registry.enqueue_job_for_worker(chosen_worker, job_data)
-    
-    if chosen_worker == "cloud_worker":
-        # Dispatch to GitHub Actions — await directly so errors surface
-        github_executor = GitHubActionsJobExecutor()
-        await github_executor.submit(job_id, payload)
+    # Queue for worker consumption via Redis Streams
+    r = await get_redis()
+    if r:
+        stream_name = f"autotube:jobs:{chosen_worker}"
+        flat_payload = json.dumps(payload)
+        await r.xadd(
+            stream_name,
+            {"job_id": job_id, "capability": cap_str, "payload": flat_payload},
+        )
+    else:
+        # Fallback to in-memory if Redis is unavailable
+        router_registry.enqueue_job_for_worker(chosen_worker, job_data)
 
     # Publish to Redis event bus
     await event_bus.publish(f"job.{status}.{chosen_worker}", job_data)
@@ -259,7 +301,10 @@ async def dispatch_job(
 
 # ── Telemetry Aggregator ──────────────────────────────────────────────────────
 
-async def get_compute_telemetry(db: Optional[AsyncSession] = None) -> Dict[str, Any]:
+
+async def get_compute_telemetry(
+    user_id: str, db: Optional[AsyncSession] = None
+) -> Dict[str, Any]:
     """Returns real-time worker status and budget telemetry for Dashboard widget."""
     local_online = router_registry.is_worker_online("local_pc")
     local_meta = router_registry.workers.get("local_pc", {})
@@ -274,9 +319,9 @@ async def get_compute_telemetry(db: Optional[AsyncSession] = None) -> Dict[str, 
     budget_cap = DAILY_GPU_BUDGET_CAP
     jobs_count = 0
 
-    if db:
+    if db and user_id:
         try:
-            spend_record = await get_or_create_daily_spend(db)
+            spend_record = await get_or_create_daily_spend(db, user_id)
             today_spent = spend_record.amount_spent_usd
             budget_cap = spend_record.budget_cap_usd
             jobs_count = spend_record.jobs_count
@@ -290,7 +335,9 @@ async def get_compute_telemetry(db: Optional[AsyncSession] = None) -> Dict[str, 
             "id": "local_pc",
             "name": "Local RTX 3050",
             "status": "online" if local_online else "offline",
-            "last_heartbeat": datetime.utcfromtimestamp(last_hb).isoformat() if last_hb > 0 else None,
+            "last_heartbeat": (
+                datetime.utcfromtimestamp(last_hb).isoformat() if last_hb > 0 else None
+            ),
             "capabilities": local_meta.get("capabilities", []),
         },
         "cloud_worker": {
@@ -307,6 +354,5 @@ async def get_compute_telemetry(db: Optional[AsyncSession] = None) -> Dict[str, 
             "today_spent_usd": round(today_spent, 2),
             "budget_remaining_usd": max(0.0, round(budget_cap - today_spent, 2)),
             "jobs_burst_today": jobs_count,
-        }
+        },
     }
-

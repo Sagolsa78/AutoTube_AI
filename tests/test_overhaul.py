@@ -7,14 +7,21 @@ Validates:
 4. YouTube Real Analytics: No mock data
 5. Video Approval Workflow: Ready status pause for explicit human review
 """
-import pytest
+
 import asyncio
-from httpx import AsyncClient, ASGITransport
-from backend.main import app
+
+import pytest
+from httpx import ASGITransport, AsyncClient
+
 from backend.core.config import settings
-from backend.db.database import init_db, engine
-from integrations.providers.ai_providers import get_available_models, generate_with_fallback
+from backend.db.database import engine, init_db
+from backend.main import app
 from backend.youtube import youtube_client
+from integrations.providers.ai_providers import (
+    generate_with_fallback,
+    get_available_models,
+)
+
 
 @pytest.fixture(autouse=True)
 async def cleanup_db_pool():
@@ -22,16 +29,23 @@ async def cleanup_db_pool():
     yield
     await engine.dispose()
 
+
 @pytest.mark.asyncio
 async def test_database_init_and_schema():
     await init_db()
     from sqlalchemy import text
+
     async with engine.begin() as conn:
-        res = await conn.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name = 'users';"))
+        res = await conn.execute(
+            text(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = 'users';"
+            )
+        )
         cols = [r[0] for r in res.fetchall()]
         assert "password_hash" in cols
         assert "preferred_ai_provider" in cols
         assert "preferred_ai_model" in cols
+
 
 @pytest.mark.asyncio
 async def test_ai_provider_detection():
@@ -45,21 +59,26 @@ async def test_ai_provider_detection():
         print(f"Detected Ollama Models: {models}")
         assert any("qwen" in m.lower() for m in models)
 
+
 @pytest.mark.asyncio
 async def test_auth_and_user_creation_flow():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         # 1. Register a test user
         import uuid
+
         uid = str(uuid.uuid4())[:8]
         test_email = f"test_{uid}@autotube.ai"
-        reg_res = await ac.post("/api/auth/register", json={
-            "email": test_email,
-            "password": "securepassword123",
-            "display_name": f"Creator {uid}",
-            "channel_name": f"Shorts Lab {uid}",
-            "niche": "science_wow"
-        })
+        reg_res = await ac.post(
+            "/api/auth/register",
+            json={
+                "email": test_email,
+                "password": "securepassword123",
+                "display_name": f"Creator {uid}",
+                "channel_name": f"Shorts Lab {uid}",
+                "niche": "science_wow",
+            },
+        )
         assert reg_res.status_code == 201, reg_res.text
         data = reg_res.json()
         token = data["access_token"]
@@ -79,20 +98,22 @@ async def test_auth_and_user_creation_flow():
         assert "providers" in models_res.json()
 
         # 4. Update AI preferences to qwen2.5-coder:7b
-        pref_res = await ac.patch("/api/auth/ai-settings", json={
-            "provider": "ollama",
-            "model": "qwen2.5-coder:7b"
-        }, headers=headers)
+        pref_res = await ac.patch(
+            "/api/auth/ai-settings",
+            json={"provider": "ollama", "model": "qwen2.5-coder:7b"},
+            headers=headers,
+        )
         assert pref_res.status_code == 200
         assert pref_res.json()["preferred_ai_model"] == "qwen2.5-coder:7b"
 
         # 5. Login with registered credentials
-        login_res = await ac.post("/api/auth/login", json={
-            "email": test_email,
-            "password": "securepassword123"
-        })
+        login_res = await ac.post(
+            "/api/auth/login",
+            json={"email": test_email, "password": "securepassword123"},
+        )
         assert login_res.status_code == 200
         assert login_res.json()["access_token"]
+
 
 @pytest.mark.asyncio
 async def test_youtube_analytics_zero_mock():

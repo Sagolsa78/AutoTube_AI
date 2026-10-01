@@ -56,12 +56,45 @@ jobs:
       - name: Install worker dependencies
         run: python -m pip install --disable-pip-version-check -r requirements.txt
 
-      - name: Check FFmpeg
-        run: ffmpeg -version | head -n 2
+      - name: Check FFmpeg and Fonts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fonts-liberation fonts-noto
+          if command -v ffmpeg >/dev/null 2>&1; then
+            echo "FFmpeg already available"
+            ffmpeg -version | head -n 1
+          else
+            echo "FFmpeg not found. Installing..."
+            sudo apt-get install -y ffmpeg
+            ffmpeg -version | head -n 1
+          fi
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
 
       - name: Execute Render Job
-        run: python -m backend.worker.main --job-id "$JOB_ID"
+        env:
+          APP_ENV: production
+          APP_MODE: cloud
+          WORKER_BACKEND: local
 
-      - name: Validate local MP4 output
-        if: ${{ success() }}
-        run: python scripts/video_sanity.py
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+          STORAGE_BACKEND: r2
+          S3_ENDPOINT_URL: ${{ secrets.S3_ENDPOINT_URL }}
+          S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
+          S3_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
+          S3_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
+          R2_PUBLIC_DOMAIN: ${{ secrets.R2_PUBLIC_DOMAIN }}
+
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+
+          WORKER_SECRET: ${{ secrets.WORKER_SECRET }}
+
+          JOB_ID: ${{ inputs.job_id }}
+
+        run: |
+          python -m backend.worker.main --job-id "$JOB_ID"

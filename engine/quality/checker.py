@@ -3,7 +3,9 @@ Quality checker — scores a script before production starts.
 Returns a score 0-100 and a list of issues.
 Works with both legacy (hook/body/payoff) and scene-based script formats.
 """
+
 from __future__ import annotations
+
 import re
 from dataclasses import dataclass, field
 
@@ -17,9 +19,17 @@ class QualityReport:
 
 
 _BANNED_KIDS = [
-    r"\bscar(ed|y|ing)\b", r"\bkill\b", r"\bdead\b", r"\bdie\b",
-    r"\bblood\b", r"\bhurt\b", r"\bweapon\b", r"\bgun\b", r"\bwar\b",
-    r"\bfight\b", r"\bchase\b",
+    r"\bscar(ed|y|ing)\b",
+    r"\bkill\b",
+    r"\bdead\b",
+    r"\bdie\b",
+    r"\bblood\b",
+    r"\bhurt\b",
+    r"\bweapon\b",
+    r"\bgun\b",
+    r"\bwar\b",
+    r"\bfight\b",
+    r"\bchase\b",
 ]
 
 
@@ -31,7 +41,9 @@ def _estimated_duration(text: str, wpm: int = 135) -> float:
     return _word_count(text) / wpm * 60
 
 
-def check_script(script: dict, niche: str = "science_wow", threshold: float = 70.0) -> QualityReport:
+def check_script(
+    script: dict, niche: str = "science_wow", threshold: float = 70.0
+) -> QualityReport:
     issues: list[str] = []
     suggestions: list[str] = []
     score = 100.0
@@ -63,11 +75,16 @@ def check_script(script: dict, niche: str = "science_wow", threshold: float = 70
 
         # 3. Each scene should have a visual description
         scenes_without_visuals = [
-            i+1 for i, s in enumerate(scenes) 
-            if not s.get("visual_description") and not s.get("visual_intent") and not s.get("stock_query")
+            i + 1
+            for i, s in enumerate(scenes)
+            if not s.get("visual_description")
+            and not s.get("visual_intent")
+            and not s.get("stock_query")
         ]
         if scenes_without_visuals:
-            issues.append(f"Scene(s) {scenes_without_visuals} missing visual descriptions")
+            issues.append(
+                f"Scene(s) {scenes_without_visuals} missing visual descriptions"
+            )
             score -= 5 * len(scenes_without_visuals)
 
         # 4. Too many scenes = rushed feeling
@@ -78,10 +95,10 @@ def check_script(script: dict, niche: str = "science_wow", threshold: float = 70
 
     else:
         # ── Legacy hook/body/payoff checks ────────────────────────────────────
-        hook     = script.get("hook", "")
-        body     = script.get("body", [])
-        payoff   = script.get("payoff", "")
-        cta      = script.get("cta", "")
+        hook = script.get("hook", "")
+        body = script.get("body", [])
+        payoff = script.get("payoff", "")
+        cta = script.get("cta", "")
 
         if not hook:
             issues.append("Missing hook")
@@ -130,7 +147,7 @@ def check_script(script: dict, niche: str = "science_wow", threshold: float = 70
     # Repetition check — first and last narration shouldn't be too similar
     if scenes and len(scenes) >= 2:
         first_words = set(scenes[0].get("narration", "").lower().split()[:5])
-        last_words  = set(scenes[-1].get("narration", "").lower().split()[:5])
+        last_words = set(scenes[-1].get("narration", "").lower().split()[:5])
         overlap = first_words & last_words
         if len(overlap) >= 3:
             issues.append("First and last scenes sound too similar — add variety")

@@ -1,10 +1,11 @@
-import os
 import logging
+import os
 import subprocess
 from functools import lru_cache
-from typing import Tuple, List
+from typing import List, Tuple
 
 log = logging.getLogger(__name__)
+
 
 @lru_cache(maxsize=1)
 def select_video_encoder() -> Tuple[str, List[str]]:
@@ -21,14 +22,22 @@ def select_video_encoder() -> Tuple[str, List[str]]:
     elif preference == "nvidia":
         log.info("VIDEO_ENCODER is set to 'nvidia'. Forcing h264_nvenc.")
         return "h264_nvenc", ["-preset", "p4", "-cq", "23", "-b:v", "0"]
-    
+
     # Auto detection
     probe_cmd = [
-        "ffmpeg", "-y",
-        "-f", "lavfi", "-i", "testsrc=duration=0.1:size=128x128:rate=1",
-        "-c:v", "h264_nvenc",
-        "-frames:v", "1",
-        "-f", "null", "-"
+        "ffmpeg",
+        "-y",
+        "-f",
+        "lavfi",
+        "-i",
+        "testsrc=duration=0.1:size=128x128:rate=1",
+        "-c:v",
+        "h264_nvenc",
+        "-frames:v",
+        "1",
+        "-f",
+        "null",
+        "-",
     ]
     try:
         result = subprocess.run(probe_cmd, capture_output=True, text=True)

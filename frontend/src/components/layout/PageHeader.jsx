@@ -5,10 +5,10 @@ import React from 'react';
  * Standardized header component across all pages:
  * provides title, subtitle, optional badge, and right-hand action controls.
  */
-export default function PageHeader({ 
-  title, 
-  description, 
-  badge = null, 
+export default function PageHeader({
+  title,
+  description,
+  badge = null,
   actions = null,
   className = ''
 }) {
