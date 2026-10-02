@@ -20,10 +20,7 @@ frontend/dist/
 frontend/.next/
 
 # Storage (generated assets — don't commit renders)
-storage/audio/
-storage/visuals/
-storage/renders/
-storage/projects/
+storage/
 *.db
 *.db-shm
 *.db-wal
