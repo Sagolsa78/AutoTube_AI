@@ -6,15 +6,13 @@ Supports:
   - Cloudflare Access Identity assertions ('Cf-Access-Jwt-Assertion')
   - Automatic zero-friction bypass in local dev (APP_ENV=development or AUTH_DISABLED=true)
 """
-
 from __future__ import annotations
-
-import logging
 import os
+import logging
 from typing import Optional
 
-from fastapi import HTTPException, Request, Security, status
-from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
+from fastapi import Security, HTTPException, status, Request
+from fastapi.security import APIKeyHeader, HTTPBearer, HTTPAuthorizationCredentials
 
 log = logging.getLogger(__name__)
 
@@ -31,7 +29,7 @@ APP_ENV = settings.APP_ENV
 async def verify_control_plane_auth(
     request: Request,
     api_key: Optional[str] = Security(api_key_header),
-    bearer: Optional[HTTPAuthorizationCredentials] = Security(http_bearer),
+    bearer: Optional[HTTPAuthorizationCredentials] = Security(http_bearer)
 ) -> bool:
     """
     Dependency that enforces control plane authentication when exposed to the cloud.
@@ -57,9 +55,7 @@ async def verify_control_plane_auth(
         return True
 
     # 5. Unauthorized
-    log.warning(
-        f"Unauthorized API request to {request.url.path} from {request.client.host if request.client else 'unknown'}"
-    )
+    log.warning(f"Unauthorized API request to {request.url.path} from {request.client.host if request.client else 'unknown'}")
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Invalid or missing authentication credentials for AutoTube Control Plane.",
@@ -69,10 +65,9 @@ async def verify_control_plane_auth(
 
 # ── Encryption Helpers ────────────────────────────────────────────────────────
 
+from cryptography.fernet import Fernet
 import base64
 import hashlib
-
-from cryptography.fernet import Fernet
 
 
 def _derive_dev_key() -> str:
@@ -83,7 +78,7 @@ def _derive_dev_key() -> str:
     """
     seed = b"autotube-local-dev-encryption-key-do-not-use-in-prod"
     raw = hashlib.sha256(seed).digest()  # 32 bytes
-    return base64.urlsafe_b64encode(raw).decode("utf-8")
+    return base64.urlsafe_b64encode(raw).decode('utf-8')
 
 
 def _load_encryption_key() -> Optional[str]:
@@ -92,18 +87,16 @@ def _load_encryption_key() -> Optional[str]:
     if key:
         # Validate the provided key is proper Fernet format
         try:
-            Fernet(key.encode("utf-8"))
+            Fernet(key.encode('utf-8'))
             return key
         except (ValueError, Exception):
             log.error(
                 "ENCRYPTION_KEY is set but is NOT a valid Fernet key. "
-                'Generate one with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"'
+                "Generate one with: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
             )
             # In cloud/production mode, fail hard if key is invalid
             if APP_ENV == "production":
-                raise RuntimeError(
-                    "Invalid ENCRYPTION_KEY in production mode. Cannot proceed without proper token encryption."
-                )
+                raise RuntimeError("Invalid ENCRYPTION_KEY in production mode. Cannot proceed without proper token encryption.")
             return None
 
     # No key configured — use derived dev key with warning
@@ -130,7 +123,7 @@ def get_fernet() -> Optional[Fernet]:
     if not _ENCRYPTION_KEY:
         return None
     try:
-        return Fernet(_ENCRYPTION_KEY.encode("utf-8"))
+        return Fernet(_ENCRYPTION_KEY.encode('utf-8'))
     except Exception as e:
         log.error(f"Failed to create Fernet instance: {e}")
         return None
@@ -142,11 +135,9 @@ def encrypt_value(value: str) -> str:
         return value
     f = get_fernet()
     if not f:
-        log.warning(
-            "encrypt_value called but Fernet is not available — returning plaintext (insecure!)"
-        )
+        log.warning("encrypt_value called but Fernet is not available — returning plaintext (insecure!)")
         return value
-    return f.encrypt(value.encode("utf-8")).decode("utf-8")
+    return f.encrypt(value.encode('utf-8')).decode('utf-8')
 
 
 def decrypt_value(encrypted_value: str) -> str:
@@ -157,7 +148,7 @@ def decrypt_value(encrypted_value: str) -> str:
     if not f:
         return encrypted_value
     try:
-        return f.decrypt(encrypted_value.encode("utf-8")).decode("utf-8")
+        return f.decrypt(encrypted_value.encode('utf-8')).decode('utf-8')
     except Exception as e:
         log.warning(f"Decryption failed (may be stored as plaintext): {e}")
         return encrypted_value

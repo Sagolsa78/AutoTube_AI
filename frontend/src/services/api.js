@@ -158,14 +158,5 @@ export const api = {
   // ── Integrations (YouTube) ────────────────────────
   getYoutubeAuthUrl: () => request('/youtube/auth'),
   getYoutubeStatus: () => request('/youtube/status'),
-  getYoutubeConfigStatus: () => request('/youtube/config-status'),
-  refreshYoutubeToken: () => request('/youtube/refresh', { method: 'POST' }),
   disconnectYoutube: () => request('/youtube/disconnect', { method: 'DELETE' }),
-
-  // ── TTS Voices ────────────────────────────────────
-  getVoices: (language) => request(`/voices/${language ? '?language=' + language : ''}`),
-
-  // ── Costs ─────────────────────────────────────────
-  getCostSummary: () => request('/costs/summary'),
-  getJobCosts: (jobId) => request(`/costs/jobs/${jobId}`),
 };
