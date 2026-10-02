@@ -86,7 +86,7 @@ export const api = {
 
   // ── Ideas ────────────────────────────────────────
   getIdeas:       (channelId) => request(`/ideas/${channelId ? '?channel_id=' + channelId : ''}`),
-  generateIdeas:  (channelId, count, niche) => request('/ideas/generate', { method: 'POST', body: JSON.stringify({ channel_id: channelId, count, niche }), timeout: 120000 }),
+  generateIdeas:  (channelId, count, data) => request('/ideas/generate', { method: 'POST', body: JSON.stringify({ channel_id: channelId, count, ...(typeof data === 'string' ? { niche: data } : data) }), timeout: 120000 }),
   discardIdea:    (id) => request(`/ideas/${id}/discard`, { method: 'POST' }),
 
   // ── Content Intelligence (Phase 2/3) ─────────────

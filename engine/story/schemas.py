@@ -72,6 +72,8 @@ class StorySpec(BaseModel):
     language: str = Field(default="en")
     locale: str = Field(default="US")
     target_duration: int = Field(default=30, description="Target duration in seconds")
+    content_type: str = Field(default="short", description="short or long_form")
+    format_type: str = Field(default="short", description="Video format/orientation")
 
     hook: str = Field(default="", description="The text of the opening hook")
     claims: List[Claim] = Field(default_factory=list)

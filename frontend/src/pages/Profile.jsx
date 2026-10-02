@@ -694,6 +694,40 @@ export default function Profile() {
               </CardContent>
             </Card>
 
+            {/* ComfyUI Workflow Settings */}
+            <Card variant="surface">
+              <CardHeader
+                title={
+                  <CardTitle icon={<Icon name="image" size={16} className="text-brand-red" />}>
+                    ComfyUI Workflow Configuration
+                  </CardTitle>
+                }
+              />
+              <CardContent className="space-y-4">
+                <p className="text-xs text-text-muted">
+                  AutoTube AI uses API-format ComfyUI workflows for image and video generation. To use your custom ComfyUI workflows, export them in "API Format" and save them to the <code className="text-brand-red font-mono">workflows/comfyui/</code> directory.
+                </p>
+                <div className="bg-elevated border border-border rounded-lg p-4">
+                  <h4 className="text-[11px] font-bold uppercase tracking-wider text-text-primary mb-2">Required Workflows & Node IDs</h4>
+                  <ul className="text-xs text-text-secondary space-y-2 list-disc list-inside">
+                    <li><code className="text-info font-mono">image_portrait.json</code> (for 9:16 images)</li>
+                    <li><code className="text-info font-mono">image_cinematic.json</code> (for 16:9 images)</li>
+                    <li><code className="text-info font-mono">video_motion.json</code> (for AI video)</li>
+                  </ul>
+                  <div className="mt-3 text-[11px] bg-canvas p-2 rounded border border-border">
+                    <span className="font-bold block mb-1">Standard Node Mappings:</span>
+                    <ul className="font-mono space-y-1">
+                      <li>Positive Prompt: Node <code className="text-warning">"6"</code></li>
+                      <li>Negative Prompt: Node <code className="text-warning">"7"</code></li>
+                      <li>Sampler / Seed: Node <code className="text-warning">"3"</code></li>
+                      <li>Latent Resolution: Node <code className="text-warning">"5"</code></li>
+                      <li>Save Image: Node <code className="text-warning">"9"</code></li>
+                    </ul>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
           </div>
 
         </div>

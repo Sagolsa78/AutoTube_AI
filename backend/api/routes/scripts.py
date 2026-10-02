@@ -153,6 +153,18 @@ async def generate_script_for_idea(
     except Exception:
         pass
 
+    # Extract freeform settings
+    idea_settings = idea.settings or {}
+    final_content_type = content_type or idea_settings.get("content_type", "short")
+    final_duration = (
+        target_duration_seconds or idea_settings.get("target_duration") or 30
+    )
+
+    custom_prompt = idea_settings.get("custom_prompt")
+    target_audience = idea_settings.get("target_audience")
+    tone = idea_settings.get("tone")
+    format_type = idea_settings.get("format")
+
     # Run generation pipeline in background thread so event loop and network remain unblocked
     from backend.models.models import CostEvent
     from engine.quality.checker import check_script
@@ -167,11 +179,18 @@ async def generate_script_for_idea(
             language=final_language,
             provider=preferred_prov,
             model=preferred_mod,
-            content_type=content_type,
-            target_duration_seconds=target_duration_seconds,
+            content_type=final_content_type,
+            target_duration_seconds=final_duration,
+            custom_prompt=custom_prompt,
+            target_audience=target_audience,
+            tone=tone,
+            format_type=format_type,
         )
         story_spec.language = final_language
         story_spec.locale = final_locale
+        story_spec.content_type = final_content_type
+        story_spec.format_type = format_type or "short"
+
         full_text = " ".join([s.narration for s in story_spec.scenes if s.narration])
         duration_est = len(full_text.split()) / 135 * 60
 

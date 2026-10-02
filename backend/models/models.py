@@ -187,6 +187,7 @@ class Idea(Base):
     status = Column(SAEnum(IdeaStatus), default=IdeaStatus.pending)
     score = Column(Float, default=0.0)
     notes = Column(Text)
+    settings = Column(JSON, default=dict)
     created_at = Column(DateTime(timezone=True), default=utc_now)
 
     channel = relationship("Channel", back_populates="ideas")

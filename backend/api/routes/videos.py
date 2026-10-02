@@ -352,6 +352,10 @@ async def render_video(
         caption_style=caption_style,
         style=body.style,
         language=story_spec.language or language,
+        orientation=body.orientation,
+        duration=(
+            float(body.target_duration_seconds) if body.target_duration_seconds else 0.0
+        ),
     )
 
     if channel and channel.watermark_enabled and user.logo_path:

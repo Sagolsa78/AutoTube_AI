@@ -34,6 +34,7 @@ class IdeaOut(BaseModel):
     status: str
     score: float
     notes: str | None = None
+    settings: dict | None = None
     created_at: str
 
     class Config:
@@ -46,6 +47,13 @@ class GenerateIdeasIn(BaseModel):
     niche: str | None = None
     provider: str | None = None
     model: str | None = None
+    content_type: str = "short"
+    custom_content_type: str | None = None
+    custom_prompt: str | None = None
+    target_audience: str | None = None
+    tone: str | None = None
+    format: str | None = None
+    target_duration: int | None = None
 
 
 def _extract_json_list(raw: str) -> list:
@@ -237,11 +245,17 @@ Example:
             log.info(f"Relevance Guard rejected idea: {topic}")
             continue
 
-        # Give a higher score if we had actual trends to work with
-        if trending:
-            score = random.uniform(85.0, 99.0)
-        else:
-            score = random.uniform(60.0, 85.0)
+        score = random.uniform(85.0, 99.0) if trending else random.uniform(60.0, 85.0)
+
+        idea_settings = {
+            "content_type": body.content_type,
+            "custom_content_type": body.custom_content_type,
+            "custom_prompt": body.custom_prompt,
+            "target_audience": body.target_audience,
+            "tone": body.tone,
+            "format": body.format,
+            "target_duration": body.target_duration,
+        }
 
         idea = Idea(
             user_id=user.id,
@@ -252,6 +266,7 @@ Example:
             status=IdeaStatus.pending,
             score=score,
             notes=trend_notes,
+            settings=idea_settings,
         )
         db.add(idea)
         created.append(idea)
@@ -400,5 +415,6 @@ def _fmt(i: Idea) -> dict:
         ),
         "score": i.score or 0.0,
         "notes": i.notes,
+        "settings": i.settings,
         "created_at": str(i.created_at),
     }

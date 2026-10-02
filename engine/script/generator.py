@@ -85,12 +85,42 @@ def generate_script(
     model: str | None = None,
     content_type: str = "short",
     target_duration_seconds: int = 30,
+    custom_prompt: str | None = None,
+    target_audience: str | None = None,
+    tone: str | None = None,
+    format_type: str | None = None,
 ) -> tuple:
     """
     Generate a structured script for the given topic.
     Returns (story_spec, provider_used, cost_data).
     """
-    template = _PROMPTS.get(niche, _DEFAULT_PROMPT)
+    if custom_prompt or tone or target_audience or format_type:
+        template = "You are an expert scriptwriter.\n"
+        if custom_prompt:
+            template += f"User instructions: {custom_prompt}\n"
+        if tone:
+            template += f"Tone: {tone}\n"
+        if target_audience:
+            template += f"Target Audience: {target_audience}\n"
+        if format_type:
+            template += f"Format: {format_type}\n"
+
+        template += """
+Write a highly engaging script about: {topic}
+
+Rules:
+- Target duration: {target_duration_seconds} seconds when read aloud.
+- Structure your script exactly as: HOOK, ESCALATION, EXPLANATION, PAYOFF, CTA.
+- The first 3 seconds MUST answer: "Why should I continue watching?"
+- NO unsupported claims (extract key facts into the claims array).
+- visual_intent: A high level visual concept for the scene.
+- stock_query: A SPECIFIC 3-5 word description for stock footage directly relevant to the narration. MUST be concrete.
+- scene_number must be sequential starting at 1.
+- preferred_visual_mode should generally be "STOCK" unless impossible to find.
+"""
+    else:
+        template = _PROMPTS.get(niche, _DEFAULT_PROMPT)
+
     if language != "en":
         template += f"\n- MUST write the script entirely in language code: {language}\n"
 

@@ -39,7 +39,7 @@ export default function StudioShell() {
   const [selectedCaption, setSelectedCaption] = useState('bold_centered');
   const [selectedVoice, setSelectedVoice] = useState('en-US-ChristopherNeural');
   const [selectedVisualStrategy, setSelectedVisualStrategy] = useState('auto');
-  const [contentType, setContentType] = useState('short');
+  const [contentType, setContentType] = useState('facts');
   const [targetDuration, setTargetDuration] = useState('60');
 
   useEffect(() => {

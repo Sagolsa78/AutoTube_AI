@@ -120,8 +120,10 @@ jobs:
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
 
           WORKER_SECRET: ${{ secrets.WORKER_SECRET }}
+          ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
+          RUNTIME_ROLE: worker
 
-          JOB_ID: ${{ inputs.job_id }}
+          JOB_ID: ${{ inputs.job_id || github.event.client_payload.job_id }}
 
         run: |
           python -m backend.worker.main --job-id "$JOB_ID"

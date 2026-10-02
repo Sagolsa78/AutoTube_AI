@@ -552,18 +552,49 @@ export default function Videos({ filter }) {
                     }}
                     title="Reject & Regenerate"
                   >
-                    <Icon name="x" size={16} /> Reject & Regenerate
+                    <Icon name="x" size={16} />
                   </button>
                 </>
               )}
-              {activeVideo.status === 'approved' && (
+              {['approved', 'uploaded'].includes(activeVideo.status) && (
                 <button
                   type="button"
-                  className="btn btn-primary w-full py-3 text-sm font-bold shadow-brand-glow"
+                  className="btn btn-primary flex-1 py-3 text-sm font-bold shadow-brand-glow"
                   onClick={() => setUploadModal(activeVideo)}
                 >
                   <Icon name="upload" size={16} /> Publish to YouTube
                 </button>
+              )}
+
+              {['ready', 'approved', 'uploaded'].includes(activeVideo.status) && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary py-3 px-3 text-sm font-bold shadow-md"
+                    title="Secure Download"
+                    onClick={async () => {
+                      try {
+                        toast.info('Preparing download...');
+                        const res = await api.downloadVideo(activeVideo.id);
+                        if (!res.ok) throw new Error('Download request failed');
+                        if (res.redirected) {
+                            window.location.href = res.url;
+                            return;
+                        }
+                        const blob = await res.blob();
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `${activeVideo.selected_title || activeVideo.id}.mp4`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                      } catch (e) {
+                        console.error(e);
+                        toast.error(`Download failed: ${e.message}`);
+                      }
+                    }}
+                  >
+                    <Icon name="download" size={16} />
+                  </button>
               )}
             </div>
           </div>

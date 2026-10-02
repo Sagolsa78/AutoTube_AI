@@ -132,7 +132,15 @@ async def _refresh_token_if_needed(conn: YouTubeConnection, db: AsyncSession) ->
         return True
 
     except Exception as e:
-        log.error(f"Token refresh failed for user {conn.user_id}: {e}")
+        error_msg = str(e).lower()
+        if "invalid_grant" in error_msg:
+            log.warning(
+                f"YouTube token revoked or invalid for user {conn.user_id}. Disconnecting."
+            )
+            await db.delete(conn)
+            await db.commit()
+        else:
+            log.error(f"Token refresh failed for user {conn.user_id}: {e}")
         return False
 
 

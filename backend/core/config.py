@@ -23,11 +23,12 @@ class Settings(BaseSettings):
     # Allowed origins for CORS (comma-separated string parsed to list in main.py)
     CORS_ORIGINS: str = "*"
     FRONTEND_URL: str = "http://localhost:5173"
+    RUNTIME_ROLE: Literal["api", "worker"] = "api"
 
     # ── Database ──────────────────────────────────────────────────────────────
     DATABASE_URL: str = "sqlite+aiosqlite:///./storage/autoshorts.db"
-    DB_POOL_SIZE: int = 5
-    DB_MAX_OVERFLOW: int = 10
+    DB_POOL_SIZE: int = 20
+    DB_MAX_OVERFLOW: int = 20
 
     @field_validator("DATABASE_URL", mode="after")
     @classmethod
@@ -149,21 +150,25 @@ class Settings(BaseSettings):
     def validate_production_secrets(self) -> "Settings":
         if self.APP_ENV == "production":
             missing = []
-            if (
-                not self.JWT_SECRET
-                or self.JWT_SECRET == "autotube-super-secret-jwt-signing-key-2026"
-            ):
-                missing.append("JWT_SECRET")
-            if not self.ENCRYPTION_KEY:
-                missing.append("ENCRYPTION_KEY")
+
+            if self.RUNTIME_ROLE == "api":
+                if (
+                    not self.JWT_SECRET
+                    or self.JWT_SECRET == "autotube-super-secret-jwt-signing-key-2026"
+                ):
+                    missing.append("JWT_SECRET")
+                if self.CORS_ORIGINS == "*":
+                    missing.append("CORS_ORIGINS (cannot be '*' in production)")
+                if not self.ENCRYPTION_KEY:
+                    missing.append("ENCRYPTION_KEY")
+
             if not self.WORKER_SECRET:
                 missing.append("WORKER_SECRET")
             if not self.DATABASE_URL:
                 missing.append("DATABASE_URL")
             if self.DATABASE_URL and "sqlite" in self.DATABASE_URL.lower():
                 missing.append("DATABASE_URL (SQLite is not allowed in production)")
-            if self.CORS_ORIGINS == "*":
-                missing.append("CORS_ORIGINS (cannot be '*' in production)")
+
             if missing:
                 raise ValueError(
                     f"Missing or invalid mandatory production secrets: {', '.join(missing)}"

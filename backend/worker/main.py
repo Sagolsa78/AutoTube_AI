@@ -15,6 +15,9 @@ import signal
 import sys
 from datetime import datetime, timedelta, timezone
 
+# Force RUNTIME_ROLE to worker before any internal modules (like config) load
+os.environ["RUNTIME_ROLE"] = "worker"
+
 from backend.core.redis_client import get_redis
 from backend.db.database import AsyncSessionLocal
 from backend.models.models import Job, JobStatus, Video, VideoStatus

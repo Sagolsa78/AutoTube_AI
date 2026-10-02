@@ -77,7 +77,20 @@ async def _get_credentials(user_id: str) -> Credentials:
 
         if not creds.valid:
             if creds.expired and creds.refresh_token:
-                creds.refresh(Request())
+                try:
+                    creds.refresh(Request())
+                except Exception as e:
+                    if "invalid_grant" in str(e).lower():
+                        log.warning(
+                            f"YouTube credentials revoked for user {user_id}. Disconnecting."
+                        )
+                        await db.delete(conn)
+                        await db.commit()
+                        raise RuntimeError(
+                            "YouTube credentials revoked. Please reconnect."
+                        )
+                    raise e
+
                 from backend.security import encrypt_value
 
                 conn.access_token = encrypt_value(creds.token)

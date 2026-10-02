@@ -59,9 +59,18 @@ export default function RenderStage({
     setError(null);
     setRenderProgress(null);
     try {
-      const video = await api.renderVideo(
-        script.id, selectedStyle, selectedCaption, null, selectedVoice, selectedVisualStrategy
-      );
+      const opts = {
+        script_id: script.id,
+        style: selectedStyle,
+        caption_style: selectedCaption,
+        custom_cta: null,
+        voice_override: selectedVoice,
+        visual_strategy: selectedVisualStrategy,
+        content_type: script.body?.content_type || 'short',
+        target_duration_seconds: script.body?.target_duration || 30,
+        orientation: script.body?.format_type || '9:16'
+      };
+      const video = await api.renderVideoFull(opts);
       setVideoId(video.id);
       toast.info('Rendering pipeline started...');
     } catch (e) {
@@ -127,6 +136,19 @@ export default function RenderStage({
             </Button>
             <Button
               variant="secondary"
+              size="sm"
+              icon="copy"
+              className="w-full"
+              onClick={() => {
+                setVideoId(null);
+                setRenderProgress(null);
+                setRendering(false);
+              }}
+            >
+              Render Variant
+            </Button>
+            <Button
+              variant="ghost"
               size="sm"
               className="w-full"
               onClick={() => navigate('/app/create')}

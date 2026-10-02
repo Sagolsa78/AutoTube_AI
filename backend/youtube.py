@@ -55,6 +55,24 @@ class YouTubeAPIClient:
                     }
             except Exception as e:
                 log.error(f"[YouTubeAPI] Error fetching real channel analytics: {e}")
+                if "invalid_grant" in str(e).lower():
+                    from sqlalchemy import select
+
+                    from backend.db.database import AsyncSessionLocal
+                    from backend.models.models import YouTubeConnection
+
+                    async with AsyncSessionLocal() as db:
+                        q = select(YouTubeConnection).where(
+                            YouTubeConnection.user_id == user_id
+                        )
+                        res = await db.execute(q)
+                        conn = res.scalars().first()
+                        if conn:
+                            log.warning(
+                                f"YouTube credentials revoked during analytics fetch for user {user_id}. Disconnecting."
+                            )
+                            await db.delete(conn)
+                            await db.commit()
 
         # Real unauthenticated state — zero mock data
         return {
@@ -93,6 +111,24 @@ class YouTubeAPIClient:
                     log.error(
                         f"[YouTubeAPI] Error fetching real video analytics for {youtube_video_id}: {e}"
                     )
+                    if "invalid_grant" in str(e).lower():
+                        from sqlalchemy import select
+
+                        from backend.db.database import AsyncSessionLocal
+                        from backend.models.models import YouTubeConnection
+
+                        async with AsyncSessionLocal() as db:
+                            q = select(YouTubeConnection).where(
+                                YouTubeConnection.user_id == user_id
+                            )
+                            res = await db.execute(q)
+                            conn = res.scalars().first()
+                            if conn:
+                                log.warning(
+                                    f"YouTube credentials revoked during video analytics fetch for user {user_id}. Disconnecting."
+                                )
+                                await db.delete(conn)
+                                await db.commit()
 
         return {
             "views": 0,
