@@ -1,6 +1,6 @@
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import React, { useState, useEffect, Suspense, lazy } from 'react';
-import { setAuthToken } from './services/api';
+import { setAuthToken, api } from './services/api';
 import { ChannelProvider } from './contexts/ChannelContext';
 import { JobsProvider } from './hooks/useJobs';
 const Landing = lazy(() => import('./pages/Landing'));
@@ -30,16 +30,28 @@ function ProtectedRoute() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
-    // 1. Check local native token
-    const localToken = localStorage.getItem('autotube_auth_token');
-    if (localToken) {
-      setIsAuthenticated(true);
-      setLoading(false);
-      return;
-    }
+    const checkAuth = async () => {
+      const localToken = localStorage.getItem('autotube_auth_token');
+      if (localToken) {
+        try {
+          // Phase 19: Cache / Stale Data - Ensure active user is consistent from backend
+          const me = await api.getMe();
+          if (me) {
+            setIsAuthenticated(true);
+            setLoading(false);
+            return;
+          }
+        } catch (error) {
+          console.warn("Invalid or stale local token, redirecting to login");
+          localStorage.removeItem('autotube_auth_token');
+        }
+      }
 
-    setIsAuthenticated(false);
-    setLoading(false);
+      setIsAuthenticated(false);
+      setLoading(false);
+    };
+
+    checkAuth();
   }, []);
 
   if (loading) {

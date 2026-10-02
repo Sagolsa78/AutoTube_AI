@@ -104,7 +104,7 @@ export const api = {
       return request(`/scripts/${qs ? '?' + qs : ''}`);
   },
   getScript:        (id) => request(`/scripts/${id}`),
-  generateScript:   (ideaId, language = 'en', locale = 'US') => request(`/scripts/generate/${ideaId}?language=${language}&locale=${locale}`, { method: 'POST', timeout: 120000 }),
+  generateScript:   (ideaId, language = 'en', locale = 'US', contentType = 'short', targetDuration = 30) => request(`/scripts/generate/${ideaId}?language=${language}&locale=${locale}&content_type=${contentType}&target_duration_seconds=${targetDuration}`, { method: 'POST', timeout: 120000 }),
   regenerateScript: (id) => request(`/scripts/${id}/regenerate`, { method: 'POST', timeout: 120000 }),
   updateScript:   (id, data) => request(`/scripts/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   discardScript:  (id) => request(`/scripts/${id}/discard`, { method: 'POST' }),

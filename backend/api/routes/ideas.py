@@ -208,8 +208,35 @@ Example:
 
     import random
 
+    from engine.quality.relevance_guard import RelevanceGuard
+
+    # Pre-fetch recent topics for relevance checking
+    recent_q2 = (
+        select(Idea.topic)
+        .where(Idea.channel_id == body.channel_id)
+        .order_by(Idea.created_at.desc())
+        .limit(20)
+    )
+    recent_result2 = await db.execute(recent_q2)
+    recent_topics_list = [t for t in recent_result2.scalars().all()]
+
+    target_audience = getattr(channel, "target_audience", None) or "General"
+
     created = []
     for topic in topics:
+        # Phase 15: Content Relevance Guard
+        is_relevant = await asyncio.to_thread(
+            RelevanceGuard.check_relevance,
+            topic,
+            niche,
+            target_audience,
+            recent_topics_list,
+        )
+
+        if not is_relevant:
+            log.info(f"Relevance Guard rejected idea: {topic}")
+            continue
+
         # Give a higher score if we had actual trends to work with
         if trending:
             score = random.uniform(85.0, 99.0)

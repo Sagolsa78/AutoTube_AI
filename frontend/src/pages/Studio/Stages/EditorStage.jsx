@@ -5,7 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '../../../components/Ca
 import Button from '../../../components/Button';
 import { toast } from 'sonner';
 
-export default function EditorStage({ idea, script, setScript, editingScenes, setEditingScenes, onBack, onNext }) {
+export default function EditorStage({ idea, script, setScript, editingScenes, setEditingScenes, contentType, targetDuration, onBack, onNext }) {
   // Generation State
   const [generating, setGenerating] = useState(false);
   const [language, setLanguage] = useState('en');
@@ -49,7 +49,7 @@ export default function EditorStage({ idea, script, setScript, editingScenes, se
     }
     setGenerating(true);
     try {
-      const result = await api.generateScript(idea.id, language, locale);
+      const result = await api.generateScript(idea.id, language, locale, contentType, targetDuration);
       setScript(result);
       toast.success('Script drafted successfully!');
     } catch (e) {
@@ -469,7 +469,8 @@ export default function EditorStage({ idea, script, setScript, editingScenes, se
                                     value={activeScene.preferred_visual_mode || 'STOCK'}
                                     onChange={e => updateScene(activeSceneIdx, 'preferred_visual_mode', e.target.value)}
                                     >
-                                    <option value="STOCK">Stock Footage (Pexels/Pixabay)</option>
+                                    <option value="STOCK">Stock Footage (Pexels/Pixabay/Coverr)</option>
+                                    <option value="COVERR">Stock Footage (Coverr Only)</option>
                                     <option value="AUTO">Auto-Select</option>
                                     <option value="GENERATED_VIDEO">AI Video (ComfyUI)</option>
                                     <option value="GENERATED_IMAGE">AI Image (ComfyUI)</option>

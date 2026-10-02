@@ -167,10 +167,16 @@ def _search_pixabay(query: str, count: int) -> list[dict]:
     return results
 
 
-def search_clips(query: str, count: int = 5) -> list[dict]:
+def search_clips(
+    query: str, count: int = 5, provider_override: str = None
+) -> list[dict]:
     """Search for clips across configured providers based on STOCK_PROVIDER_ORDER."""
     results = []
-    providers = settings.parsed_stock_provider_order
+
+    if provider_override:
+        providers = [provider_override]
+    else:
+        providers = settings.parsed_stock_provider_order
 
     # We query providers sequentially in order, stopping when we have enough clips
     for provider in providers:
@@ -188,8 +194,10 @@ def search_clips(query: str, count: int = 5) -> list[dict]:
     return results[:count]
 
 
-async def async_search_clips(query: str, count: int = 5) -> list[dict]:
-    return await asyncio.to_thread(search_clips, query, count)
+async def async_search_clips(
+    query: str, count: int = 5, provider_override: str = None
+) -> list[dict]:
+    return await asyncio.to_thread(search_clips, query, count, provider_override)
 
 
 def chunk_download(url: str, dest: Path, chunk_size: int = 1 << 20):

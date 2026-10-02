@@ -23,12 +23,10 @@ const DURATIONS = [
   { id: '90', label: '90 sec', desc: '~190 words' },
 ];
 
-export default function BriefStage({ selectedIdea, setSelectedIdea, onNext }) {
+export default function BriefStage({ selectedIdea, setSelectedIdea, contentType, setContentType, duration, setDuration, onNext }) {
   const [ideas, setIdeas] = useState([]);
   const [loading, setLoading] = useState(!selectedIdea);
   const [quickTopic, setQuickTopic] = useState('');
-  const [contentType, setContentType] = useState('facts');
-  const [duration, setDuration] = useState('60');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [generatingQuick, setGeneratingQuick] = useState(false);
   const { activeChannelId, activeChannel } = useChannel();

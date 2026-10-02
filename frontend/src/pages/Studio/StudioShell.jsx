@@ -39,6 +39,8 @@ export default function StudioShell() {
   const [selectedCaption, setSelectedCaption] = useState('bold_centered');
   const [selectedVoice, setSelectedVoice] = useState('en-US-ChristopherNeural');
   const [selectedVisualStrategy, setSelectedVisualStrategy] = useState('auto');
+  const [contentType, setContentType] = useState('short');
+  const [targetDuration, setTargetDuration] = useState('60');
 
   useEffect(() => {
     let isMounted = true;
@@ -165,6 +167,10 @@ export default function StudioShell() {
             <BriefStage
               selectedIdea={selectedIdea}
               setSelectedIdea={setSelectedIdea}
+              contentType={contentType}
+              setContentType={setContentType}
+              duration={targetDuration}
+              setDuration={setTargetDuration}
               onNext={() => setStage('editor')}
             />
           )}
@@ -179,6 +185,8 @@ export default function StudioShell() {
               }}
               editingScenes={editingScenes}
               setEditingScenes={setEditingScenes}
+              contentType={contentType}
+              targetDuration={targetDuration}
               onBack={() => setStage('brief')}
               onNext={() => setStage('render')}
             />

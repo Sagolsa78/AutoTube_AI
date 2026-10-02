@@ -274,6 +274,7 @@ export default function RenderStage({
               >
                 <option value="auto">Auto (Scene Defined)</option>
                 <option value="stock_first">Stock First (Fastest)</option>
+                <option value="coverr_only">Coverr Only (Cinematic)</option>
                 <option value="ai_first">AI First (ComfyUI)</option>
                 <option value="balanced">Balanced (Alternate)</option>
               </select>

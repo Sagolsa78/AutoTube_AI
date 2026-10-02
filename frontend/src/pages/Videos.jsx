@@ -167,6 +167,65 @@ const CustomPlayer = ({ src }) => {
   );
 };
 
+const VideoPreviewWrapper = ({ videoId }) => {
+  const [src, setSrc] = useState(null);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    setSrc(null);
+    setError(false);
+    api.getVideoPreviewUrl(videoId)
+      .then(res => {
+        if (isMounted) {
+          if (res.url.startsWith('/')) {
+            // For local URLs without JWT, we must fetch as blob and create object URL
+            // because <video src="..."> doesn't pass the Bearer token in headers.
+            const token = localStorage.getItem('autotube_auth_token');
+            fetch(`${api.getApiBase().replace('/api', '')}${res.url}`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            })
+            .then(blobRes => {
+                if (!blobRes.ok) throw new Error('Preview fetch failed');
+                return blobRes.blob();
+            })
+            .then(blob => {
+                if (isMounted) setSrc(URL.createObjectURL(blob));
+            })
+            .catch(() => { if (isMounted) setError(true); });
+          } else {
+            // S3/R2 presigned URL can be used directly
+            setSrc(res.url);
+          }
+        }
+      })
+      .catch(() => {
+        if (isMounted) setError(true);
+      });
+    return () => { isMounted = false; };
+  }, [videoId]);
+
+  if (error) {
+    return (
+      <div className="relative w-full aspect-[9/16] max-h-[580px] sm:max-h-[640px] bg-black rounded-xl overflow-hidden shadow-2xl border border-border flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3 text-center p-6">
+          <Icon name="alert-triangle" size={36} className="text-danger" />
+          <span className="text-sm font-bold text-text-primary">Preview Unavailable</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!src) {
+    return (
+      <div className="relative w-full aspect-[9/16] max-h-[580px] sm:max-h-[640px] bg-black rounded-xl overflow-hidden shadow-2xl border border-border flex items-center justify-center">
+        <Icon name="loader" size={32} className="text-white/50 animate-spin" />
+      </div>
+    );
+  }
+
+  return <CustomPlayer src={src} />;
+};
 
 export default function Videos({ filter }) {
   const [videos, setVideos] = useState([]);
@@ -409,7 +468,7 @@ export default function Videos({ filter }) {
           {/* LEFT/TOP: 9:16 Video Player Surface (5 Cols) */}
           <div className="lg:col-span-5 flex flex-col gap-4 w-full max-w-md mx-auto lg:max-w-none">
             {['ready', 'approved', 'uploaded'].includes(activeVideo.status) ? (
-              <CustomPlayer src={api.getVideoPreviewUrl(activeVideo.id)} />
+              <VideoPreviewWrapper videoId={activeVideo.id} />
             ) : (
               <div className="w-full aspect-[9/16] max-h-[580px] bg-surface rounded-xl border border-border flex items-center justify-center p-6 shadow-card-subtle">
                 {['rendering', 'paused'].includes(activeVideo.status) ? (

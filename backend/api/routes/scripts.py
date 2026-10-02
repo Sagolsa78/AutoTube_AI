@@ -105,6 +105,8 @@ async def generate_script_for_idea(
     locale: str | None = None,
     provider: str | None = None,
     model: str | None = None,
+    content_type: str = "short",
+    target_duration_seconds: int = 30,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -165,6 +167,8 @@ async def generate_script_for_idea(
             language=final_language,
             provider=preferred_prov,
             model=preferred_mod,
+            content_type=content_type,
+            target_duration_seconds=target_duration_seconds,
         )
         story_spec.language = final_language
         story_spec.locale = final_locale
@@ -173,7 +177,9 @@ async def generate_script_for_idea(
 
         data = story_spec.model_dump()
         data["full_text"] = full_text
-        report = await asyncio.to_thread(check_script, data, niche)
+        report = await asyncio.to_thread(
+            check_script, data, niche, 70.0, content_type, target_duration_seconds
+        )
 
         # True fact checking
         verifier = FactVerifier()

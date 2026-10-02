@@ -376,14 +376,115 @@ def assemble_video(
             f"FFmpeg failed (code {result.returncode}): {result.stderr[-500:]}"
         )
 
-    if not Path(out_path).exists() or Path(out_path).stat().st_size == 0:
-        log.error(
-            "FFmpeg failed to produce an output file. Stderr: %s", result.stderr[-2000:]
-        )
-        raise RuntimeError("FFmpeg assembly failed: No output file generated.")
+    # Phase 21: Post-render Quality Gates
+    _verify_render_quality(out_path, orientation)
 
     log.info("Video assembled → %s", out_path)
     return out_path
+
+
+def _verify_render_quality(file_path: str, orientation: str):
+    """
+    Phase 21: Validate rendered file using ffprobe.
+    Validates: file exists, size > 0, ffprobe succeeds, streams exist, duration > 0,
+    expected orientation, expected frame rate, container, codec.
+    """
+    p = Path(file_path)
+    if not p.exists() or p.stat().st_size == 0:
+        raise RuntimeError(
+            "Render Quality Gate Failed: File does not exist or is empty."
+        )
+
+    cmd = [
+        "ffprobe",
+        "-v",
+        "error",
+        "-show_entries",
+        "format=duration,format_name:stream=codec_type,codec_name,width,height,r_frame_rate",
+        "-of",
+        "json",
+        file_path,
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"Render Quality Gate Failed: ffprobe failed to read file: {result.stderr}"
+        )
+
+    import json
+
+    try:
+        metadata = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        raise RuntimeError(
+            "Render Quality Gate Failed: Could not parse ffprobe output."
+        )
+
+    fmt = metadata.get("format", {})
+    streams = metadata.get("streams", [])
+
+    duration = float(fmt.get("duration", 0))
+    if duration <= 0:
+        raise RuntimeError(
+            "Render Quality Gate Failed: Video duration is 0 or missing."
+        )
+
+    format_name = fmt.get("format_name", "")
+    if "mp4" not in format_name.lower():
+        raise RuntimeError(
+            f"Render Quality Gate Failed: Unexpected container format '{format_name}', expected 'mp4'."
+        )
+
+    has_video = False
+    has_audio = False
+
+    for s in streams:
+        if s.get("codec_type") == "video":
+            has_video = True
+            codec_name = s.get("codec_name", "")
+            if (
+                "h264" not in codec_name.lower()
+                and "hevc" not in codec_name.lower()
+                and "vp9" not in codec_name.lower()
+            ):
+                log.warning(f"Quality gate: unexpected video codec {codec_name}")
+
+            # Check orientation
+            w = int(s.get("width", 0))
+            h = int(s.get("height", 0))
+            if orientation == "9:16" and w > h:
+                raise RuntimeError(
+                    "Render Quality Gate Failed: Orientation mismatch, expected 9:16 but video is landscape."
+                )
+            if orientation == "16:9" and h > w:
+                raise RuntimeError(
+                    "Render Quality Gate Failed: Orientation mismatch, expected 16:9 but video is portrait."
+                )
+
+            # Check framerate
+            fps_str = s.get("r_frame_rate", "0/1")
+            try:
+                num, den = map(int, fps_str.split("/"))
+                fps = num / den if den > 0 else 0
+                if (
+                    abs(fps - 30) > 1
+                    and abs(fps - 60) > 1
+                    and abs(fps - 24) > 1
+                    and abs(fps - 25) > 1
+                ):
+                    log.warning(f"Quality gate: unexpected framerate {fps}")
+            except Exception:
+                pass
+
+        elif s.get("codec_type") == "audio":
+            has_audio = True
+
+    if not has_video:
+        raise RuntimeError("Render Quality Gate Failed: No video stream found.")
+    if not has_audio:
+        raise RuntimeError(
+            "Render Quality Gate Failed: No audio stream found (silent video)."
+        )
 
 
 import asyncio

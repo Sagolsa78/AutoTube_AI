@@ -39,6 +39,8 @@ class VisualRouter:
         # Apply strategy override
         if self.strategy == "stock_first":
             mode = "STOCK"
+        elif self.strategy == "coverr_only":
+            mode = "COVERR"
         elif self.strategy == "ai_first":
             mode = "GENERATED_IMAGE"
         elif self.strategy == "balanced":
@@ -59,6 +61,15 @@ class VisualRouter:
                 return res
             log.warning("STOCK failed, falling back to GENERATED_IMAGE.")
             return await self._resolve_generated_image(scene_data, idea_topic)
+        elif mode == "COVERR":
+            # Attempt Coverr specifically, fallback to normal STOCK if it fails
+            res = await self._resolve_stock(
+                scene_data, idea_topic, used_source_ids, provider_override="coverr"
+            )
+            if res:
+                return res
+            log.warning("COVERR failed, falling back to STOCK.")
+            return await self._resolve_stock(scene_data, idea_topic, used_source_ids)
         elif mode == "GENERATED_IMAGE":
             result = await self._resolve_generated_image(scene_data, idea_topic)
             if result:
@@ -175,7 +186,11 @@ class VisualRouter:
             return None
 
     async def _resolve_stock(
-        self, scene_data: dict, idea_topic: str, used_source_ids: set
+        self,
+        scene_data: dict,
+        idea_topic: str,
+        used_source_ids: set,
+        provider_override: str = None,
     ) -> Optional[str]:
         """Resolves stock footage for the scene."""
         query = (
@@ -189,7 +204,9 @@ class VisualRouter:
         try:
             async with AsyncSessionLocal() as db:
                 # Fetch more results to allow for deduplication and intelligence matching
-                search_results = await async_search_clips(query, count=15)
+                search_results = await async_search_clips(
+                    query, count=15, provider_override=provider_override
+                )
                 if not search_results:
                     log.warning(f"No stock results found for query: {query}")
                     return None

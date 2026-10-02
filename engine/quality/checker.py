@@ -42,7 +42,11 @@ def _estimated_duration(text: str, wpm: int = 135) -> float:
 
 
 def check_script(
-    script: dict, niche: str = "science_wow", threshold: float = 70.0
+    script: dict,
+    niche: str = "science_wow",
+    threshold: float = 70.0,
+    content_type: str = "short",
+    target_duration: int = 30,
 ) -> QualityReport:
     issues: list[str] = []
     suggestions: list[str] = []
@@ -88,7 +92,7 @@ def check_script(
             score -= 5 * len(scenes_without_visuals)
 
         # 4. Too many scenes = rushed feeling
-        if len(scenes) > 6:
+        if content_type == "short" and len(scenes) > 6:
             issues.append("Too many scenes (>6) — will feel rushed at short duration")
             score -= 8
             suggestions.append("Trim to 3-5 scenes for better pacing")
@@ -111,7 +115,7 @@ def check_script(
         if not body:
             issues.append("No body content")
             score -= 15
-        elif len(body) > 6:
+        elif content_type == "short" and len(body) > 6:
             issues.append("Body has too many sentences — will feel rushed")
             score -= 8
             suggestions.append("Trim body to 3-4 punchy sentences")
@@ -129,13 +133,20 @@ def check_script(
     # Duration estimate
     if full_text:
         est = _estimated_duration(full_text)
-        if est < 20:
-            issues.append(f"Script too short (~{est:.0f}s) — minimum 25s")
-            score -= 15
-        elif est > 65:
-            issues.append(f"Script too long (~{est:.0f}s) — maximum 60s")
-            score -= 10
-            suggestions.append("Remove one scene to tighten pacing")
+        if content_type == "short":
+            if est < 10:
+                issues.append(f"Script too short (~{est:.0f}s) — minimum 15s")
+                score -= 15
+            elif est > 180:
+                issues.append(
+                    f"Script too long (~{est:.0f}s) — maximum 180s for Shorts"
+                )
+                score -= 10
+                suggestions.append("Remove one scene to tighten pacing")
+        else:
+            if est < 60:
+                issues.append(f"Long-form script too short (~{est:.0f}s) — minimum 60s")
+                score -= 10
 
     # Kids content safety check
     if niche == "kids_facts" and full_text:
