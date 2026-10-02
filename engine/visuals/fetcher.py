@@ -27,31 +27,68 @@ def _search_coverr(query: str, count: int) -> list[dict]:
         return results
 
     try:
-        # Coverr doesn't require an API key for the public JSON search
+        headers = {}
+        params = {"query": query, "urls": "true", "page_size": count}
+        # Coverr API v2 uses Bearer token authentication
+        if settings.COVERR_API_KEY:
+            headers["Authorization"] = f"Bearer {settings.COVERR_API_KEY}"
+
         resp = requests.get(
             "https://api.coverr.co/videos",
-            params={"query": query, "urls": "true"},
+            params=params,
+            headers=headers,
             timeout=15,
         )
         resp.raise_for_status()
+        data = resp.json()
 
-        for video in resp.json().get("hits", []):
-            urls = video.get("urls", {})
-            download_url = urls.get("mp4") or urls.get("poster")
+        for video in data.get("hits", []):
+            urls = video.get("urls") or {}
+            download_url = (
+                urls.get("mp4")
+                or urls.get("mp4_download")
+                or urls.get("download")
+                or urls.get("hd")
+                or urls.get("sd")
+            )
+
+            video_id = video.get("id", "")
+            if not download_url and video_id:
+                download_url = f"https://storage.coverr.co/videos/{video_id}"
+
+            thumbnail_url = (
+                video.get("thumbnail")
+                or video.get("poster")
+                or urls.get("thumbnail")
+                or urls.get("poster")
+                or ""
+            )
+
             if not download_url:
+                log.debug("Coverr: skipping video %s — no download URL", video_id)
                 continue
+
+            is_vertical = video.get("is_vertical", False)
+            try:
+                duration = float(video.get("duration", 0) or 0)
+            except (ValueError, TypeError):
+                duration = 0.0
 
             results.append(
                 {
                     "source": "coverr",
-                    "source_asset_id": str(video.get("id", "")),
-                    "thumbnail_url": urls.get("thumbnail", ""),
-                    "url": f"https://coverr.co/videos/{video.get('id', '')}",
+                    "source_asset_id": str(video_id),
+                    "thumbnail_url": thumbnail_url,
+                    "url": f"https://coverr.co/videos/{video_id}",
                     "download_url": download_url,
-                    "duration": video.get("duration", 0),
-                    "width": 1080,  # Coverr standardizes HD
-                    "height": 1920,  # Treat as portrait compatible usually
-                    "photographer": video.get("user", {}).get("first_name", "Coverr"),
+                    "duration": duration,
+                    "width": 1080 if is_vertical else 1920,
+                    "height": 1920 if is_vertical else 1080,
+                    "photographer": (
+                        video.get("user", {}).get("first_name", "Coverr")
+                        if isinstance(video.get("user"), dict)
+                        else "Coverr"
+                    ),
                     "license": "Coverr License",
                     "commercial_ok": True,
                     "attribution_req": False,
@@ -170,26 +207,67 @@ def _search_pixabay(query: str, count: int) -> list[dict]:
 def search_clips(
     query: str, count: int = 5, provider_override: str = None
 ) -> list[dict]:
-    """Search for clips across configured providers based on STOCK_PROVIDER_ORDER."""
-    results = []
+    """Search for clips across configured providers based on STOCK_PROVIDER_ORDER.
 
+    Uses a round-robin distribution strategy: each enabled provider gets a fair
+    share of the requested count so that clips from all providers (e.g. Coverr)
+    are always included in the mix, not just the first provider.
+    """
     if provider_override:
         providers = [provider_override]
     else:
         providers = settings.parsed_stock_provider_order
 
-    # We query providers sequentially in order, stopping when we have enough clips
-    for provider in providers:
-        if len(results) >= count:
-            break
+    if not providers:
+        return []
 
-        remaining = count - len(results)
-        if provider == "pexels":
-            results.extend(_search_pexels(query, remaining))
-        elif provider == "coverr":
-            results.extend(_search_coverr(query, remaining))
-        elif provider == "pixabay":
-            results.extend(_search_pixabay(query, remaining))
+    # ── Round-robin distribution across providers ────────────────────────
+    # Distribute `count` across providers so each gets at least 1 clip.
+    # E.g. count=5, providers=[pexels, coverr, pixabay] → 2, 2, 1
+    per_provider = max(1, count // len(providers))
+    remainder = count % len(providers)
+
+    provider_fns = {
+        "pexels": _search_pexels,
+        "coverr": _search_coverr,
+        "pixabay": _search_pixabay,
+    }
+
+    results = []
+    for i, provider in enumerate(providers):
+        fn = provider_fns.get(provider)
+        if not fn:
+            continue
+        # Give first `remainder` providers an extra clip
+        alloc = per_provider + (1 if i < remainder else 0)
+        provider_results = fn(query, alloc)
+        log.info(
+            "search_clips: provider=%s query='%s' requested=%d returned=%d",
+            provider,
+            query,
+            alloc,
+            len(provider_results),
+        )
+        results.extend(provider_results)
+
+    # If we still don't have enough (some providers returned nothing),
+    # backfill from the first provider that has extra capacity
+    if len(results) < count:
+        for provider in providers:
+            if len(results) >= count:
+                break
+            fn = provider_fns.get(provider)
+            if not fn:
+                continue
+            backfill = fn(query, count - len(results))
+            # Avoid duplicates by source_asset_id
+            existing_ids = {str(r.get("source_asset_id")) for r in results}
+            for clip in backfill:
+                if str(clip.get("source_asset_id")) not in existing_ids:
+                    results.append(clip)
+                    existing_ids.add(str(clip.get("source_asset_id")))
+                if len(results) >= count:
+                    break
 
     return results[:count]
 

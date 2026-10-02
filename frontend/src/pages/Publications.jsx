@@ -88,14 +88,12 @@ export default function Publications() {
 
                 <div className="p-5 flex-1 flex flex-col gap-4">
                   <div className="flex gap-4 items-start">
-                    {/* Video Poster */}
+                    {/* Video Poster Placeholder */}
                     <div className="w-20 aspect-[9/16] bg-canvas rounded-lg border border-border overflow-hidden shrink-0 relative flex items-center justify-center">
-                      <video
-                        src={api.getVideoPreviewUrl(v.id)}
-                        className="w-full h-full object-cover"
-                        muted
-                        preload="auto"
-                      />
+                      <div className="flex flex-col items-center gap-1">
+                        <Icon name="play-circle" size={24} className="text-brand-red" />
+                        <span className="text-[8px] font-mono text-text-muted">SHORTS</span>
+                      </div>
                     </div>
 
                     <div className="flex-1 min-w-0 space-y-1.5">
@@ -129,14 +127,15 @@ export default function Publications() {
                   )}
                 </div>
 
-                {v.youtube_id && (
+                {(v.youtube_url || v.youtube_id) && (
                   <div className="px-5 py-3 border-t border-border bg-elevated/30 flex justify-end">
                     <a
-                      href={`https://youtube.com/shorts/${v.youtube_id}`}
+                      href={v.youtube_url || `https://youtube.com/shorts/${v.youtube_id}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-red hover:text-brand-red-hover transition-colors"
                     >
+                      <Icon name="youtube" size={14} />
                       <span>View on YouTube Shorts</span>
                       <Icon name="external-link" size={13} />
                     </a>

@@ -493,11 +493,25 @@ export default function Dashboard() {
                           <span>{tv.comments?.toLocaleString() || 0} comments</span>
                         </div>
                       </div>
-                      <Link to="/app/videos">
-                        <Button variant="ghost" size="sm" icon="play">
-                          View
-                        </Button>
-                      </Link>
+                      {tv.youtube_url ? (
+                        <a
+                          href={tv.youtube_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="shrink-0"
+                          title="Watch on YouTube"
+                        >
+                          <Button variant="ghost" size="sm" icon="youtube" className="text-brand-red hover:bg-brand-red/10">
+                            Watch
+                          </Button>
+                        </a>
+                      ) : (
+                        <Link to="/app/videos">
+                          <Button variant="ghost" size="sm" icon="play">
+                            View
+                          </Button>
+                        </Link>
+                      )}
                     </div>
                   ))}
                 </CardContent>

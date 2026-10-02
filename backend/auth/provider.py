@@ -38,6 +38,8 @@ class AuthProvider:
         token = request.cookies.get("autotube_session")
         if auth_header and auth_header.startswith("Bearer "):
             token = auth_header.split(" ")[1]
+        elif not token:
+            token = request.query_params.get("token")
 
         if token:
             raise HTTPException(status_code=401, detail="Invalid token")
@@ -55,14 +57,18 @@ class AuthProvider:
             auth_header = request.headers.get("Authorization")
             if auth_header and auth_header.startswith("Bearer "):
                 token = auth_header.split(" ")[1]
+            elif not token:
+                token = request.query_params.get("token")
             sub = token if token else "default-user"
             return {"sub": sub, "email": f"{sub}@local.dev"}
 
-        # 2. Check Bearer Token (header or query param)
+        # 2. Check Bearer Token (header, cookie, or query param)
         auth_header = request.headers.get("Authorization")
         token = request.cookies.get("autotube_session")
         if auth_header and auth_header.startswith("Bearer "):
             token = auth_header.split(" ")[1]
+        elif not token:
+            token = request.query_params.get("token")
 
         # 3. Check X-API-Key if configured
         if self.api_key:

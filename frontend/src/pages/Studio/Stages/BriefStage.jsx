@@ -130,7 +130,7 @@ export default function BriefStage({ selectedIdea, setSelectedIdea, contentType,
           <CardHeader
             title={
               <CardTitle icon={<Icon name="sparkles" className="text-brand-red" size={18} />}>
-                Quick Create [DEBUG: C={String(contentType)}, D={String(duration)}]
+                Quick Create
               </CardTitle>
             }
           />
@@ -177,10 +177,10 @@ export default function BriefStage({ selectedIdea, setSelectedIdea, contentType,
                         key={t.id}
                         type="button"
                         onClick={() => setContentType(t.id)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors select-none ${
+                        className={`px-3.5 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all duration-200 select-none ${
                           contentType === t.id
-                            ? 'bg-brand-red text-white shadow-sm'
-                            : 'bg-elevated text-text-secondary hover:text-text-primary border border-border'
+                            ? 'bg-brand-red text-white shadow-md shadow-brand-red/30 ring-1 ring-brand-red/50'
+                            : 'bg-elevated/80 text-text-primary border-2 border-border-strong hover:border-brand-red/50 hover:bg-elevated-hover hover:shadow-sm'
                         }`}
                       >
                         <Icon name={t.icon} size={13} />
@@ -202,14 +202,14 @@ export default function BriefStage({ selectedIdea, setSelectedIdea, contentType,
                           key={d.id}
                           type="button"
                           onClick={() => setDuration(d.id)}
-                          className={`flex-1 py-1.5 px-2 rounded-lg text-center transition-colors select-none ${
+                          className={`flex-1 py-2 px-2.5 rounded-lg text-center transition-all select-none ${
                             duration == d.id
-                              ? 'bg-elevated border border-brand-red text-brand-red font-bold'
-                              : 'bg-surface-input border border-border text-text-muted hover:text-text-secondary'
+                              ? 'bg-brand-red/15 border-2 border-brand-red text-white font-bold shadow-sm shadow-brand-red/20'
+                              : 'bg-elevated/80 border-2 border-border-strong text-text-primary hover:border-brand-red/40 hover:bg-elevated-hover'
                           }`}
                         >
                           <div className="text-xs font-bold">{d.label}</div>
-                          <div className="text-[10px] opacity-75 font-mono">{d.desc}</div>
+                          <div className="text-[10px] text-text-muted font-mono">{d.desc}</div>
                         </button>
                       ))}
                     </div>

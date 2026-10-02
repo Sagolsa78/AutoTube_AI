@@ -70,6 +70,7 @@ export default function PipelineVisualizer({
       desc: video?.status === 'uploaded' ? 'Live on YT' : 'Unpublished',
       icon: 'youtube',
       status: video?.status === 'uploaded' ? 'completed' : 'pending',
+      link: video?.youtube_url || null,
     }
   ];
 
@@ -88,10 +89,17 @@ export default function PipelineVisualizer({
           return (
             <div
               key={step.id}
-              onClick={() => onStepClick && onStepClick(step.id)}
+              onClick={() => {
+                if (step.link) {
+                  window.open(step.link, '_blank', 'noopener,noreferrer');
+                } else if (onStepClick) {
+                  onStepClick(step.id);
+                }
+              }}
               className={`flex flex-col items-center text-center gap-2 relative z-10 transition-all ${
-                onStepClick ? 'cursor-pointer group' : ''
+                step.link || onStepClick ? 'cursor-pointer group' : ''
               }`}
+              title={step.link ? `Open on YouTube` : ''}
             >
               {/* Step Circle */}
               <div
@@ -103,7 +111,7 @@ export default function PipelineVisualizer({
                       : isFailed
                         ? 'bg-danger text-white'
                         : 'bg-elevated border border-border text-text-muted'
-                }`}
+                } ${step.link ? 'group-hover:ring-2 group-hover:ring-brand-red/50' : ''}`}
               >
                 {isCompleted ? (
                   <Icon name="check" size={14} className="stroke-[3]" />
@@ -125,7 +133,7 @@ export default function PipelineVisualizer({
                         : isFailed
                           ? 'text-danger'
                           : 'text-text-muted'
-                  }`}
+                  } ${step.link ? 'group-hover:text-brand-red' : ''}`}
                 >
                   {step.label}
                 </span>

@@ -12,7 +12,7 @@ import PipelineVisualizer from '../components/pipeline/PipelineVisualizer';
 import { toast } from 'sonner';
 import { useChannel } from '../contexts/ChannelContext';
 
-const CustomPlayer = ({ src }) => {
+const CustomPlayer = ({ src, onPlaybackError }) => {
   const videoRef = useRef(null);
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(false);
@@ -93,12 +93,18 @@ const CustomPlayer = ({ src }) => {
         onLoadedData={() => setBuffering(false)}
         onWaiting={() => setBuffering(true)}
         onPlaying={() => setBuffering(false)}
-        onError={() => setVideoError(true)}
+        onError={(e) => {
+          console.warn('Video element playback error on src:', src, e);
+          if (onPlaybackError) {
+            onPlaybackError();
+          } else {
+            setVideoError(true);
+          }
+        }}
         muted={muted}
         onClick={togglePlay}
         playsInline
         preload="auto"
-        crossOrigin="anonymous"
       />
 
       {/* Buffering spinner */}
@@ -170,40 +176,61 @@ const CustomPlayer = ({ src }) => {
 const VideoPreviewWrapper = ({ videoId }) => {
   const [src, setSrc] = useState(null);
   const [error, setError] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
+  const [usedFallback, setUsedFallback] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
     setSrc(null);
     setError(false);
-    api.getVideoPreviewUrl(videoId)
-      .then(res => {
-        if (isMounted) {
-          if (res.url.startsWith('/')) {
-            // For local URLs without JWT, we must fetch as blob and create object URL
-            // because <video src="..."> doesn't pass the Bearer token in headers.
-            const token = localStorage.getItem('autotube_auth_token');
-            fetch(`${api.getApiBase().replace('/api', '')}${res.url}`, {
-              headers: { 'Authorization': `Bearer ${token}` }
-            })
-            .then(blobRes => {
-                if (!blobRes.ok) throw new Error('Preview fetch failed');
-                return blobRes.blob();
-            })
-            .then(blob => {
-                if (isMounted) setSrc(URL.createObjectURL(blob));
-            })
-            .catch(() => { if (isMounted) setError(true); });
-          } else {
-            // S3/R2 presigned URL can be used directly
-            setSrc(res.url);
-          }
+    setUsedFallback(false);
+
+    const loadPreview = async () => {
+      try {
+        const res = await api.getVideoPreviewUrl(videoId);
+        if (!isMounted || !res?.url) {
+          if (isMounted) setError(true);
+          return;
         }
-      })
-      .catch(() => {
-        if (isMounted) setError(true);
-      });
-    return () => { isMounted = false; };
-  }, [videoId]);
+
+        const token = localStorage.getItem('autotube_auth_token');
+        if (res.url.startsWith('/')) {
+          // Local/internal preview route — stream directly with token query param
+          const separator = res.url.includes('?') ? '&' : '?';
+          const fullUrl = `${api.getApiBase().replace('/api', '')}${res.url}${token ? `${separator}token=${encodeURIComponent(token)}` : ''}`;
+          setSrc(fullUrl);
+        } else {
+          // S3/R2 presigned URL can be used directly without crossOrigin
+          setSrc(res.url);
+        }
+      } catch (err) {
+        console.warn(`Video preview load failed (attempt ${retryCount + 1}):`, err);
+        // Fallback directly to backend proxy streaming endpoint
+        const token = localStorage.getItem('autotube_auth_token');
+        const fallbackUrl = `${api.getApiBase()}/videos/${videoId}/preview${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+        setSrc(fallbackUrl);
+        setUsedFallback(true);
+      }
+    };
+
+    loadPreview();
+    return () => {
+      isMounted = false;
+    };
+  }, [videoId, retryCount]);
+
+  const handlePlaybackError = () => {
+    // If direct presigned URL had CORS, expired link, or network playback error, fallback to proxy stream
+    if (!usedFallback) {
+      console.info('Switching to backend proxy streaming preview for video:', videoId);
+      const token = localStorage.getItem('autotube_auth_token');
+      const fallbackUrl = `${api.getApiBase()}/videos/${videoId}/preview${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+      setUsedFallback(true);
+      setSrc(fallbackUrl);
+    } else {
+      setError(true);
+    }
+  };
 
   if (error) {
     return (
@@ -211,6 +238,20 @@ const VideoPreviewWrapper = ({ videoId }) => {
         <div className="flex flex-col items-center gap-3 text-center p-6">
           <Icon name="alert-triangle" size={36} className="text-danger" />
           <span className="text-sm font-bold text-text-primary">Preview Unavailable</span>
+          <span className="text-xs text-text-muted max-w-[200px]">
+            {retryCount >= 2
+              ? 'Video file may still be processing or uploading to storage.'
+              : 'Could not load preview. Click retry to try again.'}
+          </span>
+          {retryCount < 3 && (
+            <button
+              type="button"
+              className="btn btn-secondary text-xs px-4 py-2 mt-2"
+              onClick={() => { setError(false); setRetryCount(r => r + 1); }}
+            >
+              <Icon name="refresh-cw" size={14} className="mr-1" /> Retry
+            </button>
+          )}
         </div>
       </div>
     );
@@ -224,7 +265,7 @@ const VideoPreviewWrapper = ({ videoId }) => {
     );
   }
 
-  return <CustomPlayer src={src} />;
+  return <CustomPlayer src={src} onPlaybackError={handlePlaybackError} />;
 };
 
 export default function Videos({ filter }) {
@@ -557,13 +598,27 @@ export default function Videos({ filter }) {
                 </>
               )}
               {['approved', 'uploaded'].includes(activeVideo.status) && (
-                <button
-                  type="button"
-                  className="btn btn-primary flex-1 py-3 text-sm font-bold shadow-brand-glow"
-                  onClick={() => setUploadModal(activeVideo)}
-                >
-                  <Icon name="upload" size={16} /> Publish to YouTube
-                </button>
+                <>
+                  {activeVideo.youtube_url ? (
+                    <a
+                      href={activeVideo.youtube_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn btn-primary flex-1 py-3 text-sm font-bold shadow-brand-glow inline-flex items-center justify-center gap-2 no-underline"
+                    >
+                      <Icon name="youtube" size={16} /> View on YouTube
+                      <Icon name="external-link" size={13} className="opacity-70" />
+                    </a>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn btn-primary flex-1 py-3 text-sm font-bold shadow-brand-glow"
+                      onClick={() => setUploadModal(activeVideo)}
+                    >
+                      <Icon name="upload" size={16} /> Publish to YouTube
+                    </button>
+                  )}
+                </>
               )}
 
               {['ready', 'approved', 'uploaded'].includes(activeVideo.status) && (
@@ -707,6 +762,20 @@ export default function Videos({ filter }) {
                     <div className="text-xs font-mono text-info">
                       {(activeVideo.hashtags || []).map(t => `#${t}`).join(' ')}
                     </div>
+                    {activeVideo.youtube_url && (
+                      <div className="pt-2 border-t border-border/40">
+                        <a
+                          href={activeVideo.youtube_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-red hover:text-brand-red-hover transition-colors"
+                        >
+                          <Icon name="youtube" size={14} />
+                          <span>Open on YouTube</span>
+                          <Icon name="external-link" size={12} className="opacity-60" />
+                        </a>
+                      </div>
+                    )}
                   </div>
                 )}
 

@@ -154,6 +154,10 @@ class VideoOut(BaseModel):
     duration_mode: str | None = "auto"
     selected_voice: str | None = None
 
+    # Publication / YouTube
+    youtube_id: str | None = None
+    youtube_url: str | None = None
+
     created_at: str
 
 
@@ -217,7 +221,11 @@ async def list_videos(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    q = select(Video).where(Video.user_id == user.id)
+    q = (
+        select(Video)
+        .where(Video.user_id == user.id)
+        .options(selectinload(Video.publication))
+    )
     if channel_id:
         q = (
             q.join(Script, Video.script_id == Script.id)
@@ -988,7 +996,15 @@ async def resume_video(
     return _fmt(v)
 
 
-def _fmt(v: Video) -> dict:
+def _fmt(v: Video, publication=None) -> dict:
+    # Extract publication info if available (either passed in or from relationship)
+    pub = publication
+    if pub is None and hasattr(v, "publication") and v.publication is not None:
+        pub = v.publication
+
+    yt_id = pub.youtube_id if pub else None
+    yt_url = pub.url if pub else None
+
     return {
         "id": v.id,
         "script_id": v.script_id,
@@ -1013,5 +1029,7 @@ def _fmt(v: Video) -> dict:
         "visual_strategy": getattr(v, "visual_strategy", "auto"),
         "duration_mode": getattr(v, "duration_mode", "auto"),
         "selected_voice": getattr(v, "selected_voice", None),
+        "youtube_id": yt_id,
+        "youtube_url": yt_url,
         "created_at": str(v.created_at),
     }
