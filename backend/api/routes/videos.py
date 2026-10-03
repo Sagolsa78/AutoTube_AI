@@ -246,7 +246,9 @@ async def get_render_progress(
 ):
     """Lightweight endpoint for polling render progress."""
     v = await db.scalar(
-        select(Video).where(Video.id == video_id, Video.user_id == user.id)
+        select(Video)
+        .options(selectinload(Video.publication))
+        .where(Video.id == video_id, Video.user_id == user.id)
     )
     if not v:
         raise HTTPException(404, "Video not found")
@@ -433,7 +435,9 @@ async def get_video(
     db: AsyncSession = Depends(get_db),
 ):
     v = await db.scalar(
-        select(Video).where(Video.id == video_id, Video.user_id == user.id)
+        select(Video)
+        .options(selectinload(Video.publication))
+        .where(Video.id == video_id, Video.user_id == user.id)
     )
     if not v:
         raise HTTPException(404, "Video not found")
@@ -448,7 +452,9 @@ async def update_video(
     db: AsyncSession = Depends(get_db),
 ):
     v = await db.scalar(
-        select(Video).where(Video.id == video_id, Video.user_id == user.id)
+        select(Video)
+        .options(selectinload(Video.publication))
+        .where(Video.id == video_id, Video.user_id == user.id)
     )
     if not v:
         raise HTTPException(404, "Video not found")
@@ -470,7 +476,9 @@ async def generate_metadata_endpoint(
     db: AsyncSession = Depends(get_db),
 ):
     v = await db.scalar(
-        select(Video).where(Video.id == video_id, Video.user_id == user.id)
+        select(Video)
+        .options(selectinload(Video.publication))
+        .where(Video.id == video_id, Video.user_id == user.id)
     )
     if not v:
         raise HTTPException(404, "Video not found")
@@ -636,7 +644,9 @@ async def get_preview_url(
     from datetime import datetime, timedelta, timezone
 
     v = await db.scalar(
-        select(Video).where(Video.id == video_id, Video.user_id == user.id)
+        select(Video)
+        .options(selectinload(Video.publication))
+        .where(Video.id == video_id, Video.user_id == user.id)
     )
     if not v:
         raise HTTPException(404, "Video not found")
@@ -689,7 +699,9 @@ async def download_video(
     For R2/S3: returns a presigned download URL.
     """
     v = await db.scalar(
-        select(Video).where(Video.id == video_id, Video.user_id == user.id)
+        select(Video)
+        .options(selectinload(Video.publication))
+        .where(Video.id == video_id, Video.user_id == user.id)
     )
     if not v:
         raise HTTPException(404, "Video not found")
@@ -760,7 +772,9 @@ async def approve_video(
     db: AsyncSession = Depends(get_db),
 ):
     v = await db.scalar(
-        select(Video).where(Video.id == video_id, Video.user_id == user.id)
+        select(Video)
+        .options(selectinload(Video.publication))
+        .where(Video.id == video_id, Video.user_id == user.id)
     )
     if not v:
         raise HTTPException(404, "Video not found")
@@ -826,7 +840,9 @@ async def reject_video(
     db: AsyncSession = Depends(get_db),
 ):
     v = await db.scalar(
-        select(Video).where(Video.id == video_id, Video.user_id == user.id)
+        select(Video)
+        .options(selectinload(Video.publication))
+        .where(Video.id == video_id, Video.user_id == user.id)
     )
     if not v:
         raise HTTPException(404, "Video not found")
@@ -844,7 +860,9 @@ async def upload_video(
 ):
     """Upload an approved video to YouTube as private."""
     v = await db.scalar(
-        select(Video).where(Video.id == video_id, Video.user_id == user.id)
+        select(Video)
+        .options(selectinload(Video.publication))
+        .where(Video.id == video_id, Video.user_id == user.id)
     )
     if not v:
         raise HTTPException(404, "Video not found")
@@ -950,7 +968,9 @@ async def cancel_video(
     db: AsyncSession = Depends(get_db),
 ):
     v = await db.scalar(
-        select(Video).where(Video.id == video_id, Video.user_id == user.id)
+        select(Video)
+        .options(selectinload(Video.publication))
+        .where(Video.id == video_id, Video.user_id == user.id)
     )
     if not v:
         raise HTTPException(404, "Video not found")
@@ -967,7 +987,9 @@ async def pause_video(
     db: AsyncSession = Depends(get_db),
 ):
     v = await db.scalar(
-        select(Video).where(Video.id == video_id, Video.user_id == user.id)
+        select(Video)
+        .options(selectinload(Video.publication))
+        .where(Video.id == video_id, Video.user_id == user.id)
     )
     if not v:
         raise HTTPException(404, "Video not found")
@@ -985,7 +1007,9 @@ async def resume_video(
     db: AsyncSession = Depends(get_db),
 ):
     v = await db.scalar(
-        select(Video).where(Video.id == video_id, Video.user_id == user.id)
+        select(Video)
+        .options(selectinload(Video.publication))
+        .where(Video.id == video_id, Video.user_id == user.id)
     )
     if not v:
         raise HTTPException(404, "Video not found")
