@@ -2,17 +2,24 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Icon from '../Icon';
 
+import { navConfig } from '../../config/navConfig';
+
+const baseCommands = navConfig.flatMap(section =>
+  section.items.map(item => ({
+    id: item.id,
+    title: item.label,
+    subtitle: `Go to ${section.label ? section.label + ' / ' : ''}${item.label}`,
+    icon: item.icon,
+    path: item.query ? `${item.path}${item.query}` : item.path,
+    section: section.label || 'Navigation'
+  }))
+);
+
 const COMMANDS = [
-  { id: 'create', title: 'Create New Video', subtitle: 'Launch Studio workflow', icon: 'plus-circle', path: '/app/create', section: 'Creation' },
-  { id: 'ideas', title: 'Idea Generator', subtitle: 'Explore viral concepts and trends', icon: 'lightbulb', path: '/app/ideas', section: 'Creation' },
-  { id: 'scripts', title: 'Script Studio', subtitle: 'Scene drafting and editing', icon: 'fileText', path: '/app/scripts', section: 'Creation' },
-  { id: 'videos', title: 'Video Library', subtitle: 'Review rendered shorts and drafts', icon: 'video', path: '/app/videos', section: 'Production' },
-  { id: 'publications', title: 'Publishing & Schedule', subtitle: 'YouTube uploads and calendar', icon: 'youtube', path: '/app/publications', section: 'Publishing' },
-  { id: 'analytics', title: 'Channel Analytics', subtitle: 'Monetization & view telemetry', icon: 'barChart', path: '/app/analytics', section: 'Insights' },
-  { id: 'channels', title: 'Channels & YouTube', subtitle: 'Manage active channels and OAuth', icon: 'hash', path: '/app/channels', section: 'System' },
-  { id: 'settings', title: 'Settings & Profile', subtitle: 'AI models, watermarks, brand setup', icon: 'settings', path: '/app/profile', section: 'System' },
-  { id: 'health', title: 'System Health & Workers', subtitle: 'Compute plane and cluster diagnostics', icon: 'heart', path: '/app/health', section: 'Operator' },
-  { id: 'logs', title: 'Activity Logs', subtitle: 'Backend log stream', icon: 'activity', path: '/app/logs', section: 'Operator' },
+  ...baseCommands,
+  { id: 'action-create', title: 'New Video', subtitle: 'Launch Studio workflow', icon: 'plus', path: '/app/create', section: 'Actions' },
+  { id: 'action-ideas', title: 'Generate Ideas', subtitle: 'Explore viral concepts and trends', icon: 'lightbulb', path: '/app/ideas', section: 'Actions' },
+  { id: 'action-retry', title: 'Retry Failed Renders', subtitle: 'Attempt to render failed videos', icon: 'rotate-cw', path: '/app/videos?filter=failed', section: 'Actions' },
 ];
 
 export default function CommandPalette({ isOpen, onClose }) {

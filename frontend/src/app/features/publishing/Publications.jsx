@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { api } from '../../../services/api';
 import Icon from '../../../components/Icon';
 import GridContainer from '../../../components/layout/GridContainer';
@@ -8,30 +8,32 @@ import StatusBadge from '../../../components/StatusBadge';
 import EmptyState from '../../../components/EmptyState';
 import Skeleton from '../../../components/Skeleton';
 import Button from '../../../components/Button';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
+import useContentStore from '../../../store/contentStore';
+import { useChannel } from '../../../contexts/ChannelContext';
 
 export default function Publications() {
-  const [videos, setVideos] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { activeChannelId } = useChannel();
+  const { publications, fetchContent, loading } = useContentStore();
+  const [searchParams] = useSearchParams();
+  const filter = searchParams.get('filter') || 'live';
 
   useEffect(() => {
-    let isMounted = true;
-    (async () => {
-      try {
-        const all = await api.getVideos();
-        if (!isMounted) return;
-        setVideos((all || [])
-          .filter(v => v.status === 'uploaded')
-          .sort((a, b) => new Date(b.uploaded_at || b.created_at) - new Date(a.uploaded_at || a.created_at))
-        );
-      } catch (e) {
-        console.error(e);
-      } finally {
-        if (isMounted) setLoading(false);
-      }
-    })();
-    return () => { isMounted = false; };
-  }, []);
+    fetchContent(activeChannelId);
+  }, [activeChannelId, fetchContent]);
+
+  // Sort and filter publications
+  const filteredPubs = publications.filter(p => {
+    if (filter === 'queue') {
+       return p.status === 'scheduled' || p.status === 'queued' || p.video?.status === 'approved';
+    }
+    return p.status === 'published' || p.status === 'live' || p.video?.status === 'uploaded';
+  });
+
+  const sortedPubs = [...filteredPubs].sort((a, b) =>
+    new Date(b.scheduled_at || b.published_at || b.video?.created_at || Date.now()) -
+    new Date(a.scheduled_at || a.published_at || a.video?.created_at || Date.now())
+  );
 
   if (loading) {
     return (
@@ -52,20 +54,20 @@ export default function Publications() {
     <GridContainer>
       <div className="space-y-6">
         <PageHeader
-          title="Publications"
-          description="Verified YouTube Shorts published directly from your automated pipeline."
+          title={filter === 'queue' ? "Publishing Queue" : "Publications"}
+          description={filter === 'queue' ? "Content scheduled or waiting to be published." : "Verified YouTube Shorts published directly from your automated pipeline."}
           badge={
-            <span className="text-xs font-mono font-semibold text-success bg-success/10 border border-success/30 px-2.5 py-1 rounded">
-              {videos.length} Published Live
+            <span className={`text-xs font-mono font-semibold px-2.5 py-1 rounded ${filter === 'queue' ? 'text-warning bg-warning/10 border border-warning/30' : 'text-success bg-success/10 border border-success/30'}`}>
+              {sortedPubs.length} {filter === 'queue' ? 'In Queue' : 'Published Live'}
             </span>
           }
         />
 
-        {videos.length === 0 ? (
+        {sortedPubs.length === 0 ? (
           <EmptyState
             icon="youtube"
-            title="No Published Videos Yet"
-            description="You have not published any Shorts to YouTube. Review and approve rendered videos in the Review Queue to publish."
+            title={filter === 'queue' ? "Queue is Empty" : "No Published Videos Yet"}
+            description={filter === 'queue' ? "You have no videos scheduled or waiting to be published." : "You have not published any Shorts to YouTube. Review and approve rendered videos in the Review Queue to publish."}
             action={
               <Link to="/app/videos">
                 <Button variant="primary" size="sm" icon="video">
@@ -76,13 +78,15 @@ export default function Publications() {
           />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {videos.map(v => (
-              <Card key={v.id} variant="surface" className="flex flex-col justify-between overflow-hidden p-0">
+            {sortedPubs.map(p => {
+              const v = p.video;
+              return (
+              <Card key={p.id} variant="surface" className="flex flex-col justify-between overflow-hidden p-0">
                 {/* Card Top Banner */}
                 <div className="bg-elevated/70 px-4 py-2.5 border-b border-border flex justify-between items-center text-xs">
-                  <StatusBadge status="uploaded" size="sm" />
+                  <StatusBadge status={filter === 'queue' ? 'approved' : 'uploaded'} size="sm" />
                   <span className="font-mono text-text-muted text-[11px]">
-                    {v.uploaded_at ? new Date(v.uploaded_at).toLocaleDateString() : 'Published'}
+                    {p.scheduled_at ? new Date(p.scheduled_at).toLocaleDateString() : p.published_at ? new Date(p.published_at).toLocaleDateString() : filter === 'queue' ? 'Queued' : 'Published'}
                   </span>
                 </div>
 
@@ -98,7 +102,7 @@ export default function Publications() {
 
                     <div className="flex-1 min-w-0 space-y-1.5">
                       <h3 className="font-bold text-sm text-text-primary line-clamp-2 leading-tight">
-                        {v.selected_title || v.title || 'Untitled Short'}
+                        {v?.derivedTitle || p.title || 'Untitled Short'}
                       </h3>
                       {v.niche && (
                         <span className="inline-block bg-elevated border border-border text-text-muted text-[10px] font-mono uppercase px-1.5 py-0.5 rounded font-bold">
@@ -127,10 +131,10 @@ export default function Publications() {
                   )}
                 </div>
 
-                {(v.youtube_url || v.youtube_id) && (
+                {(p.youtube_url || v?.youtube_id) && (
                   <div className="px-5 py-3 border-t border-border bg-elevated/30 flex justify-end">
                     <a
-                      href={v.youtube_url || `https://youtube.com/shorts/${v.youtube_id}`}
+                      href={p.youtube_url || `https://youtube.com/shorts/${v?.youtube_id}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-red hover:text-brand-red-hover transition-colors"
@@ -142,7 +146,8 @@ export default function Publications() {
                   </div>
                 )}
               </Card>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

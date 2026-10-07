@@ -1,16 +1,12 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import Icon from '../Icon';
-import { useChannel } from '../../contexts/ChannelContext';
 import JobCenterDropdown from '../jobs/JobCenterDropdown';
 import CommandPalette from '../navigation/CommandPalette';
 
 export default function TopBar() {
   const loc = useLocation();
-  const { channels, activeChannel, setActiveChannelId, loadingChannels } = useChannel();
-  const [channelDropdownOpen, setChannelDropdownOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
-  const channelDropdownRef = useRef(null);
 
   const titles = {
     '/app': 'Command Center',
@@ -42,17 +38,6 @@ export default function TopBar() {
     }
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, []);
-
-  // Close dropdown on click outside
-  useEffect(() => {
-    function handleClickOutside(event) {
-      if (channelDropdownRef.current && !channelDropdownRef.current.contains(event.target)) {
-        setChannelDropdownOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   return (
@@ -95,83 +80,11 @@ export default function TopBar() {
           </button>
         </div>
 
-        {/* Right: Persistent Channel Switcher + Job Center + Actions */}
+        {/* Right: Job Center + Actions */}
         <div className="flex items-center gap-2.5 ml-auto">
 
           {/* Global Job Center */}
           <JobCenterDropdown />
-
-          {/* Persistent Channel Switcher */}
-          {!loadingChannels && channels.length > 0 && (
-            <div className="relative" ref={channelDropdownRef}>
-              <button
-                onClick={() => setChannelDropdownOpen(!channelDropdownOpen)}
-                className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-surface hover:bg-surface-hover border border-border transition-colors text-xs font-medium select-none"
-                aria-label="Active Channel"
-              >
-                <div className="w-5 h-5 rounded bg-brand-red flex items-center justify-center text-white text-[10px] font-bold shrink-0">
-                  {activeChannel?.name?.charAt(0).toUpperCase() || 'C'}
-                </div>
-                <span className="hidden sm:inline-block max-w-[110px] truncate text-text-primary font-semibold">
-                  {activeChannel?.name || 'Channel'}
-                </span>
-                <Icon name="chevron-down" size={13} className="text-text-muted shrink-0" />
-              </button>
-
-              {channelDropdownOpen && (
-                <div className="absolute right-0 mt-2 w-60 bg-surface border border-border rounded-xl shadow-dropdown py-1 z-50 animate-in fade-in-50 zoom-in-95">
-                  <div className="px-3 py-2 text-[11px] font-bold text-text-muted uppercase tracking-wider border-b border-border/80">
-                    Active Channel
-                  </div>
-                  <div className="max-h-60 overflow-y-auto p-1 divide-y divide-border/30">
-                    {channels.map(c => (
-                      <button
-                        key={c.id}
-                        onClick={() => {
-                          setActiveChannelId(c.id);
-                          setChannelDropdownOpen(false);
-                        }}
-                        className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs text-left transition-colors ${
-                          activeChannel?.id === c.id
-                            ? 'bg-elevated text-brand-red font-bold'
-                            : 'text-text-primary hover:bg-surface-hover'
-                        }`}
-                      >
-                        <div className="w-5 h-5 rounded bg-surface border border-border flex items-center justify-center text-[10px] font-bold shrink-0">
-                          {c.name.charAt(0).toUpperCase()}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate">{c.name}</div>
-                          <div className="text-[10px] text-text-muted truncate capitalize">{c.niche || 'general'}</div>
-                        </div>
-                        {activeChannel?.id === c.id && <Icon name="check" size={14} className="ml-auto text-brand-red" />}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="border-t border-border/80 p-1">
-                    <Link
-                      to="/app/channels"
-                      onClick={() => setChannelDropdownOpen(false)}
-                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs text-text-secondary hover:text-text-primary hover:bg-surface-hover transition-colors"
-                    >
-                      <Icon name="plus" size={13} />
-                      <span>Manage & Connect Channel</span>
-                    </Link>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Primary Quick Create CTA */}
-          <Link
-            to="/app/create"
-            className="btn btn-primary btn-sm flex items-center gap-1.5 shadow-brand-glow"
-          >
-            <Icon name="plus" size={14} />
-            <span className="hidden sm:inline">Create Short</span>
-            <span className="sm:hidden">Create</span>
-          </Link>
 
           {/* Settings / Profile Link */}
           <Link
