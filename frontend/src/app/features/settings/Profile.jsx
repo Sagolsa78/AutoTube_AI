@@ -587,7 +587,7 @@ export default function Profile() {
                       value={titleStylePreference}
                       onChange={e => setTitleStylePreference(e.target.value)}
                     >
-                      <option value="curiosity">Curiosity Gap ("The Secret Behind..."../../../option>
+                      <option value="curiosity">Curiosity Gap ("The Secret Behind...")</option>
                       <option value="factual">Factual & Punchy</option>
                       <option value="clickbait">High-Stakes Hook</option>
                     </select>

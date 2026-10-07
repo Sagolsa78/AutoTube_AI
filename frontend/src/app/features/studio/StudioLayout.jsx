@@ -1,41 +1,98 @@
-import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import Icon from '../../../components/Icon';
 import useStudioStore from '../../../store/studioStore';
 import PublishComposer from '../publishing/PublishComposer';
 import CopilotPanel from './components/CopilotPanel';
+import { api } from '../../../services/api';
+import { toast } from 'sonner';
 
 import BriefView from './views/BriefView';
 import StoryboardView from './views/StoryboardView';
 import ScriptView from './views/ScriptView';
+import VoiceView from './views/VoiceView';
 import OutputView from './views/OutputView';
-
-// We will mock the other views for now until they are built
-function PlaceholderView({ name }) {
-  return <div className="p-8 flex items-center justify-center text-text-muted h-full">[{name} View Workspace]</div>;
-}
 
 export default function StudioLayout() {
   const navigate = useNavigate();
-  // Using the store we built previously
-  const script = useStudioStore((s) => s.script);
+  const [searchParams] = useSearchParams();
 
-  const [showPublish, setShowPublish] = React.useState(false);
-  const [showCopilot, setShowCopilot] = React.useState(false);
+  const {
+    script,
+    project,
+    ui: { activeStage, showCopilot },
+    setProject,
+    setScript,
+    setEditingScenes,
+    setAudio,
+    setRender,
+    setPublishing,
+    setActiveStage,
+    toggleCopilot
+  } = useStudioStore();
 
-  // New pipeline
+  const [showPublish, setShowPublish] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+
+  useEffect(() => {
+    const restoreProject = async () => {
+      const scriptId = searchParams.get('script');
+      const ideaId = searchParams.get('idea');
+      const videoId = searchParams.get('video');
+
+      if (!scriptId && !ideaId && !videoId) return;
+
+      setRestoring(true);
+      try {
+        if (videoId) {
+          const video = await api.getVideo(videoId);
+          setRender({ videoId: video.id, status: video.status, stage: video.render_stage });
+          setProject({ id: video.id, title: video.selected_title || 'Restored Video' });
+          if (video.script_id) {
+            const scriptData = await api.getScript(video.script_id);
+            setScript(scriptData);
+            setProject({ title: scriptData.topic || video.selected_title });
+          }
+          // Assuming publishing metadata fetch if needed
+          setActiveStage('output');
+        } else if (scriptId) {
+          const scriptData = await api.getScript(scriptId);
+          setScript(scriptData);
+          setProject({ title: scriptData.topic || 'Restored Script' });
+          setActiveStage('script');
+        } else if (ideaId) {
+          const ideaData = await api.getIdea(ideaId);
+          setProject({ title: ideaData.topic || 'Restored Idea' });
+          setActiveStage('concept');
+        }
+      } catch (err) {
+        toast.error('Failed to restore project context: ' + err.message);
+      } finally {
+        setRestoring(false);
+      }
+    };
+    restoreProject();
+  }, [searchParams]);
+
   const pipeline = [
     { id: 'concept', label: 'IDEA' },
     { id: 'script', label: 'SCRIPT' },
-    { id: 'storyboard', label: 'STORYBOARD' },
     { id: 'voice', label: 'VOICE' },
+    { id: 'storyboard', label: 'STORYBOARD' },
     { id: 'output', label: 'OUTPUT' }
   ];
 
-  const [activeStage, setActiveStage] = React.useState('concept');
+  if (restoring) {
+    return (
+      <div className="flex flex-col h-full bg-canvas items-center justify-center animate-in fade-in">
+        <Icon name="loader" className="animate-spin text-brand-red mb-4" size={32} />
+        <p className="text-sm font-bold text-text-secondary">Restoring project context...</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="flex flex-col h-screen bg-canvas animate-in fade-in z-50 fixed inset-0">
+    <div className="flex flex-col h-full bg-canvas animate-in fade-in">
 
       {/* ── Studio Header ────────────────────────────────────────── */}
       <header className="h-14 bg-surface border-b border-border px-4 flex items-center justify-between shrink-0">
@@ -51,17 +108,18 @@ export default function StudioLayout() {
 
           <input
             type="text"
-            defaultValue={script?.title || 'Untitled Project'}
+            value={project.title || script?.title || 'Untitled Project'}
+            onChange={(e) => setProject({ title: e.target.value })}
             className="bg-transparent border-none text-sm font-bold text-text-primary placeholder:text-text-muted focus:outline-none hover:bg-elevated/50 px-2 py-1 rounded transition-colors w-64"
           />
         </div>
 
         <div className="flex items-center gap-2">
           <span className="text-[10px] text-text-muted font-mono uppercase mr-4">
-             Draft Saved
+             {project.status === 'saving' ? 'Saving...' : 'Draft Saved'}
           </span>
           <button
-            onClick={() => setShowCopilot(!showCopilot)}
+            onClick={toggleCopilot}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 border transition-colors ${
               showCopilot ? 'bg-brand-red/10 border-brand-red/30 text-brand-red' : 'bg-surface border-border text-text-secondary hover:text-text-primary'
             }`}
@@ -82,7 +140,7 @@ export default function StudioLayout() {
 
       {showPublish && (
         <PublishComposer
-          video={{ title: script?.title, description: script?.topic }}
+          video={typeof showPublish === 'object' ? { ...showPublish } : { ...project, id: project.id || script?.id, title: project.title || script?.topic, description: script?.topic }}
           onClose={() => setShowPublish(false)}
         />
       )}
@@ -130,13 +188,13 @@ export default function StudioLayout() {
 
       {/* ── Studio Workspace ─────────────────────────────────────── */}
       <div className="flex-1 flex overflow-hidden">
-        {activeStage === 'concept' && <BriefView onNext={() => setActiveStage('script')} />}
-        {activeStage === 'script' && <ScriptView onNext={() => setActiveStage('storyboard')} />}
-        {activeStage === 'storyboard' && <StoryboardView />}
-        {activeStage === 'voice' && <PlaceholderView name="Voice & Rendering" />}
-        {activeStage === 'output' && <OutputView onPublish={() => setShowPublish(true)} />}
+        {activeStage === 'concept' && <BriefView onNext={() => setActiveStage('script')} onAutoPilot={() => setActiveStage('output')} />}
+        {activeStage === 'script' && <ScriptView onNext={() => setActiveStage('voice')} />}
+        {activeStage === 'voice' && <VoiceView onNext={() => setActiveStage('storyboard')} />}
+        {activeStage === 'storyboard' && <StoryboardView onNext={() => setActiveStage('output')} />}
+        {activeStage === 'output' && <OutputView onPublish={(renderedVideoInfo) => setShowPublish(renderedVideoInfo || true)} />}
 
-        <CopilotPanel isOpen={showCopilot} onClose={() => setShowCopilot(false)} />
+        <CopilotPanel isOpen={showCopilot} onClose={() => toggleCopilot()} />
       </div>
 
     </div>

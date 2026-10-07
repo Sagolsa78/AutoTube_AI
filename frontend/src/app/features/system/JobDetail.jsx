@@ -239,11 +239,11 @@ export default function JobDetail() {
                 </div>
                 <div className="flex justify-between py-1.5 border-b border-border/50">
                   <span className="text-text-muted">Caption Style</span>
-                  <span className="font-semibold text-text-primary capitalize">{video.caption_style || 'Default"></span>
+                  <span className="font-semibold text-text-primary capitalize">{video.caption_style || 'Default'}</span>
                 </div>
                 <div className="flex justify-between py-1.5 border-b border-border/50">
                   <span className="text-text-muted">Voice Talent</span>
-                  <span className="font-semibold text-text-primary">{video.voice_override || 'Christopher (US)"></span>
+                  <span className="font-semibold text-text-primary">{video.voice_override || 'Christopher (US)'}</span>
                 </div>
                 <div className="flex justify-between py-1.5">
                   <span className="text-text-muted">Aspect Ratio</span>

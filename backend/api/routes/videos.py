@@ -1097,7 +1097,7 @@ async def resume_video(
 def _fmt(v: Video, publication=None) -> dict:
     # Extract publication info if available (either passed in or from relationship)
     pub = publication
-    if pub is None and hasattr(v, "publications") and v.publications:
+    if pub is None and "publications" in v.__dict__ and v.publications:
         pubs = v.publications
         if isinstance(pubs, list) and len(pubs) > 0:
             pub = next((p for p in pubs if p.platform == "youtube"), pubs[0])

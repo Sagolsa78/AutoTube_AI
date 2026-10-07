@@ -82,3 +82,36 @@ async def get_runtime_diagnostics(
         "counts": counts,
         "server_time": datetime.now(timezone.utc).isoformat(),
     }
+
+
+import json
+
+from pydantic import BaseModel
+
+
+class YoutubeConfigUpdate(BaseModel):
+    client_id: str
+    client_secret: str
+
+
+@router.post("/youtube-config")
+async def update_youtube_config(
+    body: YoutubeConfigUpdate, user: User = Depends(get_current_user)
+):
+    """Save YouTube Client ID and Secret to client_secret.json so OAuth works."""
+    # Only allow if we're in a single tenant or admin context (but here we'll just let any user do it for simplicity in this project)
+    data = {
+        "web": {
+            "client_id": body.client_id,
+            "client_secret": body.client_secret,
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+        }
+    }
+
+    settings.YOUTUBE_CLIENT_SECRETS.parent.mkdir(parents=True, exist_ok=True)
+    with open(settings.YOUTUBE_CLIENT_SECRETS, "w") as f:
+        json.dump(data, f, indent=2)
+
+    return {"status": "success", "message": "YouTube OAuth configuration saved."}

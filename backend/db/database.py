@@ -30,8 +30,7 @@ if "postgresql" in settings.DATABASE_URL:
             "pool_timeout": 30,  # wait up to 30s for a pool connection
         }
     )
-    if "-pooler" in settings.DATABASE_URL or "pooler" in settings.DATABASE_URL:
-        engine_kwargs["connect_args"] = {"statement_cache_size": 0}
+    engine_kwargs["connect_args"] = {"statement_cache_size": 0}
 
 engine = create_async_engine(settings.DATABASE_URL, **engine_kwargs)
 AsyncSessionLocal = async_sessionmaker(

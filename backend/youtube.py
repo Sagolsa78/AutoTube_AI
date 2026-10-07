@@ -6,6 +6,7 @@ Eliminates mock data entirely.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any, Dict, Optional
 
@@ -35,7 +36,7 @@ class YouTubeAPIClient:
         if youtube:
             try:
                 request = youtube.channels().list(part="statistics,snippet", mine=True)
-                response = request.execute()
+                response = await asyncio.to_thread(request.execute)
                 if response.get("items"):
                     item = response["items"][0]
                     stats = item.get("statistics", {})
@@ -97,7 +98,7 @@ class YouTubeAPIClient:
                     request = youtube.videos().list(
                         part="statistics", id=youtube_video_id
                     )
-                    response = request.execute()
+                    response = await asyncio.to_thread(request.execute)
                     if response.get("items"):
                         stats = response["items"][0].get("statistics", {})
                         return {

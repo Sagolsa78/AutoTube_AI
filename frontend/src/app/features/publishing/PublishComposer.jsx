@@ -1,27 +1,66 @@
 import React, { useState, useEffect } from 'react';
 import Icon from '../../../components/Icon';
 import { api } from '../../../services/api';
+import { toast } from 'sonner';
 
-const PLATFORMS = [
-  { id: 'youtube', name: 'YouTube', icon: 'youtube', color: 'bg-[#FF0000]', connected: true },
-  { id: 'instagram', name: 'Instagram', icon: 'instagram', color: 'bg-[#E1306C]', connected: true },
-  { id: 'facebook', name: 'Facebook', icon: 'facebook', color: 'bg-[#1877F2]', connected: true },
-  { id: 'tiktok', name: 'TikTok', icon: 'video', color: 'bg-[#000000]', connected: false },
+const PLATFORM_CONFIG = [
+  { id: 'youtube', name: 'YouTube', icon: 'youtube', color: 'bg-[#FF0000]' },
+  { id: 'instagram', name: 'Instagram', icon: 'instagram', color: 'bg-[#E1306C]' },
+  { id: 'facebook', name: 'Facebook', icon: 'facebook', color: 'bg-[#1877F2]' },
+  { id: 'tiktok', name: 'TikTok', icon: 'tiktok', color: 'bg-[#000000]' },
 ];
 
 export default function PublishComposer({ video, onClose }) {
-  const [selectedPlatforms, setSelectedPlatforms] = useState(['youtube', 'instagram']);
+  const [platforms, setPlatforms] = useState(PLATFORM_CONFIG.map(p => ({ ...p, connected: false })));
+  const [selectedPlatforms, setSelectedPlatforms] = useState([]);
   const [activePreview, setActivePreview] = useState('youtube');
+  const [loadingConfig, setLoadingConfig] = useState(true);
 
   const [formData, setFormData] = useState({
-    title: video?.title || '',
+    title: video?.title || video?.description?.substring(0, 30) || '',
     caption: video?.description || '',
-    hashtags: '#shorts #viral #ai',
+    hashtags: video?.hashtags || '#shorts #viral #ai',
     scheduleDate: '',
     scheduleTime: '',
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    const fetchConnections = async () => {
+      setLoadingConfig(true);
+      try {
+        const platformStates = await Promise.all(
+          PLATFORM_CONFIG.map(async (p) => {
+            try {
+              let res;
+              if (p.id === 'youtube') {
+                res = await api.getYoutubeStatus();
+              } else {
+                res = await api.getIntegrationStatus(p.id);
+              }
+              return { ...p, connected: res?.connected || false };
+            } catch (err) {
+              return { ...p, connected: false };
+            }
+          })
+        );
+        setPlatforms(platformStates);
+
+        // Auto-select connected ones
+        const connected = platformStates.filter(p => p.connected).map(p => p.id);
+        if (connected.length > 0) {
+           setSelectedPlatforms(connected);
+           setActivePreview(connected[0]);
+        }
+      } catch (err) {
+        toast.error("Failed to load platform connections.");
+      } finally {
+        setLoadingConfig(false);
+      }
+    };
+    fetchConnections();
+  }, []);
 
   const togglePlatform = (id) => {
     setSelectedPlatforms(prev =>
@@ -33,6 +72,10 @@ export default function PublishComposer({ video, onClose }) {
   };
 
   const handlePublish = async () => {
+    if (!video || !video.id) {
+       toast.error("Application Error: Missing video context.");
+       return;
+    }
     if (selectedPlatforms.length === 0) return;
 
     setIsSubmitting(true);
@@ -43,30 +86,32 @@ export default function PublishComposer({ video, onClose }) {
       }
 
       await api.publishUniversal({
-        video_id: video?.id || 'mock-id',
+        video_id: video.id,
         platforms: selectedPlatforms,
         title: formData.title,
         caption: formData.caption,
         hashtags: formData.hashtags,
         scheduled_at
       });
+      toast.success(scheduled_at ? 'Post scheduled successfully' : 'Publishing queued');
       onClose(); // close on success
     } catch (err) {
       console.error("Publishing failed", err);
+      toast.error(err.message || 'Publishing failed. Please retry.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-canvas/80 backdrop-blur-sm p-4 sm:p-6 animate-in fade-in">
-      <div className="bg-surface border border-border w-full max-w-5xl max-h-full rounded-2xl shadow-dropdown flex overflow-hidden">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-canvas/80 backdrop-blur-sm p-4 sm:p-6 animate-in fade-in">
+      <div className="bg-surface border border-border w-full max-w-5xl max-h-[90vh] rounded-2xl shadow-dropdown flex overflow-hidden">
 
         {/* Left Column: Form & Validation */}
         <div className="w-1/2 flex flex-col bg-surface border-r border-border">
-          <div className="p-4 border-b border-border flex items-center justify-between">
+          <div className="p-4 border-b border-border flex items-center justify-between shrink-0">
             <h2 className="text-lg font-bold text-text-primary">Universal Publisher</h2>
-            <button onClick={onClose} className="text-text-muted hover:text-text-primary p-1">
+            <button onClick={onClose} className="text-text-muted hover:text-text-primary p-1 rounded hover:bg-elevated">
               <Icon name="x" size={20} />
             </button>
           </div>
@@ -76,27 +121,32 @@ export default function PublishComposer({ video, onClose }) {
             {/* Platform Selection */}
             <div className="space-y-3">
               <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Publish To</label>
-              <div className="flex flex-wrap gap-3">
-                {PLATFORMS.map(p => {
-                  const isSelected = selectedPlatforms.includes(p.id);
-                  return (
-                    <button
-                      key={p.id}
-                      onClick={() => togglePlatform(p.id)}
-                      disabled={!p.connected}
-                      className={`flex items-center gap-2 px-3 py-2 rounded-xl border transition-all ${
-                        !p.connected ? 'opacity-50 cursor-not-allowed bg-canvas border-border/50' :
-                        isSelected ? `border-transparent text-white ${p.color} shadow-sm` :
-                        'bg-elevated border-border text-text-secondary hover:text-text-primary hover:border-border-strong'
-                      }`}
-                    >
-                      <Icon name={p.icon} size={16} />
-                      <span className="text-xs font-bold">{p.name}</span>
-                      {!p.connected && <Icon name="lock" size={12} className="ml-1 opacity-50" />}
-                    </button>
-                  );
-                })}
-              </div>
+              {loadingConfig ? (
+                <div className="flex gap-3"><div className="h-10 bg-elevated rounded animate-pulse w-24"></div><div className="h-10 bg-elevated rounded animate-pulse w-24"></div></div>
+              ) : (
+                <div className="flex flex-wrap gap-3">
+                  {platforms.map(p => {
+                    const isSelected = selectedPlatforms.includes(p.id);
+                    return (
+                      <button
+                        key={p.id}
+                        onClick={() => togglePlatform(p.id)}
+                        disabled={!p.connected}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-xl border transition-all ${
+                          !p.connected ? 'opacity-50 cursor-not-allowed bg-canvas border-border/50' :
+                          isSelected ? `border-transparent text-white ${p.color} shadow-sm` :
+                          'bg-elevated border-border text-text-secondary hover:text-text-primary hover:border-border-strong'
+                        }`}
+                        title={!p.connected ? 'Platform not connected' : ''}
+                      >
+                        <Icon name={p.icon} size={16} />
+                        <span className="text-xs font-bold">{p.name}</span>
+                        {!p.connected && <Icon name="lock" size={12} className="ml-1 opacity-50" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             {/* Content Form */}
@@ -140,7 +190,7 @@ export default function PublishComposer({ video, onClose }) {
                 <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Platform Validation</label>
                 <div className="space-y-2">
                   {selectedPlatforms.map(pid => {
-                    const platform = PLATFORMS.find(p => p.id === pid);
+                    const platform = platforms.find(p => p.id === pid);
                     if (!platform) return null;
 
                     return (
@@ -164,14 +214,24 @@ export default function PublishComposer({ video, onClose }) {
           </div>
 
           {/* Footer Action */}
-          <div className="p-4 border-t border-border bg-canvas flex items-center justify-between">
+          <div className="p-4 border-t border-border bg-canvas flex items-center justify-between shrink-0">
             <div className="flex items-center gap-3">
-              <input type="date" className="bg-elevated border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary focus:outline-none" />
-              <input type="time" className="bg-elevated border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary focus:outline-none" />
+              <input
+                type="date"
+                value={formData.scheduleDate}
+                onChange={e => setFormData({...formData, scheduleDate: e.target.value})}
+                className="bg-elevated border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary focus:outline-none"
+              />
+              <input
+                type="time"
+                value={formData.scheduleTime}
+                onChange={e => setFormData({...formData, scheduleTime: e.target.value})}
+                className="bg-elevated border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary focus:outline-none"
+              />
             </div>
             <button
               onClick={handlePublish}
-              disabled={isSubmitting || selectedPlatforms.length === 0}
+              disabled={isSubmitting || selectedPlatforms.length === 0 || !video?.id}
               className="px-6 py-2.5 bg-brand-red text-white font-bold rounded-xl shadow-brand-glow hover:bg-brand-red-hover transition-colors disabled:opacity-50"
             >
               {isSubmitting ? 'Scheduling...' : 'Schedule Post'}
@@ -181,12 +241,12 @@ export default function PublishComposer({ video, onClose }) {
 
         {/* Right Column: Platform Previews */}
         <div className="w-1/2 bg-canvas flex flex-col">
-           <div className="p-4 border-b border-border flex items-center gap-2 overflow-x-auto hide-scrollbar">
+           <div className="p-4 border-b border-border flex items-center gap-2 overflow-x-auto hide-scrollbar shrink-0">
              {selectedPlatforms.length === 0 && (
                <span className="text-xs text-text-muted">Select a platform to preview</span>
              )}
              {selectedPlatforms.map(pid => {
-               const p = PLATFORMS.find(x => x.id === pid);
+               const p = platforms.find(x => x.id === pid);
                return (
                  <button
                    key={pid}
@@ -202,7 +262,7 @@ export default function PublishComposer({ video, onClose }) {
            </div>
 
            <div className="flex-1 flex items-center justify-center p-6 overflow-hidden">
-             {/* Mock Mobile Device Frame for Preview */}
+             {/* Mobile Device Frame for Preview */}
              {selectedPlatforms.length > 0 && activePreview ? (
                <div className="w-[280px] h-[580px] bg-surface rounded-[32px] border-8 border-elevated overflow-hidden relative shadow-2xl shrink-0">
                  {/* Content */}
@@ -212,8 +272,9 @@ export default function PublishComposer({ video, onClose }) {
                       {video?.final_video_url ? (
                         <video src={video.final_video_url} className="w-full h-full object-cover" loop autoPlay muted playsInline />
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-gray-900 text-white">
-                           <Icon name="video" size={32} className="opacity-50" />
+                        <div className="w-full h-full flex flex-col items-center justify-center bg-gray-900 text-white">
+                           <Icon name="video" size={32} className="opacity-50 mb-2" />
+                           <span className="text-xs opacity-50">Preview unavailable</span>
                         </div>
                       )}
                     </div>

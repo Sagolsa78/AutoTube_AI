@@ -12,41 +12,41 @@ import EmptyState from '../../../components/EmptyState';
 import Skeleton from '../../../components/Skeleton';
 import { toast } from 'sonner';
 import { useChannel } from '../../../contexts/ChannelContext';
+import useContentStore from '../../../store/contentStore';
 
 export default function Scripts() {
-  const [scripts, setScripts] = useState([]);
+  const { scripts, fetchContent, loading: storeLoading } = useContentStore();
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('draft');
   const [regenerating, setRegenerating] = useState(null);
   const navigate = useNavigate();
   const { activeChannelId } = useChannel();
 
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      const allScripts = await api.getScripts(activeChannelId);
-      setScripts((allScripts || []).sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
+  const draftCount = scripts.filter(s => s.status === 'draft').length;
+  const usedCount = scripts.filter(s => s.status === 'used_in_render').length;
+  const discardedCount = scripts.filter(s => s.status === 'discarded').length;
+
+  useEffect(() => {
+    if (scripts.length > 0 && activeTab === 'draft' && draftCount === 0) {
+      if (usedCount > 0) setActiveTab('used_in_render');
+      else if (discardedCount > 0) setActiveTab('discarded');
     }
-  };
+  }, [scripts, draftCount, usedCount, discardedCount]);
 
   useEffect(() => {
       if (activeChannelId) {
-          loadData();
+          setLoading(true);
+          fetchContent(activeChannelId).finally(() => setLoading(false));
       } else {
-          setScripts([]);
           setLoading(false);
       }
-  }, [activeChannelId]);
+  }, [activeChannelId, fetchContent]);
 
   const discardScript = async (e, id) => {
     e.stopPropagation();
     try {
       await api.discardScript(id);
-      await loadData();
+      await fetchContent(activeChannelId, true);
       toast.success('Script discarded');
     } catch (e) {
       toast.error(`Discard failed: ${e.message}`);
@@ -58,7 +58,7 @@ export default function Scripts() {
     setRegenerating(id);
     try {
       await api.regenerateScript(id);
-      await loadData();
+      await fetchContent(activeChannelId, true);
       toast.success('Script regenerated successfully!');
     } catch (e) {
       toast.error(`Regeneration failed: ${e.message}`);
@@ -71,10 +71,8 @@ export default function Scripts() {
     navigate(`/app/create?script=${scriptId}`);
   };
 
-  const filteredScripts = scripts.filter(s => s.status === activeTab);
-  const draftCount = scripts.filter(s => s.status === 'draft').length;
-  const usedCount = scripts.filter(s => s.status === 'used_in_render').length;
-  const discardedCount = scripts.filter(s => s.status === 'discarded').length;
+  const sortedScripts = [...scripts].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  const filteredScripts = sortedScripts.filter(s => s.status === activeTab);
 
   const tabs = [
     { id: 'draft', label: 'Drafts', count: draftCount, icon: 'fileText' },
@@ -162,8 +160,8 @@ export default function Scripts() {
                         <span className="w-7 h-7 rounded-lg bg-canvas border border-border flex items-center justify-center text-brand-red shrink-0">
                           <Icon name="fileText" size={14} />
                         </span>
-                        <span className="font-mono font-bold text-xs text-text-primary">
-                          #{s.id.substring(0, 8)}
+                        <span className="font-bold text-sm text-text-primary line-clamp-2">
+                          {s.topic || s.title || `Script #${s.id.substring(0, 8)}`}
                         </span>
                       </div>
 
@@ -173,6 +171,9 @@ export default function Scripts() {
                             {s.scenes.length} Scenes
                           </span>
                         )}
+                        <span className="bg-canvas border border-border px-2 py-0.5 rounded text-[10px] font-mono text-text-muted uppercase">
+                           {s.language || 'EN'}
+                        </span>
                         {s.quality_score && (
                           <ScoreBadge score={s.quality_score} label="QA" />
                         )}
@@ -183,8 +184,11 @@ export default function Scripts() {
                         )}
                       </div>
 
-                      <div className="text-[11px] text-text-muted">
-                        Created {new Date(s.created_at).toLocaleDateString()}
+                      <div className="text-[11px] text-text-muted flex justify-between items-center">
+                        <span>Created {new Date(s.created_at).toLocaleDateString()}</span>
+                        {s.status === 'used_in_render' && (
+                           <span className="text-brand-blue hover:underline cursor-pointer flex items-center gap-1"><Icon name="link" size={10} /> Linked Video</span>
+                        )}
                       </div>
                     </div>
 

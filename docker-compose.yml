@@ -15,6 +15,16 @@ services:
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   backend:
     build:
       context: .
@@ -23,6 +33,7 @@ services:
       - "8000:8000"
     environment:
       - DATABASE_URL=postgresql+asyncpg://autotube:password@db:5432/autotube
+      - REDIS_URL=redis://redis:6379/0
       - APP_ENV=${APP_ENV:-development}
       - APP_MODE=${APP_MODE:-local}
       - STORAGE_BACKEND=${STORAGE_BACKEND:-local}
@@ -48,6 +59,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
 
   worker:
     build:
@@ -55,6 +68,7 @@ services:
       dockerfile: worker.Dockerfile
     environment:
       - DATABASE_URL=postgresql+asyncpg://autotube:password@db:5432/autotube
+      - REDIS_URL=redis://redis:6379/0
       - APP_ENV=${APP_ENV:-development}
       - APP_MODE=${APP_MODE:-local}
       - STORAGE_BACKEND=${STORAGE_BACKEND:-local}
@@ -77,6 +91,8 @@ services:
       - ./storage:/app/storage
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
   frontend:

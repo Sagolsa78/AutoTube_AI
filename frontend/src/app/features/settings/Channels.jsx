@@ -66,6 +66,10 @@ export default function Channels() {
   const [previewingVoice, setPreviewingVoice] = useState(false);
   const [audioElem, setAudioElem] = useState(null);
 
+  const [ytClientId, setYtClientId] = useState('');
+  const [ytClientSecret, setYtClientSecret] = useState('');
+  const [showYtConfigForm, setShowYtConfigForm] = useState(false);
+
   useEffect(() => {
       if (modalOpen) {
           api.getVoices(form.language).then(setVoices).catch(console.error);
@@ -366,43 +370,56 @@ export default function Channels() {
               </>
             ) : (
               <div className="flex items-center gap-2">
-                {ytConfig && !ytConfig.configured && (
-                  <label className="btn btn-outline btn-sm cursor-pointer whitespace-nowrap">
-                    Upload Secrets
-                    <input
-                      type="file"
-                      accept=".json"
-                      className="hidden"
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          setYtLoading(true);
-                          try {
-                            await api.uploadYoutubeSecrets(file);
-                            toast.success("Secrets uploaded! You can now connect YouTube.");
-                            // Refresh config
-                            const config = await api.getYoutubeConfigStatus().catch(() => null);
-                            if (config) setYtConfig(config);
-                          } catch (err) {
-                            toast.error("Upload failed: " + err.message);
-                          } finally {
-                            setYtLoading(false);
-                          }
-                        }
-                      }}
-                    />
-                  </label>
+                {ytConfig && !ytConfig.configured && !showYtConfigForm && (
+                   <Button variant="outline" size="sm" onClick={() => setShowYtConfigForm(true)}>Configure Credentials</Button>
                 )}
-                <Button
-                  variant="primary"
-                  size="sm"
-                  icon="youtube"
-                  onClick={handleConnectYoutube}
-                  disabled={ytLoading || (ytConfig && !ytConfig.configured)}
-                  className="bg-brand-red hover:bg-brand-red/90 text-white shadow-brand-glow whitespace-nowrap disabled:opacity-50"
-                >
-                  {ytLoading ? "Connecting..." : "Connect YouTube"}
-                </Button>
+                {showYtConfigForm && (
+                   <div className="flex flex-col gap-2 bg-surface p-3 rounded-lg border border-border w-72">
+                      <input
+                         type="text"
+                         placeholder="Google Client ID"
+                         className="bg-canvas border border-border rounded px-2 py-1 text-xs text-text-primary"
+                         value={ytClientId}
+                         onChange={e => setYtClientId(e.target.value)}
+                      />
+                      <input
+                         type="password"
+                         placeholder="Google Client Secret"
+                         className="bg-canvas border border-border rounded px-2 py-1 text-xs text-text-primary"
+                         value={ytClientSecret}
+                         onChange={e => setYtClientSecret(e.target.value)}
+                      />
+                      <div className="flex justify-end gap-2 mt-1">
+                         <Button variant="ghost" size="sm" onClick={() => setShowYtConfigForm(false)}>Cancel</Button>
+                         <Button variant="primary" size="sm" onClick={async () => {
+                             setYtLoading(true);
+                             try {
+                                await api.updateYoutubeConfig({ client_id: ytClientId, client_secret: ytClientSecret });
+                                toast.success("YouTube credentials saved!");
+                                const config = await api.getYoutubeConfigStatus().catch(() => null);
+                                if (config) setYtConfig(config);
+                                setShowYtConfigForm(false);
+                             } catch(err) {
+                                toast.error("Failed to save config: " + err.message);
+                             } finally {
+                                setYtLoading(false);
+                             }
+                         }}>Save Config</Button>
+                      </div>
+                   </div>
+                )}
+                {!showYtConfigForm && (
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    icon="youtube"
+                    onClick={handleConnectYoutube}
+                    disabled={ytLoading || (ytConfig && !ytConfig.configured)}
+                    className="bg-brand-red hover:bg-brand-red/90 text-white shadow-brand-glow whitespace-nowrap disabled:opacity-50"
+                  >
+                    {ytLoading ? "Connecting..." : "Connect YouTube"}
+                  </Button>
+                )}
               </div>
             )}
           </div>

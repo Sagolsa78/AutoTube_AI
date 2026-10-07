@@ -111,6 +111,11 @@ export const api = {
   updateScript:   (id, data) => request(`/scripts/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   discardScript:  (id) => request(`/scripts/${id}/discard`, { method: 'POST' }),
 
+  // ── Assets & Scenes ──────────────────────────────
+  searchAssets:   (query) => request(`/assets/search?query=${encodeURIComponent(query)}`),
+  assignAssetToScene: (sceneId, asset) => request(`/scenes/${sceneId}/asset`, { method: 'POST', body: JSON.stringify(asset) }),
+  generateAsset:  (prompt, type = 'IMAGE') => request(`/assets/generate`, { method: 'POST', body: JSON.stringify({ prompt, type }), timeout: 120000 }),
+
   // ── Videos ───────────────────────────────────────
   getVideos:      (channelId) => request(`/videos/${channelId ? '?channel_id=' + channelId : ''}`),
   getVideo:       (id) => request(`/videos/${id}`),
@@ -171,10 +176,12 @@ export const api = {
   createJob:      (data) => request('/jobs/', { method: 'POST', body: JSON.stringify(data) }),
   cancelJob:      (id) => request(`/jobs/${id}/cancel`, { method: 'POST' }),
 
-  // ── Integrations (YouTube) ────────────────────────
+  // ── Integrations (YouTube & Meta/TikTok) ────────────────────────
+  getIntegrationStatus: (platform) => request(`/integrations/${platform}/status`),
   getYoutubeAuthUrl: () => request('/youtube/auth'),
   getYoutubeStatus: () => request('/youtube/status'),
   getYoutubeConfigStatus: () => request('/youtube/config-status'),
+  updateYoutubeConfig: (data) => request('/system/youtube-config', { method: 'POST', body: JSON.stringify(data) }),
   refreshYoutubeToken: () => request('/youtube/refresh', { method: 'POST' }),
   disconnectYoutube: () => request('/youtube/disconnect', { method: 'DELETE' }),
   uploadYoutubeSecrets: async (file) => {
@@ -208,4 +215,20 @@ export const api = {
 
   // ── Multi-Platform Publishing ────────────────────────
   publishUniversal: (payload) => request('/publishing/compose', { method: 'POST', body: JSON.stringify(payload) }),
+
+  // ── Assets ─────────────────────────────────────────
+  searchAssets: (query) => request(`/assets/search?query=${encodeURIComponent(query)}`),
+  assignAssetToScene: (sceneId, assetData) => request(`/assets/scenes/${sceneId}/assign`, {
+    method: 'POST',
+    body: JSON.stringify(assetData)
+  }),
+  generateAsset: (prompt, mode) => request(`/assets/generate?prompt=${encodeURIComponent(prompt)}&mode=${encodeURIComponent(mode)}`, { method: 'POST' }),
+
+  // ── Calendar ───────────────────────────────────────
+  getCalendar: (startDate, endDate, channelId) => {
+    const qs = new URLSearchParams({ start_date: startDate.toISOString(), end_date: endDate.toISOString() });
+    if (channelId) qs.append('channel_id', channelId);
+    return request(`/calendar/?${qs.toString()}`);
+  },
+  scheduleVideo: (payload) => request('/calendar/schedule', { method: 'POST', body: JSON.stringify(payload) }),
 };
