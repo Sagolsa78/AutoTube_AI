@@ -49,6 +49,14 @@ class RenderJobPayload(BaseJobPayload):
     watermark_position: str = "bottom_right"
     watermark_scale: float = 0.12
 
+    # Rendering Quality
+    quality: str = Field(default="standard", description="draft|standard|high|ultra")
+    resolution_override: Optional[str] = Field(
+        default=None, description="e.g. 1920x1080"
+    )
+    last_working_provider: Optional[str] = None
+    last_working_model: Optional[str] = None
+
 
 class LLMJobPayload(BaseJobPayload):
     system_prompt: str = Field(..., description="The system prompt for the LLM.")

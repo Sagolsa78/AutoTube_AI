@@ -25,6 +25,26 @@ class LocalJobExecutor(JobExecutor):
             job.payload = payload
             await session.commit()
 
+            # Push to Redis stream for local worker consumption
+            import json
+
+            from backend.core.redis_client import get_redis
+
+            r = await get_redis()
+            if r:
+                stream_name = "autotube:jobs:local_pc"
+                flat_payload = json.dumps(payload)
+                await r.xadd(
+                    stream_name,
+                    {
+                        "job_id": job_id,
+                        "capability": job.capability,
+                        "payload": flat_payload,
+                    },
+                )
+            else:
+                log.warning("Redis is unavailable, job may not be picked up by worker")
+
             log.info(f"Job {job_id} queued for local execution")
             return JobExecutionHandle(job_id=job_id)
 

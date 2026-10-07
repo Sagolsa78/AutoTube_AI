@@ -75,8 +75,21 @@ async def run_async_migrations() -> None:
         poolclass=pool.NullPool,
     )
 
-    async with connectable.connect() as connection:
-        await connection.run_sync(do_run_migrations)
+    import asyncio
+
+    max_retries = 5
+    for attempt in range(1, max_retries + 1):
+        try:
+            async with connectable.connect() as connection:
+                await connection.run_sync(do_run_migrations)
+            break
+        except Exception as e:
+            if attempt == max_retries:
+                raise
+            print(
+                f"Database connection failed in Alembic (attempt {attempt}): {e}. Retrying..."
+            )
+            await asyncio.sleep(attempt * 2)
 
     await connectable.dispose()
 

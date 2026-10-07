@@ -20,6 +20,7 @@ from backend.settings import (
     SCRIPT_PROVIDER_ORDER,
 )
 from integrations.providers.base import LLMProvider
+from integrations.providers.fallback_state import ProviderQuotaTracker
 
 log = logging.getLogger(__name__)
 
@@ -139,6 +140,7 @@ class GeminiProvider(LLMProvider):
         "gemini-3.5-flash-lite",
         "gemini-3.6-flash",
         "gemini-3.5-flash",
+        "gemini-3.1-pro",
     ]
 
     def is_available(self) -> bool:
@@ -360,6 +362,9 @@ def generate_with_fallback(
 
     last_error = None
     for name in order:
+        if not ProviderQuotaTracker.is_available(name):
+            log.info("Skipping provider '%s' — in cooldown", name)
+            continue
         cls = _PROVIDER_MAP.get(name)
         if cls is None:
             continue
@@ -374,6 +379,12 @@ def generate_with_fallback(
             log.info("AI provider '%s' succeeded", name)
             return result, name, cost_data
         except Exception as exc:
+            if (
+                "429" in str(exc)
+                or "quota" in str(exc).lower()
+                or "rate" in str(exc).lower()
+            ):
+                ProviderQuotaTracker.mark_exhausted(name, cooldown_seconds=300)
             log.warning("AI provider '%s' failed: %s", name, exc)
             last_error = exc
 

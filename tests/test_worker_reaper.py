@@ -26,10 +26,8 @@ async def test_watchdog_reaps_expired_lease(monkeypatch):
     mock_db = AsyncMock()
     mock_db.execute = AsyncMock(return_value=mock_result)
 
-    mock_session_local = MagicMock()
-    mock_session_local.return_value.__aenter__ = AsyncMock(return_value=mock_db)
-    mock_session_local.return_value.__aexit__ = AsyncMock(return_value=None)
-    monkeypatch.setattr("backend.worker.main.AsyncSessionLocal", mock_session_local)
+    mock_db.close = AsyncMock()
+    monkeypatch.setattr("backend.worker.main.AsyncSessionLocal", lambda: mock_db)
 
     # Stop loop after first iteration
     async def mock_sleep(*args, **kwargs):

@@ -19,17 +19,6 @@ from engine.models import RenderJob
 from engine.story.schemas import StorySpec
 
 
-class MockAsyncSession:
-    def __init__(self, db):
-        self.db = db
-
-    async def __aenter__(self):
-        return self.db
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        pass
-
-
 @pytest.mark.asyncio
 async def test_worker_crash_mid_render():
     """1. Worker Crash Mid-Render"""
@@ -63,9 +52,12 @@ async def test_worker_crash_mid_render():
     async def mock_run_render(video_id, job, job_id=None):
         raise RuntimeError("FFmpeg crashed mid-render")
 
+    mock_db.close = AsyncMock()
+    mock_db.rollback = AsyncMock()
+
     with patch(
         "backend.worker.main.AsyncSessionLocal",
-        side_effect=lambda: MockAsyncSession(mock_db),
+        side_effect=lambda: mock_db,
     ), patch("backend.services.rendering_service.run_job", side_effect=mock_run_render):
         success = await execute_job("job_fail_1")
 
@@ -138,12 +130,16 @@ async def test_worker_crash_after_upload_idempotency():
 
     mock_db.execute = AsyncMock(return_value=FakeResult())
 
+    mock_db.close = AsyncMock()
+    mock_db.rollback = AsyncMock()
+    mock_db.__aenter__.return_value = mock_db
+
     # Mock OS paths to appear existing so it skips TTS and Assembly
     with patch("os.path.exists", return_value=True), patch(
         "os.path.getsize", return_value=100000
     ), patch(
         "backend.services.rendering_service.AsyncSessionLocal",
-        side_effect=lambda: MockAsyncSession(mock_db),
+        side_effect=lambda: mock_db,
     ), patch(
         "backend.services.rendering_service.generate_voiceover"
     ) as mock_tts, patch(
@@ -195,7 +191,10 @@ async def test_duplicate_publish():
 
     video = Video(id="vid_pub_1", status=VideoStatus.uploaded)
     pub = Publication(
-        video_id="vid_pub_1", youtube_id="123", url="http://youtube.com/watch?v=123"
+        video_id="vid_pub_1",
+        platform="youtube",
+        remote_media_id="123",
+        url="http://youtube.com/watch?v=123",
     )
 
     mock_db = AsyncMock()
@@ -235,9 +234,13 @@ async def test_storage_unavailable():
     mock_result.scalars.return_value.first.return_value = Script(id="script_1")
     mock_db.execute = AsyncMock(return_value=mock_result)
 
+    mock_db.close = AsyncMock()
+    mock_db.rollback = AsyncMock()
+    mock_db.__aenter__.return_value = mock_db
+
     with patch(
         "backend.services.rendering_service.AsyncSessionLocal",
-        side_effect=lambda: MockAsyncSession(mock_db),
+        side_effect=lambda: mock_db,
     ), patch(
         "backend.services.rendering_service.storage.put_file",
         side_effect=ConnectionError("Storage unreachable"),
@@ -270,9 +273,13 @@ async def test_tts_timeout():
     mock_result.scalars.return_value.first.return_value = Script(id="script_1")
     mock_db.execute = AsyncMock(return_value=mock_result)
 
+    mock_db.close = AsyncMock()
+    mock_db.rollback = AsyncMock()
+    mock_db.__aenter__.return_value = mock_db
+
     with patch(
         "backend.services.rendering_service.AsyncSessionLocal",
-        side_effect=lambda: MockAsyncSession(mock_db),
+        side_effect=lambda: mock_db,
     ), patch(
         "backend.services.rendering_service.generate_voiceover",
         side_effect=asyncio.TimeoutError("TTS Timed out"),
@@ -318,9 +325,13 @@ async def test_invalid_asset_corrupt_media():
     mock_result.scalars.return_value.first.return_value = Script(id="script_1")
     mock_db.execute = AsyncMock(return_value=mock_result)
 
+    mock_db.close = AsyncMock()
+    mock_db.rollback = AsyncMock()
+    mock_db.__aenter__.return_value = mock_db
+
     with patch(
         "backend.services.rendering_service.AsyncSessionLocal",
-        side_effect=lambda: MockAsyncSession(mock_db),
+        side_effect=lambda: mock_db,
     ), patch("os.path.exists", return_value=True), patch(
         "os.path.getsize", return_value=1000
     ), patch(

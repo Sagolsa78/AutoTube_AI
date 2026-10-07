@@ -23,6 +23,7 @@ from backend.api.routes import (
     costs,
     health,
     ideas,
+    integrations,
     jobs,
     profile,
     scripts,
@@ -46,8 +47,20 @@ async def lifespan(app: FastAPI):
     log.info("Starting AutoTube AI...")
     await init_db()
     log.info("Database ready.")
+
+    from backend.jobs.auto_scheduler import start_auto_scheduler, stop_auto_scheduler
+    from backend.jobs.publish_scheduler import (
+        start_publish_scheduler,
+        stop_publish_scheduler,
+    )
+
+    start_publish_scheduler()
+    start_auto_scheduler()
+
     # Local worker is now a separate standalone process: python -m backend.worker.main
     yield
+    stop_auto_scheduler()
+    stop_publish_scheduler()
     log.info("Shutting down.")
 
 
@@ -102,6 +115,14 @@ app.include_router(voices.router, prefix="/api/voices", tags=["voices"])
 app.include_router(costs.router, prefix="/api/costs", tags=["costs"])
 app.include_router(health.router, prefix="/api/system/health", tags=["health"])
 app.include_router(system.router, prefix="/api/system", tags=["system"])
+app.include_router(
+    integrations.router, prefix="/api/integrations", tags=["integrations"]
+)
+
+from backend.api.routes import calendar, publishing
+
+app.include_router(calendar.router, prefix="/api/calendar", tags=["calendar"])
+app.include_router(publishing.router)
 
 
 @app.get("/", tags=["health"])

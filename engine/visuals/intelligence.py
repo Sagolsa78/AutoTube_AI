@@ -30,6 +30,7 @@ class AssetIntelligenceEngine:
         scene_intent: str,
         db: AsyncSession,
         min_duration: float = 3.0,
+        orientation: str = "portrait",
     ) -> list[dict]:
         if not candidates:
             return []
@@ -62,13 +63,18 @@ class AssetIntelligenceEngine:
             if duration > 0 and duration < min_duration:
                 score -= 40.0
 
-            # Resolution matching (prefer portrait)
+            # Resolution matching
             width = float(c.get("width") or 0.0)
             height = float(c.get("height") or 0.0)
             if width > 0 and height > 0:
-                if width > height:  # Landscape, penalize for shorts
+                if orientation == "portrait" and width > height:
+                    # Penalize landscape for shorts
                     score -= 20.0
-                if height < 1280:  # Low resolution
+                elif orientation == "landscape" and height > width:
+                    # Penalize portrait for long form
+                    score -= 20.0
+
+                if min(width, height) < 720:  # Low resolution
                     score -= 15.0
 
             # Diversity penalty
@@ -124,7 +130,7 @@ Respond ONLY with a JSON object: {{"selected_id": "the-id-you-chose"}}
 Do not include markdown or other text."""
 
         try:
-            raw_response, _ = await asyncio.to_thread(
+            raw_response, _, _ = await asyncio.to_thread(
                 generate_with_fallback,
                 prompt,
                 preferred_provider=preferred_prov,
@@ -151,3 +157,49 @@ Do not include markdown or other text."""
             )
 
         return top_candidates
+
+    @classmethod
+    async def validate_candidate(
+        cls,
+        candidate: dict,
+        scene_intent: str,
+        user_id: str,
+        db: AsyncSession,
+    ) -> bool:
+        """
+        Visual QA Stage: Validates if the selected candidate actually meets the scene intent.
+        Returns True if it's a valid match, False if it should be rejected.
+        """
+        user = await db.get(User, user_id)
+        preferred_prov = (
+            user.preferred_ai_provider if user else settings.DEFAULT_AI_PROVIDER
+        )
+        preferred_mod = user.preferred_ai_model if user else settings.DEFAULT_AI_MODEL
+
+        meta = candidate.get("asset_metadata", {})
+        tags = meta.get("tags") or meta.get("url", "")
+
+        prompt = f"""You are a strict Video QA Reviewer.
+We need a video clip for this scene intent: "{scene_intent}"
+
+We found a stock video with the following metadata/tags:
+"{tags}"
+
+Does this stock video genuinely match the required scene intent?
+If it is completely unrelated or a bad match, you must reject it.
+Respond ONLY with a JSON object: {{"approved": true}} or {{"approved": false}}
+Do not include markdown or other text."""
+
+        try:
+            raw_response, _, _ = await asyncio.to_thread(
+                generate_with_fallback,
+                prompt,
+                preferred_provider=preferred_prov,
+                preferred_model=preferred_mod,
+            )
+            cleaned = raw_response.replace("```json", "").replace("```", "").strip()
+            data = json.loads(cleaned)
+            return data.get("approved", True)
+        except Exception as e:
+            log.warning(f"QA validation failed, defaulting to True. Error: {e}")
+            return True

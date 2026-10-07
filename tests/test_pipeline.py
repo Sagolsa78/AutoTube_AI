@@ -47,6 +47,17 @@ class MockDB:
                         return []
 
                     def first(self):
+                        stmt_str = str(stmt).lower()
+                        if "platform_connections" in stmt_str:
+                            from backend.models.models import PlatformConnection
+
+                            return PlatformConnection(
+                                id="conn1",
+                                user_id="user1",
+                                platform="youtube",
+                                access_token_encrypted="mock",
+                            )
+
                         from backend.models.models import Script, ScriptStatus
 
                         # Return a script with status used_in_render if we're testing regenerate_script
@@ -97,18 +108,24 @@ class MockRenderJob:
 @patch("backend.services.rendering_service.async_fetch_clips", new_callable=AsyncMock)
 @patch("backend.services.rendering_service.generate_voiceover", new_callable=AsyncMock)
 @patch("backend.services.rendering_service.async_assemble_job", new_callable=AsyncMock)
-@patch("integrations.youtube.uploader.upload_video", new_callable=AsyncMock)
+@patch("backend.services.publisher.YouTubeProvider.publish", new_callable=AsyncMock)
+@patch(
+    "backend.services.publisher.YouTubeProvider.validate_connection",
+    new_callable=AsyncMock,
+)
 @patch("backend.services.rendering_service.generate_with_fallback")
 @patch("backend.services.rendering_service.AsyncSessionLocal")
 async def test_metadata_failure_no_auto_publish(
     mock_session_local,
     mock_gen,
+    mock_val,
     mock_upload,
     mock_assemble,
     mock_tts,
     mock_fetch,
     mock_getsize,
 ):
+    mock_val.return_value = True
     mock_tts.return_value = {
         "audio_path": "a",
         "sub_path": "s",
@@ -186,18 +203,24 @@ async def test_metadata_failure_no_auto_publish(
 @patch("backend.services.rendering_service.async_fetch_clips", new_callable=AsyncMock)
 @patch("backend.services.rendering_service.generate_voiceover", new_callable=AsyncMock)
 @patch("backend.services.rendering_service.async_assemble_job", new_callable=AsyncMock)
-@patch("integrations.youtube.uploader.upload_video", new_callable=AsyncMock)
+@patch("backend.services.publisher.YouTubeProvider.publish", new_callable=AsyncMock)
+@patch(
+    "backend.services.publisher.YouTubeProvider.validate_connection",
+    new_callable=AsyncMock,
+)
 @patch("backend.services.rendering_service.generate_with_fallback")
 @patch("backend.services.rendering_service.AsyncSessionLocal")
 async def test_metadata_success_auto_publish(
     mock_session_local,
     mock_gen,
+    mock_val,
     mock_upload,
     mock_assemble,
     mock_tts,
     mock_fetch,
     mock_getsize,
 ):
+    mock_val.return_value = True
     mock_tts.return_value = {
         "audio_path": "a",
         "sub_path": "s",
@@ -219,6 +242,7 @@ async def test_metadata_success_auto_publish(
     mock_gen.return_value = (
         '{"title_candidates": ["A"], "description": "B", "hashtags": ["C"]}',
         "mock_llm",
+        {"prompt_tokens": 10},
     )
     mock_upload.return_value = "yt_draft_123"
 
@@ -277,6 +301,7 @@ async def test_pytrends_fails_idea_generation_proceeds(mock_gen, mock_trends):
     mock_gen.return_value = (
         '{"ideas": [{"title": "t1", "angle": "a1", "score": 9.0}]}',
         "mock_llm",
+        {"prompt_tokens": 10},
     )
 
     from backend.api.routes.ideas import GenerateIdeasIn, generate_ideas
@@ -314,18 +339,24 @@ async def test_pytrends_fails_idea_generation_proceeds(mock_gen, mock_trends):
 @patch("backend.services.rendering_service.async_fetch_clips", new_callable=AsyncMock)
 @patch("backend.services.rendering_service.generate_voiceover", new_callable=AsyncMock)
 @patch("backend.services.rendering_service.async_assemble_job", new_callable=AsyncMock)
-@patch("integrations.youtube.uploader.upload_video", new_callable=AsyncMock)
+@patch("backend.services.publisher.YouTubeProvider.publish", new_callable=AsyncMock)
+@patch(
+    "backend.services.publisher.YouTubeProvider.validate_connection",
+    new_callable=AsyncMock,
+)
 @patch("backend.services.rendering_service.generate_with_fallback")
 @patch("backend.services.rendering_service.AsyncSessionLocal")
 async def test_youtube_update_fails_adds_publish_failed_state(
     mock_session_local,
     mock_gen,
+    mock_val,
     mock_upload,
     mock_assemble,
     mock_tts,
     mock_fetch,
     mock_getsize,
 ):
+    mock_val.return_value = True
     mock_tts.return_value = {
         "audio_path": "a",
         "sub_path": "s",
@@ -347,6 +378,7 @@ async def test_youtube_update_fails_adds_publish_failed_state(
     mock_gen.return_value = (
         '{"title_candidates": ["A"], "description": "B", "hashtags": ["C"]}',
         "mock_llm",
+        {"prompt_tokens": 10},
     )
     mock_upload.side_effect = Exception("OAuth Token Expired")
 
@@ -391,7 +423,7 @@ async def test_youtube_update_fails_adds_publish_failed_state(
     pubs = [p for p in db.added if type(p).__name__ == "Publication"]
     assert len(pubs) == 1
     pub = pubs[0]
-    assert pub.status == "draft"  # Stays draft because upload failed
+    assert pub.status == "failed"  # Stays failed because upload failed
     assert pub.privacy_status == "private"
 
 

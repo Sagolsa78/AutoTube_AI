@@ -399,16 +399,20 @@ async def generate_voiceover(
     if not is_multilingual and requested_lang_base != voice_lang_base:
         fallback_voice = LANG_VOICES.get(language, LANG_VOICES.get(requested_lang_base))
         if fallback_voice:
-            if not is_default:
-                log.warning(
-                    "Selected voice '%s' (%s) does not support requested language '%s'. "
-                    "Switching to compatible voice '%s' to avoid TTS failure.",
+            if is_default:
+                # Default/niche voice — safe to auto-switch to a compatible one
+                selected_voice = fallback_voice
+            else:
+                # User explicitly chose this voice — respect their selection.
+                # They may want an en-IN voice for Hindi/Hinglish content.
+                log.info(
+                    "User-selected voice '%s' (%s) differs from script language '%s'. "
+                    "Respecting user selection. Suggested compatible voice: '%s'.",
                     selected_voice,
                     voice_lang_base,
                     language,
                     fallback_voice,
                 )
-            selected_voice = fallback_voice
     elif not is_multilingual and language == "en-IN" and is_default:
         # Specific override for Indian English if default is en-US
         selected_voice = LANG_VOICES["en-IN"]

@@ -7,17 +7,6 @@ from backend.models.models import Job, JobStatus, Video, VideoStatus
 from engine.story.schemas import StorySpec
 
 
-class MockAsyncSession:
-    def __init__(self, db):
-        self.db = db
-
-    async def __aenter__(self):
-        return self.db
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        pass
-
-
 @pytest.mark.asyncio
 async def test_worker_execute_job_success():
     video = Video(
@@ -68,9 +57,12 @@ async def test_worker_execute_job_success():
         nonlocal rendered_job
         rendered_job = job
 
+    mock_db.close = AsyncMock()
+    mock_db.rollback = AsyncMock()
+
     with patch(
         "backend.worker.main.AsyncSessionLocal",
-        side_effect=lambda: MockAsyncSession(mock_db),
+        side_effect=lambda: mock_db,
     ), patch("backend.services.rendering_service.run_job", side_effect=mock_run_render):
         from backend.worker.main import execute_job
 
@@ -122,9 +114,12 @@ async def test_worker_execute_job_failure():
     async def mock_run_render(video_id, job, job_id=None):
         raise RuntimeError("FFmpeg crashed")
 
+    mock_db.close = AsyncMock()
+    mock_db.rollback = AsyncMock()
+
     with patch(
         "backend.worker.main.AsyncSessionLocal",
-        side_effect=lambda: MockAsyncSession(mock_db),
+        side_effect=lambda: mock_db,
     ), patch("backend.services.rendering_service.run_job", side_effect=mock_run_render):
         from backend.worker.main import execute_job
 

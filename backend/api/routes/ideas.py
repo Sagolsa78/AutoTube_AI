@@ -54,6 +54,13 @@ class GenerateIdeasIn(BaseModel):
     tone: str | None = None
     format: str | None = None
     target_duration: int | None = None
+    language: str | None = None
+
+
+class CreateIdeaIn(BaseModel):
+    topic: str
+    channel_id: str | None = None
+    angle: str | None = None
 
 
 def _extract_json_list(raw: str) -> list:
@@ -79,6 +86,34 @@ async def list_ideas(
         q = q.where(Idea.status == status)
     result = await db.execute(q)
     return [_fmt(i) for i in result.scalars().all()]
+
+
+@router.post("/", response_model=IdeaOut, status_code=201)
+async def create_idea(
+    body: CreateIdeaIn,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    channel_id = body.channel_id
+    if not channel_id:
+        ch = await db.scalar(select(Channel).where(Channel.user_id == user.id).limit(1))
+        if not ch:
+            raise HTTPException(404, "No channels found")
+        channel_id = ch.id
+
+    idea = Idea(
+        user_id=user.id,
+        channel_id=channel_id,
+        title=body.topic,
+        topic=body.topic,
+        angle=body.angle or "Manual idea",
+        status=IdeaStatus.pending,
+        score=0.0,
+    )
+    db.add(idea)
+    await db.commit()
+    await db.refresh(idea)
+    return _fmt(idea)
 
 
 @router.post("/generate", response_model=list[IdeaOut], status_code=201)
@@ -213,7 +248,6 @@ Example:
     except Exception as e:
         log.error("Idea generation failed: %s", e)
         raise HTTPException(500, f"Idea generation failed: {e}")
-
     import random
 
     from engine.quality.relevance_guard import RelevanceGuard
@@ -255,6 +289,7 @@ Example:
             "tone": body.tone,
             "format": body.format,
             "target_duration": body.target_duration,
+            "language": body.language,
         }
 
         idea = Idea(
@@ -401,6 +436,41 @@ async def dismiss_idea(
 
     await db.commit()
     return _fmt(idea)
+
+
+class ImproveIdeaIn(BaseModel):
+    topic: str
+    channel_id: str | None = None
+
+
+@router.post("/improve")
+async def improve_idea(
+    body: ImproveIdeaIn,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Improves a rough idea/topic into a catchy YouTube Shorts hook.
+    """
+    prompt = f"""You are an expert YouTube Shorts producer.
+Take this rough idea and improve it into a highly engaging, viral topic hook for a short-form video.
+Rough idea: "{body.topic}"
+
+Respond ONLY with the improved topic/hook string, no quotes or markdown. Keep it under 150 characters."""
+
+    preferred_prov = user.preferred_ai_provider or settings.DEFAULT_AI_PROVIDER
+    preferred_mod = user.preferred_ai_model or settings.DEFAULT_AI_MODEL
+    try:
+        improved, _, _ = await asyncio.to_thread(
+            generate_with_fallback,
+            prompt,
+            preferred_provider=preferred_prov,
+            preferred_model=preferred_mod,
+        )
+        return {"improved_topic": improved.strip(" \"'")}
+    except Exception as e:
+        log.error("Failed to improve idea: %s", e)
+        raise HTTPException(500, f"Failed to improve idea: {e}")
 
 
 def _fmt(i: Idea) -> dict:

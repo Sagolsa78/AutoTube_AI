@@ -169,11 +169,11 @@ async def generate_script_for_idea(
     from backend.models.models import CostEvent
     from engine.quality.checker import check_script
     from engine.research.verifier import FactVerifier
-    from engine.script.generator import generate_script
+    from engine.script.agentic_generator import generate_script_agentic
 
     try:
         story_spec, provider_used, cost_data = await asyncio.to_thread(
-            generate_script,
+            generate_script_agentic,
             idea_topic,
             niche=niche,
             language=final_language,

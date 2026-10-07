@@ -1,16 +1,16 @@
 @import "tailwindcss";
 
 @theme {
-  --color-canvas: #0A0B0D;
-  --color-background: #0A0B0D;
-  --color-surface: #111318;
-  --color-surface-hover: #171A20;
-  --color-surface-input: #14171E;
-  --color-elevated: #171A20;
-  --color-elevated-hover: #20242D;
-  --color-border: #262A32;
-  --color-border-subtle: #1C1F26;
-  --color-border-strong: #353A45;
+  --color-canvas: #0E1015; /* Slightly softer near-black */
+  --color-background: #0E1015;
+  --color-surface: #14171F; /* Soft graphite */
+  --color-surface-hover: #1A1D27;
+  --color-surface-input: #11141B;
+  --color-elevated: #1A1D27;
+  --color-elevated-hover: #212532;
+  --color-border: #222631; /* More subtle borders */
+  --color-border-subtle: #191C25;
+  --color-border-strong: #2D3240;
   --color-border-focus: #E6392F;
   --color-brand-red: #E6392F;
   --color-brand-red-hover: #FF5045;
@@ -39,17 +39,17 @@
 
 :root {
   /* Surfaces */
-  --canvas:         #0A0B0D;
-  --surface:        #111318;
-  --surface-hover:  #171A20;
-  --surface-input:  #14171E;
-  --elevated:       #171A20;
-  --elevated-hover: #20242D;
+  --canvas:         #0E1015;
+  --surface:        #14171F;
+  --surface-hover:  #1A1D27;
+  --surface-input:  #11141B;
+  --elevated:       #1A1D27;
+  --elevated-hover: #212532;
 
   /* Borders */
-  --border:         #262A32;
-  --border-subtle:  #1C1F26;
-  --border-strong:  #353A45;
+  --border:         #222631;
+  --border-subtle:  #191C25;
+  --border-strong:  #2D3240;
   --border-focus:   #E6392F;
 
   /* Brand Primary (Strict: Brand, primary actions, important states — never decorative) */

@@ -236,6 +236,7 @@ def build_karaoke_ass(
     out_path: str,
     style_key: str = "bold_centered",
     group_size: int = 4,
+    orientation: str = "9:16",
 ) -> str:
     """
     Build an ASS subtitle file with karaoke-style per-word highlighting.
@@ -252,11 +253,18 @@ def build_karaoke_ass(
     """
     preset = get_caption_style(style_key)
 
+    if orientation == "16:9":
+        resx, resy = 1920, 1080
+        pos_x, pos_y = 960, int(resy * 0.8)
+    else:
+        resx, resy = 1080, 1920
+        pos_x, pos_y = 540, int(resy * 0.7)
+
     header = (
         "[Script Info]\n"
         "ScriptType: v4.00+\n"
-        "PlayResX: 1080\n"
-        "PlayResY: 1920\n"
+        f"PlayResX: {resx}\n"
+        f"PlayResY: {resy}\n"
         "WrapStyle: 0\n"
         "\n"
         "[V4+ Styles]\n"
@@ -299,7 +307,9 @@ def build_karaoke_ass(
             )
             parts.append(f"{{\\kf{cs}}}{safe_text} ")
 
-        text = f"{{\\an5\\pos(540,1350)\\fad(100,100)}}" + "".join(parts).rstrip()
+        text = (
+            f"{{\\an5\\pos({pos_x},{pos_y})\\fad(100,100)}}" + "".join(parts).rstrip()
+        )
         lines.append(f"Dialogue: 0,{_ts(start)},{_ts(end)},Default,,0,0,0,,{text}")
 
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)

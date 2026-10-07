@@ -11,6 +11,7 @@ async def test_auth_disabled_returns_default():
     provider = AuthProvider(disabled=True, api_key="test-key")
     req = MagicMock(spec=Request)
     req.headers = {}
+    req.cookies = {}
     req.query_params = {}
 
     payload = await provider.verify_request(req)
@@ -22,6 +23,7 @@ async def test_auth_enabled_requires_header():
     provider = AuthProvider(disabled=False, api_key="test-key")
     req = MagicMock(spec=Request)
     req.headers = {}
+    req.cookies = {}
     req.query_params = {}
 
     from fastapi import HTTPException
@@ -37,6 +39,7 @@ async def test_auth_enabled_valid_api_key():
     provider = AuthProvider(disabled=False, api_key="test-key")
     req = MagicMock(spec=Request)
     req.headers = {"X-API-Key": "test-key"}
+    req.cookies = {}
     req.query_params = {}
 
     payload = await provider.verify_request(req)
@@ -48,6 +51,7 @@ async def test_auth_enabled_invalid_api_key():
     provider = AuthProvider(disabled=False, api_key="test-key")
     req = MagicMock(spec=Request)
     req.headers = {"X-API-Key": "wrong-key"}
+    req.cookies = {}
     req.query_params = {}
 
     from fastapi import HTTPException

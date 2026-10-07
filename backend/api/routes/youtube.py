@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.auth.dependencies import get_current_user
 from backend.core.config import settings
 from backend.db.database import get_db
-from backend.models.models import User, YouTubeConnection
+from backend.models.models import PlatformConnection, User
 
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -90,17 +90,24 @@ def get_oauth_flow(redirect_uri: str) -> Flow:
     return flow
 
 
-async def _refresh_token_if_needed(conn: YouTubeConnection, db: AsyncSession) -> bool:
+async def _refresh_token_if_needed(conn: PlatformConnection, db: AsyncSession) -> bool:
     """
     Attempt to refresh an expired OAuth token using the stored refresh_token.
     Returns True if successfully refreshed, False otherwise.
     Updates the DB record in-place and commits.
     """
-    if not conn.refresh_token:
+    if not conn.refresh_token_encrypted:
         log.warning(f"No refresh token available for user {conn.user_id}")
         return False
 
     client_id, client_secret = _get_client_credentials()
+
+    # Fallback to DB stored credentials if not available locally (e.g. cloud workers)
+    if not client_id or not client_secret:
+        meta = conn.platform_metadata or {}
+        client_id = meta.get("client_id", "")
+        client_secret = meta.get("client_secret", "")
+
     if not client_id or not client_secret:
         log.error("Cannot refresh token: OAuth client credentials not configured")
         return False
@@ -109,8 +116,8 @@ async def _refresh_token_if_needed(conn: YouTubeConnection, db: AsyncSession) ->
         from backend.security import decrypt_value, encrypt_value
 
         creds = Credentials(
-            token=decrypt_value(conn.access_token),
-            refresh_token=decrypt_value(conn.refresh_token),
+            token=decrypt_value(conn.access_token_encrypted),
+            refresh_token=decrypt_value(conn.refresh_token_encrypted),
             token_uri="https://oauth2.googleapis.com/token",
             client_id=client_id,
             client_secret=client_secret,
@@ -121,9 +128,9 @@ async def _refresh_token_if_needed(conn: YouTubeConnection, db: AsyncSession) ->
         creds.refresh(GoogleAuthRequest())
 
         # Update stored credentials
-        conn.access_token = encrypt_value(creds.token)
+        conn.access_token_encrypted = encrypt_value(creds.token)
         if creds.refresh_token:
-            conn.refresh_token = encrypt_value(creds.refresh_token)
+            conn.refresh_token_encrypted = encrypt_value(creds.refresh_token)
         if creds.expiry:
             conn.expires_at = creds.expiry.replace(tzinfo=timezone.utc)
 
@@ -142,6 +149,33 @@ async def _refresh_token_if_needed(conn: YouTubeConnection, db: AsyncSession) ->
         else:
             log.error(f"Token refresh failed for user {conn.user_id}: {e}")
         return False
+
+
+from fastapi import File, UploadFile
+
+
+@router.post("/upload-secrets")
+async def upload_client_secrets(
+    file: UploadFile = File(...), user: User = Depends(get_current_user)
+):
+    """
+    Uploads client_secrets.json directly from the frontend.
+    """
+    if not file.filename.endswith(".json"):
+        raise HTTPException(400, "Must be a JSON file")
+
+    content = await file.read()
+    try:
+        data = json.loads(content)
+        if "web" not in data and "installed" not in data:
+            raise HTTPException(400, "Invalid client secrets format")
+    except Exception as e:
+        raise HTTPException(400, f"Invalid JSON: {e}")
+
+    with open(settings.YOUTUBE_CLIENT_SECRETS, "wb") as f:
+        f.write(content)
+
+    return {"status": "success", "message": "Client secrets saved"}
 
 
 @router.get("/auth")
@@ -241,21 +275,24 @@ async def youtube_auth_callback(
         credentials = flow.credentials
 
         # Save to database
-        q = select(YouTubeConnection).where(YouTubeConnection.user_id == user_id)
+        q = select(PlatformConnection).where(
+            PlatformConnection.user_id == user_id,
+            PlatformConnection.platform == "youtube",
+        )
         result = await db.execute(q)
         conn = result.scalars().first()
 
         if not conn:
-            conn = YouTubeConnection(user_id=user_id)
+            conn = PlatformConnection(user_id=user_id, platform="youtube")
             db.add(conn)
 
         from backend.security import encrypt_value
 
-        conn.access_token = encrypt_value(credentials.token)
-        conn.refresh_token = (
+        conn.access_token_encrypted = encrypt_value(credentials.token)
+        conn.refresh_token_encrypted = (
             encrypt_value(credentials.refresh_token)
             if credentials.refresh_token
-            else conn.refresh_token
+            else conn.refresh_token_encrypted
         )
         # Ensure expiry is always timezone-aware UTC
         if credentials.expiry:
@@ -275,10 +312,24 @@ async def youtube_auth_callback(
 
         youtube = build("youtube", "v3", credentials=credentials)
         channels_response = youtube.channels().list(mine=True, part="snippet").execute()
+
+        meta = conn.platform_metadata or {}
+        # Also store the client_id and client_secret so cloud workers can refresh tokens without env vars
+        client_config = _get_client_config()
+        if client_config:
+            client_data = (
+                client_config.get("web") or client_config.get("installed") or {}
+            )
+            if client_data.get("client_id") and client_data.get("client_secret"):
+                meta["client_id"] = client_data.get("client_id")
+                meta["client_secret"] = client_data.get("client_secret")
+
         if channels_response.get("items"):
             channel = channels_response["items"][0]
-            conn.channel_id = channel["id"]
-            conn.channel_title = channel["snippet"]["title"]
+            conn.account_id = channel["id"]
+            conn.account_name = channel["snippet"]["title"]
+
+        conn.platform_metadata = meta
 
         await db.commit()
         frontend_url = settings.FRONTEND_URL or "http://localhost:5173"
@@ -314,7 +365,9 @@ async def youtube_status(
     Check if the user has a valid YouTube connection.
     Automatically refreshes expired tokens using the refresh_token.
     """
-    q = select(YouTubeConnection).where(YouTubeConnection.user_id == user.id)
+    q = select(PlatformConnection).where(
+        PlatformConnection.user_id == user.id, PlatformConnection.platform == "youtube"
+    )
     result = await db.execute(q)
     conn = result.scalars().first()
 
@@ -336,7 +389,7 @@ async def youtube_status(
         is_expired = expires < (now + timedelta(minutes=5))
 
     # Auto-refresh if expired and we have a refresh token
-    if is_expired and conn.refresh_token:
+    if is_expired and conn.refresh_token_encrypted:
         refreshed = await _refresh_token_if_needed(conn, db)
         if refreshed:
             # Re-read the updated record
@@ -345,8 +398,8 @@ async def youtube_status(
 
     return {
         "connected": True,
-        "channel_id": conn.channel_id,
-        "channel_title": conn.channel_title,
+        "channel_id": conn.account_id,
+        "channel_title": conn.account_name,
         "is_expired": is_expired,
         "expires_at": conn.expires_at,
     }
@@ -357,7 +410,9 @@ async def refresh_youtube_token(
     user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
     """Manually refresh the YouTube OAuth token."""
-    q = select(YouTubeConnection).where(YouTubeConnection.user_id == user.id)
+    q = select(PlatformConnection).where(
+        PlatformConnection.user_id == user.id, PlatformConnection.platform == "youtube"
+    )
     result = await db.execute(q)
     conn = result.scalars().first()
 
@@ -383,7 +438,9 @@ async def disconnect_youtube(
     user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
     """Disconnect YouTube and delete credentials."""
-    q = select(YouTubeConnection).where(YouTubeConnection.user_id == user.id)
+    q = select(PlatformConnection).where(
+        PlatformConnection.user_id == user.id, PlatformConnection.platform == "youtube"
+    )
     result = await db.execute(q)
     conn = result.scalars().first()
 

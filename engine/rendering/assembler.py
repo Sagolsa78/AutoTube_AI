@@ -95,14 +95,19 @@ def _build_filtergraph(
     watermark_scale: float = 0.12,
     bgm_path: str | None = None,
     orientation: str = "9:16",
+    quality: str = "standard",
 ) -> str:
     """
     Construct FFmpeg filtergraph using precise timeline durations.
     """
+    preset = QUALITY_PRESETS.get(quality, QUALITY_PRESETS["standard"])
+    preset_w, preset_h = preset["resolution"]
+
     if orientation == "16:9":
-        target_w, target_h = 1920, 1080
+        # Flip the resolution for landscape
+        target_w, target_h = max(preset_w, preset_h), min(preset_w, preset_h)
     else:
-        target_w, target_h = 1080, 1920
+        target_w, target_h = min(preset_w, preset_h), max(preset_w, preset_h)
 
     fade_dur = 0.3
     parts: list[str] = []
@@ -117,22 +122,49 @@ def _build_filtergraph(
         else:
             seg = audio_dur
         durations = [seg] * clips_count
+        transitions = ["fade"] * clips_count
     else:
         durations = []
+        transitions = []
         for i, scene in enumerate(timeline.scenes):
             base_dur = (
                 scene.custom_duration
                 if scene.custom_duration is not None
                 else scene.duration
             )
+            trans = getattr(scene, "transition", "fade")
+            transitions.append(trans)
+
+            # If cut, we don't need extra duration for xfade overlapping
+            scene_fade_dur = 0.0 if trans == "cut" else fade_dur
+
             if i < clips_count - 1:
-                durations.append(base_dur + fade_dur)
+                next_trans = getattr(timeline.scenes[i + 1], "transition", "fade")
+                next_fade = 0.05 if next_trans == "cut" else fade_dur
+                durations.append(base_dur + next_fade)
             else:
                 durations.append(base_dur)
 
     # -- Per-clip processing --------------------------------------------------
     for i in range(clips_count):
         seg = durations[i]
+
+        motion = "static"
+        if has_timeline:
+            motion = getattr(timeline.scenes[i], "camera_motion", "static")
+
+        motion_filter = ""
+        if motion == "zoom_in":
+            motion_filter = f",zoompan=z='min(zoom+0.0015,1.15)':d={int(seg*30)}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={target_w}x{target_h}"
+        elif motion == "zoom_out":
+            motion_filter = f",zoompan=z='1.15-0.0015*on':d={int(seg*30)}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={target_w}x{target_h}"
+        elif motion == "pan_left":
+            motion_filter = f",zoompan=z=1.15:d={int(seg*30)}:x='max(0, (iw-iw/zoom)-(on*2))':y='ih/2-(ih/zoom/2)':s={target_w}x{target_h}"
+        elif motion == "pan_right":
+            motion_filter = f",zoompan=z=1.15:d={int(seg*30)}:x='min(iw-iw/zoom, on*2)':y='ih/2-(ih/zoom/2)':s={target_w}x{target_h}"
+        elif motion == "ken_burns":
+            motion_filter = f",zoompan=z='min(zoom+0.001,1.1)':d={int(seg*30)}:x='iw/2-(iw/zoom/2)+on':y='ih/2-(ih/zoom/2)+on/2':s={target_w}x{target_h}"
+
         parts.append(
             f"[{i}:v]"
             f"fps=30,"
@@ -142,10 +174,11 @@ def _build_filtergraph(
             f"trim=duration={seg:.3f},"
             f"setpts=PTS-STARTPTS,"
             f"eq=contrast=1.05:brightness=0.02:saturation=1.1"
+            f"{motion_filter}"
             f"[v{i}];"
         )
 
-    # -- Concatenation with xfade ---------------------------------------------
+    # -- Concatenation with xfade/concat --------------------------------------
     after_concat = "[base]"
     if clips_count <= 1:
         parts.append(f"[v0]null{after_concat};")
@@ -153,15 +186,31 @@ def _build_filtergraph(
         last_out = "[v0]"
         current_offset = 0.0
         for i in range(1, clips_count):
+            trans = transitions[i]
             if has_timeline:
                 current_offset += timeline.scenes[i - 1].duration
             else:
                 current_offset = i * durations[0] - i * fade_dur
 
             out_name = f"[v_fade_{i}]" if i < clips_count - 1 else after_concat
-            parts.append(
-                f"{last_out}[v{i}]xfade=transition=fade:duration={fade_dur}:offset={current_offset:.3f}{out_name};"
-            )
+
+            if trans == "cut":
+                # Quick workaround for concat in filtergraph without xfade
+                # For cut, we just xfade with tiny duration to simulate a hard cut, keeping the offset math simple
+                parts.append(
+                    f"{last_out}[v{i}]xfade=transition=fade:duration=0.05:offset={current_offset:.3f}{out_name};"
+                )
+            else:
+                xfade_map = {
+                    "fade": "fade",
+                    "crossfade": "fade",
+                    "dip_to_black": "fadeblack",
+                    "wipe": "wipeleft",
+                }
+                ff_trans = xfade_map.get(trans, "fade")
+                parts.append(
+                    f"{last_out}[v{i}]xfade=transition={ff_trans}:duration={fade_dur}:offset={current_offset:.3f}{out_name};"
+                )
             last_out = out_name
 
     # -- Subtitles (ASS with embedded style — no force_style needed) ----------
@@ -211,13 +260,22 @@ def _build_filtergraph(
         # [tts][ducked_bgm]amix[out_a]
         parts.append(
             f"[{bgm_idx}:a]volume=0.2[bgm_vol];"
-            f"[bgm_vol][{tts_idx}:a]sidechaincompress=threshold=0.04:ratio=4:attack=50:release=300[ducked_bgm];"
-            f"[{tts_idx}:a][ducked_bgm]amix=inputs=2:duration=first:dropout_transition=2[out_a]"
+            f"[{tts_idx}:a]asplit[tts_out][tts_sc];"
+            f"[bgm_vol][tts_sc]sidechaincompress=threshold=0.04:ratio=4:attack=50:release=300[ducked_bgm];"
+            f"[tts_out][ducked_bgm]amix=inputs=2:duration=first:dropout_transition=2[out_a]"
         )
     else:
         parts.append(f"[{tts_idx}:a]anull[out_a]")
 
     return "".join(parts)
+
+
+QUALITY_PRESETS = {
+    "draft": {"crf": "28", "preset": "ultrafast", "resolution": (720, 1280)},
+    "standard": {"crf": "23", "preset": "faster", "resolution": (1080, 1920)},
+    "high": {"crf": "18", "preset": "medium", "resolution": (1080, 1920)},
+    "ultra": {"crf": "15", "preset": "slow", "resolution": (2160, 3840)},
+}
 
 
 def assemble_video(
@@ -235,6 +293,7 @@ def assemble_video(
     watermark_scale: float = 0.12,
     bgm_path: str | None = None,
     orientation: str = "9:16",
+    quality: str = "standard",
 ) -> str:
     """
     Build the final MP4 with styled captions and optional watermark.
@@ -281,6 +340,7 @@ def assemble_video(
             word_boundaries,
             sub_path,
             style_key=caption_style,
+            orientation=orientation,
         )
         log.info("Built ASS subtitle with style='%s' → %s", caption_style, sub_path)
     else:
@@ -323,10 +383,11 @@ def assemble_video(
         watermark_scale=watermark_scale,
         bgm_path=bgm_path,
         orientation=orientation,
+        quality=quality,
     )
 
     # Detect best available encoder (GPU or CPU fallback)
-    video_codec, codec_args = select_video_encoder()
+    video_codec, codec_args = select_video_encoder(quality=quality)
     log.info("Using video encoder: %s", video_codec)
 
     cmd = [
@@ -528,6 +589,7 @@ def assemble_job(job: RenderJob) -> str:
         watermark_scale=job.watermark_scale,
         bgm_path=getattr(job, "bgm_path", None),
         orientation=getattr(job, "orientation", "9:16"),
+        quality=getattr(job, "quality", "standard"),
     )
     job.output_path = out_path
     return out_path

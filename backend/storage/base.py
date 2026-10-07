@@ -40,7 +40,12 @@ class StorageBackend(Protocol):
         """
         ...
 
-    async def generate_signed_url(self, remote_key: str, expires_in: int = 3600) -> str:
+    async def generate_signed_url(
+        self,
+        remote_key: str,
+        expires_in: int = 3600,
+        response_content_disposition: Optional[str] = None,
+    ) -> str:
         """
         Generates a temporary signed URL for downloading/viewing the file.
         """

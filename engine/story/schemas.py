@@ -61,6 +61,14 @@ class SceneSpec(BaseModel):
         default=None, description="Phase 5: User-defined strict duration for this scene"
     )
 
+    # Dynamic Scene Editing (Phase 2)
+    camera_motion: Literal[
+        "static", "zoom_in", "zoom_out", "pan_left", "pan_right", "ken_burns"
+    ] = Field(default="static")
+    transition: Literal["cut", "fade", "dip_to_black", "wipe"] = Field(default="cut")
+    emotion: str = Field(default="")
+    visual_effect: str = Field(default="")
+
     # Scoring/Budget
     importance: Literal["low", "medium", "high"] = Field(default="medium")
     generation_priority: int = Field(default=1)
@@ -74,6 +82,8 @@ class StorySpec(BaseModel):
     target_duration: int = Field(default=30, description="Target duration in seconds")
     content_type: str = Field(default="short", description="short or long_form")
     format_type: str = Field(default="short", description="Video format/orientation")
+    language: str = Field(default="en", description="Language code")
+    locale: str = Field(default="US", description="Locale code")
 
     hook: str = Field(default="", description="The text of the opening hook")
     claims: List[Claim] = Field(default_factory=list)

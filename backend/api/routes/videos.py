@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import os
+from datetime import datetime
 
 from fastapi import (
     APIRouter,
@@ -187,6 +188,8 @@ class UploadIn(BaseModel):
     tags: list[str] = []
     privacy_status: str = "private"
     made_for_kids: bool = False
+    scheduled_at: datetime | None = None
+    platforms: list[str] = ["youtube"]
 
 
 class VideoUpdateIn(BaseModel):
@@ -224,7 +227,7 @@ async def list_videos(
     q = (
         select(Video)
         .where(Video.user_id == user.id)
-        .options(selectinload(Video.publication))
+        .options(selectinload(Video.publications))
     )
     if channel_id:
         q = (
@@ -247,7 +250,7 @@ async def get_render_progress(
     """Lightweight endpoint for polling render progress."""
     v = await db.scalar(
         select(Video)
-        .options(selectinload(Video.publication))
+        .options(selectinload(Video.publications))
         .where(Video.id == video_id, Video.user_id == user.id)
     )
     if not v:
@@ -266,7 +269,6 @@ async def get_render_progress(
 @router.post("/render", response_model=VideoOut, status_code=202)
 async def render_video(
     body: RenderIn,
-    bg: BackgroundTasks,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -325,7 +327,8 @@ async def render_video(
     await db.commit()
     await db.refresh(video)
 
-    spec_data = script.body or {}
+    raw_body = script.body
+    spec_data: dict = raw_body if isinstance(raw_body, dict) else {}
 
     from engine.story.schemas import SceneSpec, StorySpec
 
@@ -436,7 +439,7 @@ async def get_video(
 ):
     v = await db.scalar(
         select(Video)
-        .options(selectinload(Video.publication))
+        .options(selectinload(Video.publications))
         .where(Video.id == video_id, Video.user_id == user.id)
     )
     if not v:
@@ -453,7 +456,7 @@ async def update_video(
 ):
     v = await db.scalar(
         select(Video)
-        .options(selectinload(Video.publication))
+        .options(selectinload(Video.publications))
         .where(Video.id == video_id, Video.user_id == user.id)
     )
     if not v:
@@ -477,7 +480,7 @@ async def generate_metadata_endpoint(
 ):
     v = await db.scalar(
         select(Video)
-        .options(selectinload(Video.publication))
+        .options(selectinload(Video.publications))
         .where(Video.id == video_id, Video.user_id == user.id)
     )
     if not v:
@@ -645,7 +648,7 @@ async def get_preview_url(
 
     v = await db.scalar(
         select(Video)
-        .options(selectinload(Video.publication))
+        .options(selectinload(Video.publications))
         .where(Video.id == video_id, Video.user_id == user.id)
     )
     if not v:
@@ -700,7 +703,7 @@ async def download_video(
     """
     v = await db.scalar(
         select(Video)
-        .options(selectinload(Video.publication))
+        .options(selectinload(Video.publications))
         .where(Video.id == video_id, Video.user_id == user.id)
     )
     if not v:
@@ -773,7 +776,7 @@ async def approve_video(
 ):
     v = await db.scalar(
         select(Video)
-        .options(selectinload(Video.publication))
+        .options(selectinload(Video.publications))
         .where(Video.id == video_id, Video.user_id == user.id)
     )
     if not v:
@@ -793,12 +796,14 @@ async def approve_video(
     from backend.models.models import Publication
 
     pub_q = select(Publication).where(
-        Publication.video_id == video_id, Publication.user_id == user.id
+        Publication.video_id == video_id,
+        Publication.user_id == user.id,
+        Publication.platform == "youtube",
     )
     pub_res = await db.execute(pub_q)
     pub = pub_res.scalar_one_or_none()
 
-    if pub and pub.youtube_id:
+    if pub and pub.remote_media_id:
         from googleapiclient.discovery import build
 
         from integrations.youtube.uploader import _get_credentials
@@ -807,7 +812,7 @@ async def approve_video(
             creds = await _get_credentials(user.id)
             youtube = build("youtube", "v3", credentials=creds)
             body = {
-                "id": pub.youtube_id,
+                "id": pub.remote_media_id,
                 "snippet": {
                     "title": v.selected_title or pub.title,
                     "description": f"{v.description}\n\n{' '.join(['#'+t for t in (v.hashtags or [])])}",
@@ -841,7 +846,7 @@ async def reject_video(
 ):
     v = await db.scalar(
         select(Video)
-        .options(selectinload(Video.publication))
+        .options(selectinload(Video.publications))
         .where(Video.id == video_id, Video.user_id == user.id)
     )
     if not v:
@@ -861,7 +866,7 @@ async def upload_video(
     """Upload an approved video to YouTube as private."""
     v = await db.scalar(
         select(Video)
-        .options(selectinload(Video.publication))
+        .options(selectinload(Video.publications))
         .where(Video.id == video_id, Video.user_id == user.id)
     )
     if not v:
@@ -876,7 +881,9 @@ async def upload_video(
         )
         if pub:
             return {
-                "youtube_id": pub.youtube_id,
+                "youtube_id": (
+                    pub.remote_media_id if pub.platform == "youtube" else None
+                ),
                 "url": pub.url,
                 "status": "already_uploaded",
             }
@@ -924,41 +931,108 @@ async def upload_video(
             )
 
     from backend.models.models import Publication
-    from integrations.youtube.uploader import upload_video as yt_upload
+
+    if body.scheduled_at:
+        for platform in body.platforms:
+            pub = Publication(
+                user_id=user.id,
+                video_id=video_id,
+                platform=platform,
+                remote_media_id=None,
+                url=None,
+                title=body.title,
+                description=body.description,
+                tags=body.tags,
+                privacy_status=body.privacy_status,
+                status="pending",
+                scheduled_at=body.scheduled_at,
+                schedule_status="scheduled",
+            )
+            db.add(pub)
+        v.status = VideoStatus.approved
+        v.notes = f"Scheduled for publishing at {body.scheduled_at} on {', '.join(body.platforms)}"
+        await db.flush()
+        return {"status": "scheduled", "scheduled_at": body.scheduled_at.isoformat()}
+
+    yt_id = None
+    tt_id = None
+    ig_id = None
+
+    from backend.models.models import PlatformConnection
+    from backend.services.publisher import get_publisher
 
     try:
-        yt_id = await yt_upload(
-            user_id=user.id,
-            video_path=upload_file_path,
-            title=body.title,
-            description=body.description,
-            tags=body.tags,
-            privacy_status=body.privacy_status,
-            made_for_kids=body.made_for_kids,
-        )
+        for platform in body.platforms:
+            q_conn = select(PlatformConnection).where(
+                PlatformConnection.user_id == user.id,
+                PlatformConnection.platform == platform,
+            )
+            conn_res = await db.execute(q_conn)
+            connection = conn_res.scalars().first()
+            if not connection:
+                raise HTTPException(400, f"No active connection found for {platform}")
+
+            pub = Publication(
+                user_id=user.id,
+                video_id=video_id,
+                platform=platform,
+                platform_connection_id=connection.id,
+                remote_media_id=None,
+                url=None,
+                title=body.title,
+                description=body.description,
+                tags=body.tags,
+                privacy_status=body.privacy_status,
+                status="publishing",
+            )
+            db.add(pub)
+            await db.commit()
+
+            publisher = get_publisher(platform)
+            if not await publisher.validate_connection(connection):
+                raise HTTPException(
+                    400, f"Connection for {platform} is invalid or expired."
+                )
+
+            remote_id = await publisher.publish(
+                publication=pub,
+                connection=connection,
+                video_path=upload_file_path,
+            )
+
+            if platform == "youtube":
+                yt_id = remote_id
+            elif platform == "tiktok":
+                tt_id = remote_id
+            elif platform == "instagram":
+                ig_id = remote_id
+
+            url = (
+                f"https://youtu.be/{remote_id}"
+                if remote_id and platform == "youtube"
+                else None
+            )
+
+            pub.remote_media_id = remote_id
+            pub.url = url
+            pub.status = "live"
+            await db.commit()
     except Exception as exc:
-        raise HTTPException(500, f"YouTube upload failed: {exc}")
+        raise HTTPException(500, f"Upload to one or more platforms failed: {exc}")
     finally:
         if temp_download_dir and os.path.exists(temp_download_dir):
             import shutil
 
             shutil.rmtree(temp_download_dir, ignore_errors=True)
 
-    pub = Publication(
-        user_id=user.id,
-        video_id=video_id,
-        youtube_id=yt_id,
-        url=f"https://youtu.be/{yt_id}",
-        title=body.title,
-        description=body.description,
-        tags=body.tags,
-        privacy_status=body.privacy_status,
-        status="live",
-    )
-    db.add(pub)
     v.status = VideoStatus.uploaded
     await db.flush()
-    return {"youtube_id": yt_id, "url": f"https://youtu.be/{yt_id}"}
+    return {
+        "youtube_id": yt_id,
+        "tiktok_id": tt_id,
+        "instagram_id": ig_id,
+        "url": f"https://youtu.be/{yt_id}" if yt_id else None,
+    }
 
 
 @router.post("/{video_id}/cancel", response_model=VideoOut)
@@ -969,7 +1043,7 @@ async def cancel_video(
 ):
     v = await db.scalar(
         select(Video)
-        .options(selectinload(Video.publication))
+        .options(selectinload(Video.publications))
         .where(Video.id == video_id, Video.user_id == user.id)
     )
     if not v:
@@ -988,7 +1062,7 @@ async def pause_video(
 ):
     v = await db.scalar(
         select(Video)
-        .options(selectinload(Video.publication))
+        .options(selectinload(Video.publications))
         .where(Video.id == video_id, Video.user_id == user.id)
     )
     if not v:
@@ -1008,7 +1082,7 @@ async def resume_video(
 ):
     v = await db.scalar(
         select(Video)
-        .options(selectinload(Video.publication))
+        .options(selectinload(Video.publications))
         .where(Video.id == video_id, Video.user_id == user.id)
     )
     if not v:
@@ -1023,10 +1097,12 @@ async def resume_video(
 def _fmt(v: Video, publication=None) -> dict:
     # Extract publication info if available (either passed in or from relationship)
     pub = publication
-    if pub is None and hasattr(v, "publication") and v.publication is not None:
-        pub = v.publication
+    if pub is None and hasattr(v, "publications") and v.publications:
+        pubs = v.publications
+        if isinstance(pubs, list) and len(pubs) > 0:
+            pub = next((p for p in pubs if p.platform == "youtube"), pubs[0])
 
-    yt_id = pub.youtube_id if pub else None
+    yt_id = pub.remote_media_id if pub and pub.platform == "youtube" else None
     yt_url = pub.url if pub else None
 
     return {

@@ -255,7 +255,7 @@ Respond ONLY with this JSON (no markdown, no extra text):
         try:
             import asyncio
 
-            raw_response, provider_used = await asyncio.to_thread(
+            raw_response, provider_used, _ = await asyncio.to_thread(
                 generate_with_fallback,
                 prompt,
                 preferred_provider=preferred_provider,

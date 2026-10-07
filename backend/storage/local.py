@@ -61,7 +61,12 @@ class LocalStorageBackend(StorageBackend):
         # For local dev, we might serve via a static route like /static/
         return f"/static/{remote_key}"
 
-    async def generate_signed_url(self, remote_key: str, expires_in: int = 3600) -> str:
+    async def generate_signed_url(
+        self,
+        remote_key: str,
+        expires_in: int = 3600,
+        response_content_disposition: Optional[str] = None,
+    ) -> str:
         # Local doesn't have true signed URLs, just return public URL
         return await self.get_public_url(remote_key) or ""
 

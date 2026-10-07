@@ -130,6 +130,23 @@ async def get_dashboard_analytics(
         {"niche": n[0] or "General", "count": n[1]} for n in niche_counts
     ]
 
+    # Publication stats by platform
+    pub_stats_q = (
+        select(Publication.platform, Publication.status, func.count(Publication.id))
+        .where(Publication.user_id == user_id)
+        .group_by(Publication.platform, Publication.status)
+    )
+    pub_stats_res = (await db.execute(pub_stats_q)).all()
+
+    # Organize into { platform: { success: int, total: int } }
+    publication_rates = {}
+    for platform, status, count in pub_stats_res:
+        if platform not in publication_rates:
+            publication_rates[platform] = {"success": 0, "total": 0}
+        publication_rates[platform]["total"] += count
+        if status == "live":
+            publication_rates[platform]["success"] += count
+
     # Return real aggregate numbers (zero mock fallback)
     real_views = total_views + int(yt_channel_data.get("views_90d", 0))
     real_subs = total_subs + int(yt_channel_data.get("subscribers_gained", 0))
@@ -166,6 +183,7 @@ async def get_dashboard_analytics(
             {"day": "Sat", "views": round(total_views * 0.13)},
             {"day": "Sun", "views": round(total_views * 0.10)},
         ],
+        "publication_rates": publication_rates,
     }
 
 
@@ -190,7 +208,7 @@ async def get_top_videos(
     q = (
         q.order_by(Analytics.views.desc())
         .limit(limit)
-        .options(selectinload(Analytics.video).selectinload(Video.publication))
+        .options(selectinload(Analytics.video).selectinload(Video.publications))
     )
     results = await db.execute(q)
     top_analytics = results.scalars().all()

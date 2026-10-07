@@ -86,6 +86,8 @@ export const api = {
 
   // ── Ideas ────────────────────────────────────────
   getIdeas:       (channelId) => request(`/ideas/${channelId ? '?channel_id=' + channelId : ''}`),
+  createIdea:     (data) => request('/ideas/', { method: 'POST', body: JSON.stringify(data) }),
+  improveIdea:    (topic, channel_id = null) => request('/ideas/improve', { method: 'POST', body: JSON.stringify({ topic, channel_id }) }),
   generateIdeas:  (channelId, count, data) => request('/ideas/generate', { method: 'POST', body: JSON.stringify({ channel_id: channelId, count, ...(typeof data === 'string' ? { niche: data } : data) }), timeout: 120000 }),
   discardIdea:    (id) => request(`/ideas/${id}/discard`, { method: 'POST' }),
 
@@ -175,6 +177,27 @@ export const api = {
   getYoutubeConfigStatus: () => request('/youtube/config-status'),
   refreshYoutubeToken: () => request('/youtube/refresh', { method: 'POST' }),
   disconnectYoutube: () => request('/youtube/disconnect', { method: 'DELETE' }),
+  uploadYoutubeSecrets: async (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const token = localStorage.getItem('autotube_auth_token');
+
+    // We use standard fetch here because the `request` wrapper hardcodes Content-Type: application/json
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || '';
+    const formattedBase = baseUrl ? `${baseUrl.replace(/\/$/, '')}/api` : '/api';
+
+    const res = await fetch(`${formattedBase}/youtube/upload-secrets`, {
+      method: 'POST',
+      body: formData,
+      headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || err.message || 'Failed to upload secrets');
+    }
+    return res.json();
+  },
 
   // ── TTS Voices ────────────────────────────────────
   getVoices: (language) => request(`/voices/${language ? '?language=' + language : ''}`),
@@ -182,4 +205,7 @@ export const api = {
   // ── Costs ─────────────────────────────────────────
   getCostSummary: () => request('/costs/summary'),
   getJobCosts: (jobId) => request(`/costs/jobs/${jobId}`),
+
+  // ── Multi-Platform Publishing ────────────────────────
+  publishUniversal: (payload) => request('/publishing/compose', { method: 'POST', body: JSON.stringify(payload) }),
 };

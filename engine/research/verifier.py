@@ -57,7 +57,7 @@ Respond ONLY with a JSON object in this exact format (no markdown fences):
 """
         for attempt in range(self.max_retries + 1):
             try:
-                raw_response, provider = generate_with_fallback(prompt)
+                raw_response, provider, _ = generate_with_fallback(prompt)
 
                 # Strip markdown
                 import re

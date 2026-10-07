@@ -18,6 +18,10 @@ from datetime import datetime, timedelta, timezone
 # Force RUNTIME_ROLE to worker before any internal modules (like config) load
 os.environ["RUNTIME_ROLE"] = "worker"
 
+from contextlib import asynccontextmanager
+
+from sqlalchemy.exc import DBAPIError, OperationalError
+
 from backend.core.redis_client import get_redis
 from backend.db.database import AsyncSessionLocal
 from backend.models.models import Job, JobStatus, Video, VideoStatus
@@ -28,6 +32,51 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s — %(message)s",
 )
 log = logging.getLogger(__name__)
+
+
+def is_transient_db_error(exc: Exception) -> bool:
+    err_str = str(exc).lower()
+    return any(
+        k in err_str
+        for k in (
+            "connectiondoesnotexist",
+            "name resolution",
+            "could not connect",
+            "connection refused",
+            "connection reset",
+            "ssl",
+            "timeout",
+            "temporary failure",
+            "server closed the connection unexpectedly",
+        )
+    )
+
+
+@asynccontextmanager
+async def worker_db():
+    """Provides an AsyncSession with automatic retries for transient connection errors."""
+    max_retries = 3
+    for attempt in range(1, max_retries + 1):
+        session = AsyncSessionLocal()
+        try:
+            yield session
+            return
+        except (OperationalError, DBAPIError) as exc:
+            await session.rollback()
+            if is_transient_db_error(exc) and attempt < max_retries:
+                wait = 2**attempt
+                log.warning(
+                    f"[Worker DB] Transient error (attempt {attempt}/{max_retries}), retrying in {wait}s: {exc}"
+                )
+                await asyncio.sleep(wait)
+                continue
+            raise
+        except Exception:
+            await session.rollback()
+            raise
+        finally:
+            await session.close()
+
 
 # Global flag for graceful shutdown
 _shutdown_requested = False
@@ -44,7 +93,7 @@ async def renew_lease(job_id: str):
     log.info(f"[Lease] Started lease renewal for job {job_id}")
     try:
         while not _shutdown_requested:
-            async with AsyncSessionLocal() as db:
+            async with worker_db() as db:
                 try:
                     job = await db.get(Job, job_id)
                     if job and job.status == JobStatus.RUNNING:
@@ -72,7 +121,7 @@ async def execute_job(job_id: str) -> bool:
     video_id = None
 
     # Step 1: Read & Claim the Job in a short-lived DB session
-    async with AsyncSessionLocal() as db:
+    async with worker_db() as db:
         try:
             job_record = await db.get(Job, job_id)
             if not job_record:
@@ -120,7 +169,7 @@ async def execute_job(job_id: str) -> bool:
             await run_job(video_id, render_job, job_id=job_id)
 
             # Check video outcome
-            async with AsyncSessionLocal() as db:
+            async with worker_db() as db:
                 video = await db.get(Video, video_id)
                 if video and video.status in (VideoStatus.ready, VideoStatus.uploaded):
                     success = True
@@ -143,7 +192,7 @@ async def execute_job(job_id: str) -> bool:
             pass
 
     # Step 3: Update Job Status in a fresh DB session
-    async with AsyncSessionLocal() as db:
+    async with worker_db() as db:
         try:
             job_record = await db.get(Job, job_id)
             if job_record:
@@ -221,6 +270,8 @@ async def heartbeat_loop(worker_id: str):
     """Periodically sends heartbeat to Control Plane via HTTP."""
     import httpx
 
+    from backend.core.config import settings
+
     api_base = os.getenv("AUTOTUBE_API_URL", "http://127.0.0.1:8000/api").rstrip("/")
     url = f"{api_base}/jobs/worker/heartbeat"
     payload = {
@@ -228,11 +279,16 @@ async def heartbeat_loop(worker_id: str):
         "status": "AVAILABLE",
         "capabilities": ["RENDER", "IMAGE", "VIDEO", "TTS", "LLM"],
     }
+
+    headers = {}
+    if settings.WORKER_SECRET:
+        headers["X-Worker-Secret"] = settings.WORKER_SECRET
+
     log.info(f"[Worker] Started heartbeat loop targeting {url}.")
     while not _shutdown_requested:
         try:
             async with httpx.AsyncClient(timeout=5) as client:
-                await client.post(url, json=payload)
+                await client.post(url, json=payload, headers=headers)
         except Exception as e:
             log.debug(f"[Worker] Heartbeat ping failed: {e}")
         await asyncio.sleep(10)
@@ -244,7 +300,7 @@ async def watchdog():
     log.info("[Worker] Started watchdog loop.")
     while not _shutdown_requested:
         try:
-            async with AsyncSessionLocal() as db:
+            async with worker_db() as db:
                 from sqlalchemy import select
 
                 now = datetime.now(timezone.utc)

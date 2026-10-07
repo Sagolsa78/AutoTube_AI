@@ -47,12 +47,26 @@ async def init_db():
     """
     log.info("Checking database connectivity...")
     try:
+        import asyncio
+
         from sqlalchemy import text
 
-        async with engine.begin() as conn:
-            # Verify connection is alive
-            await conn.execute(text("SELECT 1"))
-            log.info("Database connectivity verified.")
+        max_retries = 5
+        for attempt in range(1, max_retries + 1):
+            try:
+                async with engine.begin() as conn:
+                    # Verify connection is alive
+                    await conn.execute(text("SELECT 1"))
+                    log.info("Database connectivity verified.")
+                    return
+            except Exception as e:
+                if attempt == max_retries:
+                    raise
+                wait_time = attempt * 2
+                log.warning(
+                    f"Database connection attempt {attempt} failed: {e}. Retrying in {wait_time}s..."
+                )
+                await asyncio.sleep(wait_time)
     except Exception as e:
         log.error(f"Failed to connect to database: {e}")
         raise

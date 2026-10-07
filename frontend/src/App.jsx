@@ -3,23 +3,24 @@ import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { setAuthToken, api } from './services/api';
 import { ChannelProvider } from './contexts/ChannelContext';
 import { JobsProvider } from './hooks/useJobs';
-const Landing = lazy(() => import('./pages/Landing'));
-const Login = lazy(() => import('./pages/Login'));
-const Register = lazy(() => import('./pages/Register'));
-const Dashboard = lazy(() => import('./pages/Dashboard'));
-const StudioShell = lazy(() => import('./pages/Studio/StudioShell'));
-const Ideas = lazy(() => import('./pages/Ideas'));
-const Scripts = lazy(() => import('./pages/Scripts'));
-const Videos = lazy(() => import('./pages/Videos'));
-const JobDetail = lazy(() => import('./pages/JobDetail'));
-const Profile = lazy(() => import('./pages/Profile'));
-const Channels = lazy(() => import('./pages/Channels'));
-const Publications = lazy(() => import('./pages/Publications'));
-const Analytics = lazy(() => import('./pages/Analytics'));
-const Costs = lazy(() => import('./pages/Costs'));
-const Logs = lazy(() => import('./pages/Logs'));
-const Health = lazy(() => import('./pages/Health'));
-import AppShell from './components/layout/AppShell';
+const Landing = lazy(() => import('./app/features/landing/Landing'));
+const Login = lazy(() => import('./app/features/auth/Login'));
+const Register = lazy(() => import('./app/features/auth/Register'));
+const Dashboard = lazy(() => import('./app/features/dashboard/Dashboard'));
+const StudioShell = lazy(() => import('./app/features/studio/StudioLayout'));
+const Ideas = lazy(() => import('./app/features/ideation/Ideas'));
+const Scripts = lazy(() => import('./app/features/ideation/Scripts'));
+const Videos = lazy(() => import('./app/features/content/Content'));
+const Calendar = lazy(() => import('./app/features/calendar/Calendar'));
+const JobDetail = lazy(() => import('./app/features/system/JobDetail'));
+const Profile = lazy(() => import('./app/features/settings/Profile'));
+const Channels = lazy(() => import('./app/features/settings/Channels'));
+const Publications = lazy(() => import('./app/features/publishing/Publications'));
+const Analytics = lazy(() => import('./app/features/analytics/Analytics'));
+const Costs = lazy(() => import('./app/features/settings/Costs'));
+const Logs = lazy(() => import('./app/features/system/Logs'));
+const Health = lazy(() => import('./app/features/system/Health'));
+import AppShell from './app/layouts/AppShell';
 import ErrorBoundary from './components/ErrorBoundary';
 import { Toaster } from 'sonner';
 import './index.css';
@@ -86,6 +87,7 @@ export default function App() {
             <Route path="ideas" element={<Ideas />} />
             <Route path="scripts" element={<Scripts />} />
             <Route path="videos" element={<Videos />} />
+            <Route path="calendar" element={<Calendar />} />
             <Route path="jobs/:id" element={<JobDetail />} />
             <Route path="best" element={<Videos filter="best" />} />
             <Route path="publications" element={<Publications />} />

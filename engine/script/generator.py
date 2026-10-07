@@ -22,7 +22,7 @@ Rules:
 - Target duration: {target_duration_seconds} seconds when read aloud.
 - Structure your script exactly as: HOOK, ESCALATION, EXPLANATION, PAYOFF, CTA.
 - The first 3 seconds MUST answer: "Why should I continue watching?"
-- HOOK: A single curiosity scene (question or surprising statement). Use formula: [Specific scenario] + [question] + [consequence]
+- HOOK: Use 2-3 very short rapid-fire scenes (1-2 seconds each) with "cut" transitions and dynamic "camera_motion" to build immediate tension. Formula: [scenario] + [question].
 - ESCALATION: Build the mystery.
 - EXPLANATION: Simple, fun facts (as if explaining to a 6-year-old).
 - PAYOFF: The most amazing part.
@@ -31,6 +31,10 @@ Rules:
 - NO unsupported claims (extract key facts into the claims array).
 - visual_intent: A high level visual concept for the scene.
 - stock_query: A SPECIFIC 3-5 word description for stock footage directly relevant to the narration. MUST be concrete. (e.g. "monarch butterfly close up wings")
+- camera_motion: Pick one: "static", "zoom_in", "zoom_out", "pan_left", "pan_right", "ken_burns".
+- transition: Pick one: "cut", "fade", "dip_to_black", "wipe". Use "cut" for rapid pacing.
+- emotion: The primary emotion (e.g. "panic", "awe", "curiosity").
+- visual_effect: Special effect if needed (e.g. "shake", "flash") or empty string.
 - scene_number must be sequential starting at 1.
 - preferred_visual_mode should generally be "STOCK" unless impossible to find.
 """,
@@ -42,7 +46,7 @@ Rules:
 - Target duration: {target_duration_seconds} seconds when read aloud.
 - Structure your script exactly as: HOOK, ESCALATION, EXPLANATION, PAYOFF, CTA.
 - The first 3 seconds MUST answer: "Why should I continue watching?"
-- HOOK: Use formula: [Specific scenario] + [question] + [consequence]. (e.g. "If both engines fail at 35,000 feet, what happens next? The answer might save your life.")
+- HOOK: Use 2-3 very short rapid-fire scenes (1-2 seconds each) with "cut" transitions and dynamic "camera_motion" to build immediate tension. Formula: [scenario] + [question].
 - ESCALATION: Build tension or curiosity.
 - EXPLANATION: 1-2 fact scenes — extreme brevity, highly surprising.
 - PAYOFF: A "wait, that means..." moment that connects to everyday life.
@@ -50,6 +54,10 @@ Rules:
 - No clickbait or false claims (extract key facts into the claims array).
 - visual_intent: High level visual concept.
 - stock_query: A SPECIFIC 3-5 word description for stock footage directly relevant to the narration. MUST be concrete. DO NOT use single abstract keywords.
+- camera_motion: Pick one: "static", "zoom_in", "zoom_out", "pan_left", "pan_right", "ken_burns". Use dynamic motion for the HOOK.
+- transition: Pick one: "cut", "fade", "dip_to_black", "wipe".
+- emotion: The primary emotion.
+- visual_effect: Special effect if needed (e.g. "shake", "flash") or empty string.
 - scene_number must be sequential starting at 1.
 - preferred_visual_mode should generally be "STOCK".
 """,
@@ -61,7 +69,7 @@ Rules:
 - Target duration: {target_duration_seconds} seconds at a fast speaking pace.
 - Structure your script exactly as: HOOK, ESCALATION, EXPLANATION, PAYOFF, CTA.
 - The first 3 seconds MUST answer: "Why should I continue watching?"
-- HOOK: Frame as a mystery using: [Specific scenario] + [question] + [consequence].
+- HOOK: Use 2-3 very short rapid-fire scenes (1-2 seconds each) with "cut" transitions and dynamic "camera_motion" to build immediate tension. Formula: [scenario] + [question].
 - ESCALATION: Raise the stakes of the mystery.
 - EXPLANATION: 1-2 body scenes explaining the mechanism simply and quickly.
 - PAYOFF: The "aha" moment of understanding.
@@ -69,6 +77,10 @@ Rules:
 - Accurate — no speculation presented as fact (extract facts to claims array).
 - visual_intent: High level visual concept.
 - stock_query: A SPECIFIC 3-5 word description for stock footage directly relevant to the narration. MUST be concrete.
+- camera_motion: Pick one: "static", "zoom_in", "zoom_out", "pan_left", "pan_right", "ken_burns".
+- transition: Pick one: "cut", "fade", "dip_to_black", "wipe".
+- emotion: The primary emotion.
+- visual_effect: Special effect if needed.
 - scene_number must be sequential starting at 1.
 - preferred_visual_mode should generally be "STOCK".
 """,
@@ -112,9 +124,14 @@ Rules:
 - Target duration: {target_duration_seconds} seconds when read aloud.
 - Structure your script exactly as: HOOK, ESCALATION, EXPLANATION, PAYOFF, CTA.
 - The first 3 seconds MUST answer: "Why should I continue watching?"
+- HOOK: Use 2-3 very short rapid-fire scenes (1-2 seconds each) with "cut" transitions and dynamic "camera_motion" to build immediate tension.
 - NO unsupported claims (extract key facts into the claims array).
 - visual_intent: A high level visual concept for the scene.
 - stock_query: A SPECIFIC 3-5 word description for stock footage directly relevant to the narration. MUST be concrete.
+- camera_motion: Pick one: "static", "zoom_in", "zoom_out", "pan_left", "pan_right", "ken_burns".
+- transition: Pick one: "cut", "fade", "dip_to_black", "wipe".
+- emotion: The primary emotion.
+- visual_effect: Special effect if needed.
 - scene_number must be sequential starting at 1.
 - preferred_visual_mode should generally be "STOCK" unless impossible to find.
 """
@@ -125,7 +142,19 @@ Rules:
         template += f"\n- MUST write the script entirely in language code: {language}\n"
 
     if content_type == "long_form":
-        template += "\n- This is a long-form video. Add a dedicated INTRO, deep-dive EXPLANATION chapters, and a conclusion.\n"
+        template += f"""
+- This is a LONG-FORM video ({target_duration_seconds} seconds / ~{target_duration_seconds // 60} minutes).
+- Structure: COLD OPEN → INTRO → 3-5 CHAPTERS → CONCLUSION → CTA
+- Each chapter should have 2-4 scenes with distinct narration blocks.
+- Generate 12-25 scenes total (proportional to duration).
+- Each scene narration should be 2-4 sentences (15-30 seconds spoken).
+- Include chapter transitions ("But here's where it gets interesting...")
+- Every 3 minutes, re-hook the audience with a pattern interrupt.
+- COLD OPEN: Start with the most shocking/curious part of the story (first 15 seconds).
+- INTRO: Set context after the cold open (30-45 seconds).
+- CONCLUSION: Tie everything together with a memorable takeaway.
+- CTA: "Subscribe and hit the bell for more deep dives like this."
+"""
 
     planner = StoryPlanner(max_retries=2)
 

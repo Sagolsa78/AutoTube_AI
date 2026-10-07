@@ -110,13 +110,21 @@ class S3StorageBackend(StorageBackend):
             return f"{domain}/{key}"
         return None
 
-    async def generate_signed_url(self, remote_key: str, expires_in: int = 3600) -> str:
+    async def generate_signed_url(
+        self,
+        remote_key: str,
+        expires_in: int = 3600,
+        response_content_disposition: Optional[str] = None,
+    ) -> str:
         async with self.session.client(
             "s3", endpoint_url=self.endpoint_url, config=self.s3_config
         ) as s3:
+            params = {"Bucket": self.bucket, "Key": remote_key}
+            if response_content_disposition:
+                params["ResponseContentDisposition"] = response_content_disposition
             url = await s3.generate_presigned_url(
                 "get_object",
-                Params={"Bucket": self.bucket, "Key": remote_key},
+                Params=params,
                 ExpiresIn=expires_in,
             )
             return url

@@ -24,7 +24,11 @@ class VisualRouter:
         self.strategy = strategy
 
     async def resolve_asset(
-        self, scene_data: dict, idea_topic: str = "", used_source_ids: set = None
+        self,
+        scene_data: dict,
+        idea_topic: str = "",
+        used_source_ids: set = None,
+        orientation: str = "portrait",
     ) -> Optional[str]:
         """
         Resolves an asset path for the given scene data.
@@ -55,27 +59,64 @@ class VisualRouter:
         )
 
         if mode == "STOCK":
-            # Attempt stock, if fails, fallback to generated
-            res = await self._resolve_stock(scene_data, idea_topic, used_source_ids)
+            # Attempt stock, if fails, fallback to AI B-Roll
+            res = await self._resolve_stock(
+                scene_data, idea_topic, used_source_ids, orientation=orientation
+            )
             if res:
                 return res
-            log.warning("STOCK failed, falling back to GENERATED_IMAGE.")
+            log.warning("STOCK failed, falling back to AI B-Roll (Dynamic AI Video).")
+
+            from engine.visuals.fallback_broll import generate_fallback_broll
+
+            prompt = (
+                scene_data.get("visual_intent")
+                or scene_data.get("visual_description")
+                or idea_topic
+                or "beautiful scenery"
+            )
+            fallback_res = await generate_fallback_broll(prompt, self.visual_dir)
+            if fallback_res:
+                # Store the fallback asset in DB
+                async with AsyncSessionLocal() as db:
+                    new_asset = Asset(
+                        user_id=self.user_id,
+                        asset_type="video_clip",
+                        source="ai_fallback",
+                        path=fallback_res,
+                        asset_metadata={"prompt": prompt},
+                    )
+                    db.add(new_asset)
+                    await db.flush()
+                    scene_data["asset_id"] = new_asset.id
+                    await db.commit()
+                return fallback_res
+
+            log.warning("AI B-Roll fallback failed, falling back to GENERATED_IMAGE.")
             return await self._resolve_generated_image(scene_data, idea_topic)
         elif mode == "COVERR":
             # Attempt Coverr specifically, fallback to normal STOCK if it fails
             res = await self._resolve_stock(
-                scene_data, idea_topic, used_source_ids, provider_override="coverr"
+                scene_data,
+                idea_topic,
+                used_source_ids,
+                provider_override="coverr",
+                orientation=orientation,
             )
             if res:
                 return res
             log.warning("COVERR failed, falling back to STOCK.")
-            return await self._resolve_stock(scene_data, idea_topic, used_source_ids)
+            return await self._resolve_stock(
+                scene_data, idea_topic, used_source_ids, orientation=orientation
+            )
         elif mode == "GENERATED_IMAGE":
             result = await self._resolve_generated_image(scene_data, idea_topic)
             if result:
                 return result
             log.warning("GENERATED_IMAGE failed, falling back to STOCK.")
-            return await self._resolve_stock(scene_data, idea_topic, used_source_ids)
+            return await self._resolve_stock(
+                scene_data, idea_topic, used_source_ids, orientation=orientation
+            )
         elif mode == "GENERATED_VIDEO":
             result = await self._resolve_generated_video(scene_data, idea_topic)
             if result:
@@ -191,6 +232,7 @@ class VisualRouter:
         idea_topic: str,
         used_source_ids: set,
         provider_override: str = None,
+        orientation: str = "portrait",
     ) -> Optional[str]:
         """Resolves stock footage for the scene."""
         query = (
@@ -205,7 +247,10 @@ class VisualRouter:
             async with AsyncSessionLocal() as db:
                 # Fetch more results to allow for deduplication and intelligence matching
                 search_results = await async_search_clips(
-                    query, count=15, provider_override=provider_override
+                    query,
+                    count=15,
+                    provider_override=provider_override,
+                    orientation=orientation,
                 )
                 if not search_results:
                     log.warning(f"No stock results found for query: {query}")
@@ -220,11 +265,23 @@ class VisualRouter:
                     scene_intent=scene_data.get("visual_intent", query),
                     db=db,
                     min_duration=3.0,  # Could be derived from scene duration in the future
+                    orientation=orientation,
                 )
 
                 clip_meta = (
                     ranked_candidates[0] if ranked_candidates else search_results[0]
                 )
+
+                # -- Visual QA Stage --
+                qa_passed = await AssetIntelligenceEngine.validate_candidate(
+                    candidate=clip_meta,
+                    scene_intent=scene_data.get("visual_intent", query),
+                    user_id=self.user_id,
+                    db=db,
+                )
+                if not qa_passed:
+                    log.warning(f"QA rejected the stock candidate for query: {query}")
+                    return None
 
                 source_id = str(clip_meta["source_asset_id"])
                 used_source_ids.add(source_id)

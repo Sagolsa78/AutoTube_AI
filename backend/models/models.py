@@ -96,32 +96,37 @@ class User(Base):
     channels = relationship(
         "Channel", back_populates="user", cascade="all, delete-orphan"
     )
-    youtube_connections = relationship(
-        "YouTubeConnection", back_populates="user", cascade="all, delete-orphan"
+    platform_connections = relationship(
+        "PlatformConnection", back_populates="user", cascade="all, delete-orphan"
     )
 
 
 UserProfile = User  # Legacy alias for backward compatibility
 
 
-class YouTubeConnection(Base):
-    """Stores encrypted OAuth credentials for YouTube publishing."""
+class PlatformConnection(Base):
+    """Stores encrypted OAuth credentials for platform publishing."""
 
-    __tablename__ = "youtube_connections"
+    __tablename__ = "platform_connections"
 
     id = Column(String, primary_key=True, default=_uuid)
     user_id = Column(
         String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    channel_id = Column(String, nullable=True)  # YT Channel ID
-    channel_title = Column(String, nullable=True)
-    access_token = Column(Text, nullable=False)  # Consider encrypting in production
-    refresh_token = Column(Text, nullable=True)
+    platform = Column(String, nullable=False, index=True)
+    account_id = Column(String, nullable=True)
+    account_name = Column(String, nullable=True)
+    access_token_encrypted = Column(Text, nullable=False)
+    refresh_token_encrypted = Column(Text, nullable=True)
     expires_at = Column(DateTime(timezone=True), nullable=True)
+    scopes = Column(JSON, default=list)
+    status = Column(String, default="active")
+    platform_metadata = Column(JSON, default=dict)
+
     created_at = Column(DateTime(timezone=True), default=utc_now)
     updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
 
-    user = relationship("User", back_populates="youtube_connections")
+    user = relationship("User", back_populates="platform_connections")
 
 
 # ── Tables ────────────────────────────────────────────────────────────────────
@@ -166,6 +171,21 @@ class Channel(Base):
     )  # e.g. {"default_strategy": "balanced"}
     topic_fingerprints = Column(JSON, default=list)  # normalized topic embeddings
     performance_metrics = Column(JSON, default=dict)  # aggregated channel-level metrics
+
+    schedule_config = Column(
+        JSON,
+        default=lambda: {
+            "timezone": "UTC",
+            "buffer_days": 1,
+            "min_hours_between": 8,
+            "auto_schedule": True,
+            "platforms": {
+                "youtube": "18:30",
+                "instagram": "19:00",
+                "facebook": "19:15",
+            },
+        },
+    )
 
     created_at = Column(DateTime(timezone=True), default=utc_now)
 
@@ -321,7 +341,9 @@ class Video(Base):
     created_at = Column(DateTime(timezone=True), default=utc_now)
 
     script = relationship("Script", back_populates="videos")
-    publication = relationship("Publication", back_populates="video", uselist=False)
+    publications = relationship(
+        "Publication", back_populates="video", cascade="all, delete-orphan"
+    )
     analytics = relationship(
         "Analytics", back_populates="video", cascade="all, delete-orphan"
     )
@@ -334,17 +356,41 @@ class Publication(Base):
     user_id = Column(
         String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    video_id = Column(String, ForeignKey("videos.id"), nullable=False, unique=True)
-    youtube_id = Column(String)
-    url = Column(String)
-    title = Column(String)
-    description = Column(Text)
-    tags = Column(JSON)
+    video_id = Column(String, ForeignKey("videos.id"), nullable=False, index=True)
+    platform_connection_id = Column(
+        String,
+        ForeignKey("platform_connections.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    platform = Column(String, nullable=False, default="youtube")
+    remote_media_id = Column(String, nullable=True)
+    url = Column(String, nullable=True)
+    title = Column(String, nullable=True)
+    caption = Column(Text, nullable=True)
+    description = Column(Text, nullable=True)
+    hashtags = Column(JSON, nullable=True)
+    tags = Column(JSON, nullable=True)
     privacy_status = Column(SAEnum(PrivacyStatus), default=PrivacyStatus.private)
-    published_at = Column(DateTime(timezone=True))
+    published_at = Column(DateTime(timezone=True), nullable=True)
     status = Column(String, default="pending")
 
-    video = relationship("Video", back_populates="publication")
+    # ── Scheduled Publishing ──────────────────────────────────────────────────
+    scheduled_at = Column(DateTime(timezone=True), nullable=True)
+    schedule_status = Column(
+        String, default="immediate"
+    )  # immediate | scheduled | published | failed
+    attempts = Column(Integer, default=0)
+    last_error = Column(Text, nullable=True)
+    last_attempt_at = Column(DateTime(timezone=True), nullable=True)
+    platform_metadata = Column(JSON, default=dict)
+    idempotency_key = Column(String, index=True, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), default=utc_now)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+
+    video = relationship("Video", back_populates="publications")
+    platform_connection = relationship("PlatformConnection")
 
 
 class Analytics(Base):

@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import re
+import uuid
 from pathlib import Path
 
 from sqlalchemy import select
@@ -21,7 +22,6 @@ from backend.models.models import (
     User,
     Video,
     VideoStatus,
-    YouTubeConnection,
 )
 from backend.storage.local import LocalStorageBackend
 from backend.storage.s3 import S3StorageBackend
@@ -263,10 +263,18 @@ async def run_job(video_id: str, job: RenderJob, job_id: str = None):
                                 )
                                 scene_dict = scene_spec.model_dump()
 
+                                # Determine orientation for stock clip fetching
+                                vis_orientation = (
+                                    "landscape"
+                                    if job.orientation == "16:9"
+                                    else "portrait"
+                                )
+
                                 asset_path = await router.resolve_asset(
                                     scene_dict,
                                     idea.topic if idea else "",
                                     used_source_ids,
+                                    orientation=vis_orientation,
                                 )
 
                                 if "asset_id" in scene_dict:
@@ -274,12 +282,65 @@ async def run_job(video_id: str, job: RenderJob, job_id: str = None):
                                     scene_spec.asset_id = scene_dict["asset_id"]
                                     await db.commit()
 
-                        if asset_path and os.path.getsize(asset_path) > 10_000:
+                        if (
+                            not asset_path
+                            or not os.path.exists(asset_path)
+                            or os.path.getsize(asset_path) < 10_000
+                        ):
+                            log.warning(
+                                f"Failed to resolve valid asset for scene {scene.scene_number}. Generating solid color fallback."
+                            )
+                            # Generate a solid color fallback using ffmpeg
+                            fallback_path = os.path.join(
+                                str(visual_dir),
+                                f"fallback_scene_{scene.scene_number}_{uuid.uuid4().hex[:8]}.mp4",
+                            )
+                            try:
+                                import asyncio
+
+                                # Default to 3 seconds if not known
+                                duration = (
+                                    scene_spec.duration
+                                    or getattr(scene, "duration_est", None)
+                                    or 3.0
+                                )
+                                # Pick a random dark color or just navy
+                                cmd = [
+                                    "ffmpeg",
+                                    "-y",
+                                    "-f",
+                                    "lavfi",
+                                    "-i",
+                                    f"color=c=navy:s=1080x1920:d={duration}",
+                                    "-c:v",
+                                    "libx264",
+                                    "-preset",
+                                    "ultrafast",
+                                    fallback_path,
+                                ]
+                                proc = await asyncio.create_subprocess_exec(
+                                    *cmd,
+                                    stdout=asyncio.subprocess.PIPE,
+                                    stderr=asyncio.subprocess.PIPE,
+                                )
+                                _, stderr = await proc.communicate()
+                                if proc.returncode == 0:
+                                    asset_path = fallback_path
+                                else:
+                                    log.error(
+                                        f"Failed to generate solid color fallback: {stderr.decode()}"
+                                    )
+                            except Exception as fb_exc:
+                                log.error(
+                                    f"Error generating solid color fallback: {fb_exc}"
+                                )
+
+                        if asset_path and os.path.exists(asset_path):
                             valid_clip_paths.append(asset_path)
                             job.story_spec.scenes[i].asset_path = asset_path
                         else:
-                            log.warning(
-                                f"Failed to resolve valid asset for scene {scene.scene_number}"
+                            raise ValueError(
+                                f"CRITICAL: Failed to resolve any asset for scene {scene.scene_number} and fallback failed."
                             )
                 else:
                     queries = (
@@ -450,29 +511,55 @@ Respond ONLY with a JSON object in this exact format (no markdown):
                     log.info(
                         f"Auto-publishing video {video_id} because channel.auto_approve is True"
                     )
-                    from integrations.youtube.uploader import upload_video as yt_upload
+                    from backend.services.publisher import get_publisher
 
                     try:
-                        yt_id = await yt_upload(
-                            user_id=video.user_id,
-                            video_path=saved_path,
-                            title=video.selected_title,
-                            description=video.description,
-                            tags=video.hashtags,
-                            privacy_status="private",
-                            made_for_kids=False,
+                        from backend.models.models import PlatformConnection
+
+                        q_conn = select(PlatformConnection).where(
+                            PlatformConnection.user_id == video.user_id,
+                            PlatformConnection.platform == "youtube",
                         )
+                        conn_res = await db.execute(q_conn)
+                        connection = conn_res.scalars().first()
+
+                        if not connection:
+                            raise ValueError(
+                                "No active youtube connection found for auto-publish."
+                            )
+
                         pub = Publication(
                             user_id=video.user_id,
                             video_id=video_id,
-                            youtube_id=yt_id,
-                            url=f"https://youtu.be/{yt_id}",
+                            platform="youtube",
+                            platform_connection_id=connection.id,
                             title=video.selected_title,
                             description=video.description,
-                            status="live",
-                            privacy_status="public",
+                            tags=video.hashtags,
+                            hashtags=video.hashtags,
+                            status="publishing",
+                            privacy_status="private",
                         )
                         db.add(pub)
+                        await db.commit()
+
+                        publisher = get_publisher("youtube")
+                        if not await publisher.validate_connection(connection):
+                            raise ValueError(
+                                "Connection for youtube is invalid or expired."
+                            )
+
+                        yt_id = await publisher.publish(
+                            publication=pub,
+                            connection=connection,
+                            video_path=saved_path,
+                        )
+
+                        pub.remote_media_id = yt_id
+                        pub.url = f"https://youtu.be/{yt_id}" if yt_id else ""
+                        pub.status = "live"
+                        pub.privacy_status = "public"
+
                         video.status = VideoStatus.uploaded
                     except Exception as upload_exc:
                         log.error(f"Auto-publish failed for {video_id}: {upload_exc}")
@@ -480,17 +567,22 @@ Respond ONLY with a JSON object in this exact format (no markdown):
                         video.notes = (
                             video.notes or ""
                         ) + f"\nAuto-publish failed: {upload_exc}"
-                        pub = Publication(
-                            user_id=video.user_id,
-                            video_id=video_id,
-                            youtube_id="",
-                            url="",
-                            title=video.selected_title,
-                            description=video.description,
-                            status="draft",
-                            privacy_status="private",
-                        )
-                        db.add(pub)
+
+                        # In case we failed before creating pub, create a failed draft one
+                        if "pub" not in locals():
+                            pub = Publication(
+                                user_id=video.user_id,
+                                video_id=video_id,
+                                platform="youtube",
+                                title=video.selected_title,
+                                description=video.description,
+                                status="draft",
+                                privacy_status="private",
+                            )
+                            db.add(pub)
+                        else:
+                            pub.status = "failed"
+                            pub.last_error = str(upload_exc)
                 else:
                     log.info(
                         f"Skipping auto-publish for {video_id} because metadata failed."
@@ -499,7 +591,8 @@ Respond ONLY with a JSON object in this exact format (no markdown):
                     pub = Publication(
                         user_id=video.user_id,
                         video_id=video_id,
-                        youtube_id="",
+                        platform="youtube",
+                        remote_media_id="",
                         url="",
                         title=video.selected_title,
                         description=video.description,
