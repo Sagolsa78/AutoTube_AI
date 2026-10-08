@@ -1,0 +1,45 @@
+{
+  "image_portrait": {
+    "workflow": "image_portrait.json",
+    "inputs": {
+      "positive_prompt": "6",
+      "negative_prompt": "7",
+      "sampler": "3",
+      "latent_image": "5",
+      "save_image": "9"
+    }
+  },
+  "image_cinematic": {
+    "workflow": "image_cinematic.json",
+    "inputs": {
+      "positive_prompt": "6",
+      "negative_prompt": "7",
+      "sampler": "3",
+      "latent_image": "5",
+      "save_image": "9"
+    }
+  },
+  "video_wan_vace_1_3b": {
+    "workflow": "video_wan_vace_1_3b.json",
+    "inputs": {
+      "positive_prompt": "12",
+      "negative_prompt": "13",
+      "seed": "9",
+      "reference_image": "21",
+      "width": "25",
+      "height": "26",
+      "frames": "27",
+      "output": "42"
+    }
+  },
+  "video_motion": {
+    "workflow": "video_motion.json",
+    "inputs": {
+      "positive_prompt": "12",
+      "negative_prompt": "13",
+      "seed": "9",
+      "duration": "27",
+      "output": "42"
+    }
+  }
+}
