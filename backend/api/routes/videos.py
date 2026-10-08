@@ -329,11 +329,16 @@ async def render_video(
 
     from engine.story.schemas import SceneSpec, StorySpec
 
-    story_spec = (
-        StorySpec(**spec_data)
-        if spec_data
-        else StorySpec(topic=idea.topic if idea else "")
-    )
+    if isinstance(spec_data, dict):
+        story_spec = (
+            StorySpec(**spec_data)
+            if spec_data
+            else StorySpec(topic=idea.topic if idea else "")
+        )
+    elif isinstance(spec_data, list):
+        story_spec = StorySpec(topic=idea.topic if idea else "", scenes=spec_data)
+    else:
+        story_spec = StorySpec(topic=idea.topic if idea else "")
 
     if not story_spec.scenes:
         # Build scenes from script.scenes if missing
@@ -752,7 +757,6 @@ async def download_video(
             signed_url = await storage.generate_signed_url(
                 v.path,
                 expires_in=1800,
-                response_content_disposition=f'attachment; filename="{filename}"',
             )
             from fastapi.responses import RedirectResponse
 
@@ -1023,8 +1027,12 @@ async def resume_video(
 def _fmt(v: Video, publication=None) -> dict:
     # Extract publication info if available (either passed in or from relationship)
     pub = publication
-    if pub is None and hasattr(v, "publication") and v.publication is not None:
-        pub = v.publication
+    if (
+        pub is None
+        and "publication" in v.__dict__
+        and v.__dict__["publication"] is not None
+    ):
+        pub = v.__dict__["publication"]
 
     yt_id = pub.youtube_id if pub else None
     yt_url = pub.url if pub else None

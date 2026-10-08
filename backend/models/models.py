@@ -166,6 +166,7 @@ class Channel(Base):
     )  # e.g. {"default_strategy": "balanced"}
     topic_fingerprints = Column(JSON, default=list)  # normalized topic embeddings
     performance_metrics = Column(JSON, default=dict)  # aggregated channel-level metrics
+    schedule_config = Column(JSON, default=dict)  # Auto-publishing settings
 
     created_at = Column(DateTime(timezone=True), default=utc_now)
 

@@ -1,6 +1,8 @@
 name: AutoTube AI - Video Render Worker
 
 on:
+  repository_dispatch:
+    types: [render_video, video_render]
   workflow_dispatch:
     inputs:
       job_id:
