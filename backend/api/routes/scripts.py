@@ -310,10 +310,6 @@ async def update_script(
     s = res.scalars().first()
     if not s:
         raise HTTPException(404, "Script not found")
-    if s.status == ScriptStatus.used_in_render:
-        raise HTTPException(
-            400, "Cannot edit a script that is already used in a render."
-        )
 
     if body.full_text is not None:
         s.full_text = body.full_text
@@ -390,10 +386,6 @@ async def regenerate_script(
 
     if not old_script:
         raise HTTPException(404, "Script not found")
-    if old_script.status == ScriptStatus.used_in_render:
-        raise HTTPException(
-            400, "Cannot regenerate a script that is already used in a render."
-        )
 
     old_script.status = ScriptStatus.discarded
     await db.flush()
@@ -419,10 +411,6 @@ async def discard_script(
     s = res.scalars().first()
     if not s:
         raise HTTPException(404, "Script not found")
-    if s.status == ScriptStatus.used_in_render:
-        raise HTTPException(
-            400, "Cannot discard a script that is already used in a render."
-        )
 
     s.status = ScriptStatus.discarded
     await db.flush()

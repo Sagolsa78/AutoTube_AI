@@ -190,7 +190,7 @@ class Settings(BaseSettings):
     def parsed_cors_origins(self) -> list[str]:
         if not self.CORS_ORIGINS:
             return []
-        return [origin.strip() for origin in self.CORS_ORIGINS.split(",")]
+        return [origin.strip().rstrip("/") for origin in self.CORS_ORIGINS.split(",")]
 
     @property
     def parsed_script_provider_order(self) -> list[str]:
