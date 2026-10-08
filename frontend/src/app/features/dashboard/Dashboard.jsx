@@ -239,18 +239,11 @@ export default function Dashboard() {
              <h2 className="text-xs font-bold text-text-muted uppercase tracking-widest flex items-center gap-2">
                <Icon name="sparkles" size={14} className="text-brand-red" /> Auto Insights
              </h2>
-             <div className="bg-brand-red/5 border border-brand-red/20 rounded-2xl p-5 shadow-sm relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-4 opacity-10"><Icon name="trending-up" size={64} /></div>
-                <div className="relative z-10">
-                   <p className="text-sm text-text-primary leading-relaxed font-medium mb-3">
-                     🔥 Your science videos are outperforming your average by <span className="text-brand-red font-bold">34%</span>.
-                   </p>
-                   <p className="text-xs text-text-secondary italic mb-4">
-                     Recommended next topic: "Why time behaves differently near black holes"
-                   </p>
-                   <button onClick={() => navigate('/app/create')} className="bg-canvas border border-border text-text-primary hover:border-brand-red hover:text-brand-red px-4 py-2 rounded-lg text-[11px] font-bold transition-all shadow-sm">
-                     Develop idea
-                   </button>
+             <div className="bg-surface border border-border/60 rounded-2xl p-5 shadow-sm relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-4 opacity-5"><Icon name="trending-up" size={64} /></div>
+                <div className="relative z-10 text-center py-4">
+                   <p className="text-sm font-bold text-text-primary mb-2">Not enough data</p>
+                   <p className="text-xs text-text-secondary">AI insights will appear here once you publish more videos.</p>
                 </div>
              </div>
            </div>
@@ -259,10 +252,10 @@ export default function Dashboard() {
            <div className="space-y-4">
              <h2 className="text-xs font-bold text-text-muted uppercase tracking-widest">Performance</h2>
              <div className="grid grid-cols-2 gap-3">
-               <MetricCard label="Views" value={analytics?.views || '1.2M'} />
-               <MetricCard label="Watch Time" value={analytics?.watch_time || '48h'} />
-               <MetricCard label="Engagement" value={analytics?.engagement || '8.4%'} />
-               <MetricCard label="Published" value={analytics?.published_count || '23'} />
+               <MetricCard label="Views" value={analytics?.performance?.total_views || 0} />
+               <MetricCard label="Subs" value={analytics?.performance?.total_subs || 0} />
+               <MetricCard label="Likes" value={analytics?.performance?.total_likes || 0} />
+               <MetricCard label="Published" value={analytics?.performance?.total_videos || 0} />
              </div>
            </div>
 

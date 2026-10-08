@@ -287,60 +287,20 @@ async def run_job(video_id: str, job: RenderJob, job_id: str = None):
                             or not os.path.exists(asset_path)
                             or os.path.getsize(asset_path) < 10_000
                         ):
-                            log.warning(
-                                f"Failed to resolve valid asset for scene {scene.scene_number}. Generating solid color fallback."
+                            log.error(
+                                f"CRITICAL: Failed to resolve valid asset for scene {scene.scene_number}. "
+                                "Visual unavailable. Halting render."
                             )
-                            # Generate a solid color fallback using ffmpeg
-                            fallback_path = os.path.join(
-                                str(visual_dir),
-                                f"fallback_scene_{scene.scene_number}_{uuid.uuid4().hex[:8]}.mp4",
+                            raise ValueError(
+                                f"Scene {scene.scene_number} needs a visual. Visual unavailable."
                             )
-                            try:
-                                import asyncio
-
-                                # Default to 3 seconds if not known
-                                duration = (
-                                    scene_spec.duration
-                                    or getattr(scene, "duration_est", None)
-                                    or 3.0
-                                )
-                                # Pick a random dark color or just navy
-                                cmd = [
-                                    "ffmpeg",
-                                    "-y",
-                                    "-f",
-                                    "lavfi",
-                                    "-i",
-                                    f"color=c=navy:s=1080x1920:d={duration}",
-                                    "-c:v",
-                                    "libx264",
-                                    "-preset",
-                                    "ultrafast",
-                                    fallback_path,
-                                ]
-                                proc = await asyncio.create_subprocess_exec(
-                                    *cmd,
-                                    stdout=asyncio.subprocess.PIPE,
-                                    stderr=asyncio.subprocess.PIPE,
-                                )
-                                _, stderr = await proc.communicate()
-                                if proc.returncode == 0:
-                                    asset_path = fallback_path
-                                else:
-                                    log.error(
-                                        f"Failed to generate solid color fallback: {stderr.decode()}"
-                                    )
-                            except Exception as fb_exc:
-                                log.error(
-                                    f"Error generating solid color fallback: {fb_exc}"
-                                )
 
                         if asset_path and os.path.exists(asset_path):
                             valid_clip_paths.append(asset_path)
                             job.story_spec.scenes[i].asset_path = asset_path
                         else:
                             raise ValueError(
-                                f"CRITICAL: Failed to resolve any asset for scene {scene.scene_number} and fallback failed."
+                                f"CRITICAL: Failed to resolve any asset for scene {scene.scene_number}."
                             )
                 else:
                     queries = (

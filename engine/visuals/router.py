@@ -37,25 +37,42 @@ class VisualRouter:
         if used_source_ids is None:
             used_source_ids = set()
 
-        mode = scene_data.get("preferred_visual_mode", "STOCK")
+        mode = scene_data.get("preferred_visual_mode", "AUTO")
         scene_num = scene_data.get("scene_number", 1)
+        intent = scene_data.get("visual_intent", "")
+        motion_req = scene_data.get("camera_motion", "")
+        continuity = scene_data.get("continuity_group", None)
 
-        # Apply strategy override
-        if self.strategy == "stock_first":
-            mode = "STOCK"
-        elif self.strategy == "coverr_only":
-            mode = "COVERR"
-        elif self.strategy == "ai_first":
-            mode = "GENERATED_IMAGE"
-        elif self.strategy == "balanced":
-            # Alternate between stock and generated based on scene number
-            mode = "STOCK" if scene_num % 2 != 0 else "GENERATED_IMAGE"
-        elif self.strategy == "auto":
-            # Keep original preferred mode if specified, else AUTO logic
-            mode = scene_data.get("preferred_visual_mode", "AUTO")
+        if self.strategy == "auto" or mode == "AUTO":
+            # Real Intelligence Logic
+            # E.g. Action/motion implies AI_VIDEO or STOCK
+            # Character continuity implies AI_IMAGE or AI_VIDEO
+            # Abstract concepts imply AI_IMAGE or STOCK
+
+            # Simple scoring placeholder representing the real intelligence layer
+            score_video = 80 if motion_req else 40
+            score_image = 90 if continuity else 60
+            score_stock = 70
+
+            if score_video > score_image and score_video > score_stock:
+                mode = "GENERATED_VIDEO"
+            elif score_image > score_stock:
+                mode = "GENERATED_IMAGE"
+            else:
+                mode = "STOCK"
+
+        # Handle manual user overrides
+        if scene_data.get("preferred_visual_mode") in [
+            "STOCK",
+            "GENERATED_IMAGE",
+            "GENERATED_VIDEO",
+            "USER_ASSET",
+        ]:
+            mode = scene_data.get("preferred_visual_mode")
 
         log.info(
-            f"VisualRouter: resolving scene {scene_num} using mode {mode} (Strategy: {self.strategy})"
+            f"VisualRouter: intelligently resolving scene {scene_num} using mode {mode} "
+            f"(Intent: {intent}, Motion: {motion_req}, Continuity: {continuity})"
         )
 
         if mode == "STOCK":

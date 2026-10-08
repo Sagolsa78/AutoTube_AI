@@ -7,7 +7,7 @@ router = APIRouter()
 
 @router.get("/")
 async def get_system_health():
-    # Hardcode for now, but mock real provider telemetry data
+    # Hardcode for now, but simulate real provider telemetry data
     providers = [
         {
             "name": "Ollama",

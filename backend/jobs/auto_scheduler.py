@@ -20,9 +20,18 @@ log = logging.getLogger(__name__)
 _auto_scheduler_task: asyncio.Task | None = None
 
 
+from backend.core.redis_client import get_redis
+
+
 async def _run_auto_scheduler():
-    async with AsyncSessionLocal() as db:
-        try:
+    redis_client = await get_redis()
+    if redis_client:
+        lock = await redis_client.set("lock:auto_scheduler", "1", nx=True, ex=120)
+        if not lock:
+            log.debug("Auto-Scheduler skipped (locked by another instance).")
+            return
+    try:
+        async with AsyncSessionLocal() as db:
             # 1. Fetch all channels
             channels = (await db.execute(select(Channel))).scalars().all()
             for channel in channels:
@@ -129,8 +138,11 @@ async def _run_auto_scheduler():
                     f"Successfully scheduled video {ready_video.id} to platforms: {list(platforms_times.keys())}"
                 )
 
-        except Exception as e:
-            log.exception(f"Auto-scheduler loop error: {e}")
+        # except Exception as e:
+        #     log.exception(f"Auto-scheduler loop error: {e}")
+    finally:
+        if redis_client:
+            await redis_client.delete("lock:auto_scheduler")
 
 
 async def _auto_scheduler_loop():

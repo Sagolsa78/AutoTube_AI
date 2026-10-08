@@ -190,23 +190,13 @@ export default function JobCenterDropdown({ isEngineOnline, engineStatus, collap
           <div className="px-4 py-3 border-t border-border/80 bg-surface-2/50 flex flex-col gap-3 rounded-b-xl">
              <div className="flex items-center justify-between gap-4">
                <div className="flex flex-col gap-1.5 flex-1">
-                  <div className="flex justify-between items-center text-[10px] text-text-secondary">
-                     <span>Storage</span>
-                     <span className="font-mono text-text-primary">42GB / 100GB</span>
-                  </div>
-                  <div className="w-full bg-canvas rounded-full h-1.5 border border-border/50">
-                     <div className="bg-brand-red h-full rounded-full w-[42%]" />
-                  </div>
-               </div>
-               <div className="w-px h-8 bg-border" />
-               <div className="flex flex-col gap-1 min-w-[70px]">
-                  <span className="text-[10px] text-text-secondary">AI Provider</span>
+                  <span className="text-[10px] text-text-secondary">Connected Providers</span>
                   <div className="flex items-center gap-1.5 text-[11px] font-bold text-success">
                      <span className="relative flex h-1.5 w-1.5">
                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
                        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-success"></span>
                      </span>
-                     Gemini
+                     System Online
                   </div>
                </div>
              </div>

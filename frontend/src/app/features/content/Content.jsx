@@ -176,7 +176,7 @@ export default function Content() {
 function ContentCard({ video }) {
   const navigate = useNavigate();
   const dateStr = new Date(video.created_at || Date.now()).toLocaleDateString();
-  const durationStr = "0:59"; // Mock duration
+  const durationStr = video.duration ? `${Math.floor(video.duration / 60)}:${(Math.floor(video.duration % 60)).toString().padStart(2, '0')}` : "0:00";
 
   return (
     <div

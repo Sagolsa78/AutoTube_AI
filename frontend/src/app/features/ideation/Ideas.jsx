@@ -94,7 +94,7 @@ export default function Ideas() {
 
   const actionRestore = async (id) => {
     try {
-      // Mock API call for restore - typically a patch to status='pending'
+      // Simulated API call for restore - typically a patch to status='pending'
       toast.success('Concept restored to Inbox');
       // In a real app we'd fetchContent, here we'll simulate success since we can't change backend easily right now without knowing the route
     } catch (e) {

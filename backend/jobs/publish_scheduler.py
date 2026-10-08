@@ -26,10 +26,19 @@ log = logging.getLogger(__name__)
 _scheduler_task: asyncio.Task | None = None
 
 
+from backend.core.redis_client import get_redis
+
+
 async def _check_scheduled_publications():
     """Publishes videos whose scheduled_at has passed."""
-    async with AsyncSessionLocal() as db:
-        try:
+    redis_client = await get_redis()
+    if redis_client:
+        lock = await redis_client.set("lock:publish_scheduler", "1", nx=True, ex=60)
+        if not lock:
+            return
+
+    try:
+        async with AsyncSessionLocal() as db:
             now = utc_now()
 
             # Crash recovery: reset stuck publishing jobs (older than 15 mins)
@@ -152,8 +161,11 @@ async def _check_scheduled_publications():
 
                     await db.commit()
 
-        except Exception as exc:
-            log.exception("Publish scheduler check failed: %s", exc)
+    except Exception as exc:
+        log.exception("Publish scheduler check failed: %s", exc)
+    finally:
+        if redis_client:
+            await redis_client.delete("lock:publish_scheduler")
 
 
 async def _scheduler_loop():

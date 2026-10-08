@@ -119,7 +119,7 @@ async def get_dashboard_analytics(
         )
         total_storage_mb = round(output_dir_size + temp_dir_size, 2)
 
-    # Niche / Topic performance mock or aggregated
+    # Niche / Topic performance aggregated
     topic_q = (
         select(Idea.topic, func.count(Idea.id))
         .where(Idea.user_id == user_id)
@@ -147,7 +147,7 @@ async def get_dashboard_analytics(
         if status == "live":
             publication_rates[platform]["success"] += count
 
-    # Return real aggregate numbers (zero mock fallback)
+    # Return real aggregate numbers
     real_views = total_views + int(yt_channel_data.get("views_90d", 0))
     real_subs = total_subs + int(yt_channel_data.get("subscribers_gained", 0))
 

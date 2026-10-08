@@ -24,26 +24,18 @@ log = logging.getLogger(__name__)
 COMFYUI_URL = settings.COMFYUI_URL
 WORKFLOWS_DIR = Path(BASE_DIR) / "workflows" / "comfyui"
 
-# Default node ID mappings — configurable per workflow
-DEFAULT_NODE_IDS = {
-    "image_portrait": {
-        "positive_prompt": "6",
-        "negative_prompt": "7",
-        "sampler": "3",
-        "latent_image": "5",
-        "save_image": "9",
-    },
-    "image_cinematic": {
-        "positive_prompt": "6",
-        "negative_prompt": "7",
-        "sampler": "3",
-        "latent_image": "5",
-        "save_image": "9",
-    },
-}
+# Default node ID mappings loaded from manifest.json
+MANIFEST_PATH = WORKFLOWS_DIR / "manifest.json"
 
 # Timeout for generation in seconds
 GENERATION_TIMEOUT = 300
+
+
+def load_manifest() -> dict:
+    if MANIFEST_PATH.exists():
+        with open(MANIFEST_PATH, "r") as f:
+            return json.load(f)
+    return {}
 
 
 class ComfyWorkflow:
@@ -54,13 +46,17 @@ class ComfyWorkflow:
 
     def __init__(self, workflow_name: str, node_ids: dict[str, str] | None = None):
         self.workflow_name = workflow_name
-        self.node_ids = node_ids or DEFAULT_NODE_IDS.get(workflow_name, {})
+        self.manifest = load_manifest()
+
+        manifest_data = self.manifest.get(workflow_name, {})
+        self.node_ids = node_ids or manifest_data.get("inputs", {})
+        self.workflow_filename = manifest_data.get("workflow", f"{workflow_name}.json")
         self.workflow_data: dict[str, Any] = {}
         self._loaded = False
 
     def load(self) -> "ComfyWorkflow":
         """Load workflow JSON from disk."""
-        path = WORKFLOWS_DIR / f"{self.workflow_name}.json"
+        path = WORKFLOWS_DIR / self.workflow_filename
         if not path.exists():
             raise FileNotFoundError(f"ComfyUI workflow not found: {path}")
 
@@ -160,22 +156,6 @@ class ComfyUIProvider(VisualProvider):
             return None
 
         client_id = str(uuid.uuid4())
-
-        # 1. Queue prompt
-        p = {"prompt": prompt_workflow, "client_id": client_id}
-        data = json.dumps(p).encode("utf-8")
-        req = urllib.request.Request(f"{self.base_url}/prompt", data=data)
-        req.add_header("Content-Type", "application/json")
-
-        try:
-            with urllib.request.urlopen(req, timeout=10) as response:
-                response_data = json.loads(response.read())
-                prompt_id = response_data["prompt_id"]
-        except Exception as e:
-            log.error(f"Failed to queue ComfyUI prompt: {e}")
-            return None
-
-        # 2. Connect to websocket and listen for execution_success
         ws_url = (
             self.base_url.replace("http://", "ws://").replace("https://", "wss://")
             + f"/ws?clientId={client_id}"
@@ -183,6 +163,21 @@ class ComfyUIProvider(VisualProvider):
 
         try:
             async with websockets.connect(ws_url) as websocket:
+                # 1. Queue prompt
+                p = {"prompt": prompt_workflow, "client_id": client_id}
+                data = json.dumps(p).encode("utf-8")
+                req = urllib.request.Request(f"{self.base_url}/prompt", data=data)
+                req.add_header("Content-Type", "application/json")
+
+                try:
+                    with urllib.request.urlopen(req, timeout=10) as response:
+                        response_data = json.loads(response.read())
+                        prompt_id = response_data["prompt_id"]
+                except Exception as e:
+                    log.error(f"Failed to queue ComfyUI prompt: {e}")
+                    return None
+
+                # 2. Listen for execution_success
                 start_time = time.monotonic()
                 while True:
                     if time.monotonic() - start_time > timeout:

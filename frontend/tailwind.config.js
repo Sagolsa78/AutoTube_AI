@@ -16,21 +16,31 @@ export default {
     },
     extend: {
       colors: {
-        canvas: "#0A0B0D",
-        background: "#0A0B0D",
+        canvas: "#090B10",
+        background: "#090B10",
         surface: {
-          DEFAULT: "#111318",
-          hover: "#171A20",
-          input: "#14171E",
+          DEFAULT: "#10141C",
+          hover: "#141923",
+          input: "#0F1219",
         },
         elevated: {
-          DEFAULT: "#171A20",
-          hover: "#20242D",
+          DEFAULT: "#171C26",
+          hover: "#1D2330",
         },
         border: {
-          DEFAULT: "#262A32",
-          subtle: "#1C1F26",
-          strong: "#353A45",
+          DEFAULT: "#242A36",
+          subtle: "#1B1F28",
+          strong: "#353C4D",
+        },
+        primary: {
+          DEFAULT: "#8B5CF6",
+          hover: "#A78BFA",
+          muted: "rgba(139, 92, 246, 0.12)",
+        },
+        accent: {
+          DEFAULT: "#22D3EE",
+          hover: "#67E8F9",
+          muted: "rgba(34, 211, 238, 0.12)",
         },
         'brand-red': {
           DEFAULT: "#E6392F",
@@ -39,21 +49,21 @@ export default {
           muted: "rgba(230, 57, 47, 0.12)",
         },
         text: {
-          primary: "#F3F1EC",
-          secondary: "#A7ABB4",
-          muted: "#737984",
+          primary: "#F8FAFC",
+          secondary: "#AAB1C0",
+          muted: "#697386",
         },
         success: {
-          DEFAULT: "#32C48D",
-          muted: "rgba(50, 196, 141, 0.12)",
+          DEFAULT: "#34D399",
+          muted: "rgba(52, 211, 153, 0.12)",
         },
         warning: {
-          DEFAULT: "#E8B04B",
-          muted: "rgba(232, 176, 75, 0.12)",
+          DEFAULT: "#F59E0B",
+          muted: "rgba(245, 158, 11, 0.12)",
         },
         danger: {
-          DEFAULT: "#E5484D",
-          muted: "rgba(229, 72, 77, 0.12)",
+          DEFAULT: "#F87171",
+          muted: "rgba(248, 113, 113, 0.12)",
         },
         info: {
           DEFAULT: "#5C8FE8",

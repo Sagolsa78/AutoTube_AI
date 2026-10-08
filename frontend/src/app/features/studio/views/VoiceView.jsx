@@ -38,13 +38,8 @@ export default function VoiceView() {
       } catch (err) {
         if (active) {
            toast.error('Failed to load voices');
-           // Fallback mocks
-           const mocks = [
-             { id: 'v1', name: 'Aria', gender: 'Female', type: 'Natural' },
-             { id: 'v2', name: 'Davis', gender: 'Male', type: 'Deep' }
-           ];
-           setVoices(mocks);
-           setSelectedVoice(mocks[0].id);
+           setVoices([]);
+           setSelectedVoice('');
         }
       } finally {
         if (active) setLoadingVoices(false);

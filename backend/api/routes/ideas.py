@@ -473,6 +473,56 @@ Respond ONLY with the improved topic/hook string, no quotes or markdown. Keep it
         raise HTTPException(500, f"Failed to improve idea: {e}")
 
 
+@router.post("/{idea_id}/hooks")
+async def generate_idea_hooks(
+    idea_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Phase 5: HOOK ENGINE. Generate 5 hook candidates for this idea.
+    """
+    idea = await db.scalar(
+        select(Idea).where(Idea.id == idea_id, Idea.user_id == user.id)
+    )
+    if not idea:
+        raise HTTPException(404, "Idea not found")
+
+    channel = await db.scalar(
+        select(Channel).where(Channel.id == idea.channel_id, Channel.user_id == user.id)
+    )
+    if not channel:
+        raise HTTPException(404, "Channel not found")
+
+    from engine.script.hook_generator import generate_hooks
+
+    preferred_prov = user.preferred_ai_provider or settings.DEFAULT_AI_PROVIDER
+    preferred_mod = user.preferred_ai_model or settings.DEFAULT_AI_MODEL
+
+    try:
+        hooks_result = await generate_hooks(
+            topic=idea.topic,
+            niche=channel.niche or "General",
+            target_audience=getattr(channel, "target_audience", None) or "General",
+            tone=channel.content_tone or "Engaging",
+            provider=preferred_prov,
+            model=preferred_mod,
+        )
+
+        # Save hooks into the idea's settings for later retrieval
+        settings_dict = idea.settings or {}
+        settings_dict["hooks"] = [h.model_dump() for h in hooks_result.candidates]
+        settings_dict["best_hook_index"] = hooks_result.best_hook_index
+        idea.settings = settings_dict
+
+        await db.commit()
+        return hooks_result.model_dump()
+
+    except Exception as e:
+        log.error("Hook generation failed: %s", e)
+        raise HTTPException(500, f"Hook generation failed: {e}")
+
+
 def _fmt(i: Idea) -> dict:
     return {
         "id": i.id,
