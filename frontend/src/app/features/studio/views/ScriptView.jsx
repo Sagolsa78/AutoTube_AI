@@ -8,12 +8,21 @@ export default function ScriptView({ onNext }) {
   const script = useStudioStore(s => s.script);
   const editingScenes = useStudioStore(s => s.editingScenes);
   const setEditingScenes = useStudioStore(s => s.setEditingScenes);
+  const project = useStudioStore(s => s.project);
 
   const [activeSceneIdx, setActiveSceneIdx] = useState(0);
   const [saveState, setSaveState] = useState(''); // 'saving', 'saved', ''
   const saveTimeoutRef = useRef(null);
 
   const [aiWorking, setAiWorking] = useState(false);
+  const [versions, setVersions] = useState([]);
+  const [reverting, setReverting] = useState(false);
+
+  useEffect(() => {
+    if (script?.id) {
+       api.getScriptVersions(script.id).then(setVersions).catch(console.error);
+    }
+  }, [script?.id, saveState]); // Reload when saved
 
   if (!script || !editingScenes || editingScenes.length === 0) {
     return (
@@ -58,7 +67,15 @@ export default function ScriptView({ onNext }) {
   const updateActiveScene = (field, value) => {
     setEditingScenes(prev => {
       const updated = [...prev];
-      updated[activeSceneIdx] = { ...updated[activeSceneIdx], [field]: value };
+      const newScene = { ...updated[activeSceneIdx], [field]: value };
+
+      // Auto-calculate duration if narration changes
+      if (field === 'narration') {
+         const wordCount = (value || '').split(/\s+/).filter(Boolean).length;
+         newScene.duration_est = Math.max(2, Math.ceil((wordCount / 150) * 60));
+      }
+
+      updated[activeSceneIdx] = newScene;
       return updated;
     });
     triggerSave();
@@ -67,20 +84,26 @@ export default function ScriptView({ onNext }) {
   const handleAiAction = async (action) => {
     setAiWorking(true);
     try {
-      // Simulate AI operation since we don't have a specific endpoint for scene-level AI rewrite in the given codebase.
-      // In reality, this would hit something like api.rewriteScene(activeScene.id, action)
-      await new Promise(r => setTimeout(r, 1200));
-
-      let updatedText = activeScene.narration;
-      if (action === 'rewrite') updatedText = `(Rewritten) ${activeScene.narration}`;
-      if (action === 'shorten') updatedText = activeScene.narration.substring(0, Math.max(20, activeScene.narration.length / 2));
-
-      updateActiveScene('narration', updatedText);
+      const res = await api.aiEditScene(script.id, activeScene.id, action);
+      updateActiveScene('narration', res.narration);
       toast.success(`Scene updated via AI: ${action}`);
     } catch(e) {
-      toast.error("AI action failed");
+      toast.error(`AI action failed: ${e.message}`);
     } finally {
       setAiWorking(false);
+    }
+  };
+
+  const handleRevert = async (versionId) => {
+    setReverting(true);
+    try {
+       const updated = await api.revertScriptVersion(script.id, versionId);
+       setEditingScenes(updated.scenes);
+       toast.success("Script reverted successfully");
+    } catch (e) {
+       toast.error("Failed to revert: " + e.message);
+    } finally {
+       setReverting(false);
     }
   };
 
@@ -89,49 +112,60 @@ export default function ScriptView({ onNext }) {
      toast.success("Applied AI suggestion");
   };
 
+  const handleNext = async () => {
+    if (project?.id) {
+      try {
+        await api.updateProject(project.id, { current_stage: 'voice' });
+      } catch (err) {
+        console.error("Failed to advance project state", err);
+      }
+    }
+    onNext();
+  };
+
   return (
     <div className="flex-1 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden bg-canvas">
 
       {/* ── LEFT: SCENES LIST (25%) ──────────────────────────────────────── */}
-      <div className="w-full md:w-1/4 min-w-[250px] border-r border-border/50 bg-surface/30 flex flex-col shrink-0 md:shrink">
-        <div className="h-14 border-b border-border/50 px-4 flex items-center justify-between shrink-0 bg-surface/80 backdrop-blur">
+      <div className="w-full md:w-1/4 min-w-[260px] border-r border-border/50 bg-surface/40 flex flex-col shrink-0 md:shrink">
+        <div className="h-16 border-b border-border/50 px-5 flex items-center justify-between shrink-0 bg-canvas/50 backdrop-blur-md">
           <span className="text-xs font-bold uppercase tracking-widest text-text-muted">Scenes</span>
-          <button className="text-text-muted hover:text-text-primary p-1">
+          <button className="text-text-muted hover:text-brand-red p-1.5 rounded-lg hover:bg-brand-red/10 transition-colors">
              <Icon name="plus" size={16} />
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-3 space-y-2">
+        <div className="flex-1 overflow-y-auto p-4 space-y-2 hide-scrollbar">
           {editingScenes.map((scene, idx) => (
             <button
               key={scene.id || idx}
               onClick={() => setActiveSceneIdx(idx)}
-              className={`w-full text-left p-3 rounded-xl transition-all border ${
+              className={`w-full text-left p-3 rounded-xl transition-all border group ${
                 idx === activeSceneIdx
-                  ? 'bg-surface border-brand-red/30 shadow-sm'
-                  : 'bg-transparent border-transparent hover:bg-surface-hover'
+                  ? 'bg-surface border-ai/40 shadow-sm shadow-ai/5 scale-[1.02]'
+                  : 'bg-transparent border-transparent hover:bg-surface/50 hover:border-border'
               }`}
             >
-              <div className="flex items-center gap-2 mb-1.5">
-                 <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                   idx === activeSceneIdx ? 'bg-brand-red/10 text-brand-red' : 'bg-canvas text-text-muted'
+              <div className="flex items-center gap-2 mb-2">
+                 <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded transition-colors ${
+                   idx === activeSceneIdx ? 'bg-ai/10 text-ai' : 'bg-surface border border-border text-text-muted group-hover:text-text-secondary'
                  }`}>
                    {String(idx + 1).padStart(2, '0')}
                  </span>
-                 <span className="text-xs font-semibold text-text-primary truncate">
+                 <span className={`text-xs font-semibold truncate transition-colors ${idx === activeSceneIdx ? 'text-text-primary' : 'text-text-secondary'}`}>
                    {idx === 0 ? 'Hook' : idx === editingScenes.length - 1 ? 'CTA' : 'Segment'}
                  </span>
-              </div>
-              <p className={`text-xs truncate ${idx === activeSceneIdx ? 'text-text-secondary' : 'text-text-muted'}`}>
-                {scene.narration || 'Empty scene...'}
-              </p>
-            </button>
-          ))}
+               </div>
+               <p className={`text-xs truncate transition-colors ${idx === activeSceneIdx ? 'text-text-secondary' : 'text-text-muted group-hover:text-text-secondary'}`}>
+                 {scene.narration || 'Empty scene...'}
+               </p>
+              </button>
+            ))}
         </div>
-        <div className="p-4 border-t border-border/50">
+        <div className="p-4 border-t border-border/50 bg-surface/30">
            <button
-             onClick={onNext}
-             className="w-full py-2.5 bg-text-primary text-canvas text-sm font-bold rounded-lg hover:bg-white transition-colors shadow-sm flex items-center justify-center gap-2"
+             onClick={handleNext}
+             className="w-full py-3 bg-brand-red text-white text-sm font-bold rounded-xl hover:bg-brand-red-hover hover:-translate-y-0.5 transition-all shadow-brand-glow hover:shadow-lg flex items-center justify-center gap-2"
            >
              Storyboard <Icon name="arrow-right" size={14} />
            </button>
@@ -139,12 +173,18 @@ export default function ScriptView({ onNext }) {
       </div>
 
       {/* ── CENTER: SCRIPT EDITOR (50%) ──────────────────────────────────── */}
-      <div className="flex-1 flex flex-col bg-canvas relative shrink-0 min-h-[500px] md:min-h-0">
-        <div className="h-14 border-b border-border/30 px-6 flex items-center justify-between shrink-0 z-10">
-          <div className="flex items-center gap-3">
-             <span className="text-sm font-bold text-text-primary">Scene {String(activeSceneIdx + 1).padStart(2, '0')}</span>
-             <span className="text-xs text-text-muted bg-surface px-2 py-0.5 rounded-full border border-border/50">
-               ~{activeScene?.duration_est || 5}s
+      <div className="flex-1 flex flex-col bg-canvas relative shrink-0 min-h-[500px] md:min-h-0 isolate">
+        {/* Subtle glow for the active editor area */}
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[400px] bg-ai/5 blur-[120px] rounded-full pointer-events-none -z-10" />
+
+        <div className="h-16 border-b border-border/50 px-8 flex items-center justify-between shrink-0 z-10 bg-canvas/80 backdrop-blur-md">
+          <div className="flex items-center gap-4">
+             <span className="text-base font-bold text-text-primary">Scene {String(activeSceneIdx + 1).padStart(2, '0')}</span>
+             <span className="text-xs text-text-muted bg-surface px-2.5 py-1 rounded-md border border-border">
+               Est. Duration: ~{activeScene?.duration_est || 5}s
+             </span>
+             <span className="text-xs text-text-muted bg-surface px-2.5 py-1 rounded-md border border-border">
+               Words: {(activeScene?.narration || '').split(/\s+/).filter(Boolean).length}
              </span>
           </div>
 
@@ -154,37 +194,37 @@ export default function ScriptView({ onNext }) {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 md:p-10 hide-scrollbar">
-          <div className="max-w-3xl mx-auto space-y-8">
+        <div className="flex-1 overflow-y-auto p-8 md:p-12 hide-scrollbar">
+          <div className="max-w-3xl mx-auto space-y-10">
 
             {/* Narration */}
-            <div className="space-y-3">
-              <label className="text-[11px] font-bold uppercase tracking-widest text-text-muted flex items-center justify-between">
-                <span>Narration</span>
-                <span className="text-brand-red/80 font-mono tracking-normal">TTS / Audio</span>
+            <div className="space-y-4">
+              <label className="text-xs font-bold uppercase tracking-widest text-text-muted flex items-center justify-between">
+                <span className="flex items-center gap-2"><Icon name="mic" size={14} /> Narration</span>
+                <span className="text-ai font-mono tracking-normal text-[10px] bg-ai/10 px-2 py-0.5 rounded">TTS / Voice</span>
               </label>
               <div className="group relative">
-                <div className="absolute -inset-0.5 bg-gradient-to-r from-brand-red/10 to-transparent rounded-2xl blur opacity-0 group-focus-within:opacity-100 transition duration-500"></div>
+                <div className="absolute -inset-1 bg-gradient-to-r from-ai/20 to-transparent rounded-2xl blur opacity-0 group-focus-within:opacity-100 transition duration-500 pointer-events-none" />
                 <textarea
-                  className="relative w-full bg-surface border border-border/60 rounded-2xl p-5 text-base text-text-primary focus:outline-none focus:border-brand-red/50 min-h-[160px] leading-relaxed shadow-sm transition-colors resize-none"
+                  className="relative w-full bg-surface/80 border border-border/80 rounded-2xl p-6 text-lg text-text-primary focus:outline-none focus:border-ai/50 focus:bg-surface min-h-[220px] leading-relaxed shadow-sm transition-all resize-none"
                   value={activeScene?.narration || ''}
                   onChange={e => updateActiveScene('narration', e.target.value)}
-                  placeholder="What will the AI voice say here?"
+                  placeholder="What will the AI voice say here? Press space to start typing..."
                 />
               </div>
             </div>
 
             {/* Visual Direction */}
-            <div className="space-y-3">
-              <label className="text-[11px] font-bold uppercase tracking-widest text-text-muted flex items-center justify-between">
-                <span>Visual Direction</span>
-                <span className="text-text-muted/60 font-mono tracking-normal">B-Roll / Generation</span>
+            <div className="space-y-4">
+              <label className="text-xs font-bold uppercase tracking-widest text-text-muted flex items-center justify-between">
+                <span className="flex items-center gap-2"><Icon name="image" size={14} /> Visual Direction</span>
+                <span className="text-text-muted/60 font-mono tracking-normal text-[10px] bg-surface px-2 py-0.5 rounded border border-border">AI Generation / Stock</span>
               </label>
               <textarea
-                className="w-full bg-surface/50 border border-border/40 rounded-xl p-4 text-sm text-text-secondary focus:outline-none focus:border-brand-red/30 focus:bg-surface min-h-[100px] leading-relaxed transition-all resize-none"
+                className="w-full bg-surface/40 border border-border/40 rounded-xl p-5 text-sm text-text-secondary focus:outline-none focus:border-ai/30 focus:bg-surface/80 min-h-[120px] leading-relaxed transition-all resize-none"
                 value={activeScene?.visual_description || activeScene?.visual_prompt || ''}
                 onChange={e => updateActiveScene('visual_prompt', e.target.value)}
-                placeholder="Describe what the viewer should see..."
+                placeholder="Describe what the viewer should see. e.g. Cinematic pan over a glowing nebula..."
               />
             </div>
 
@@ -193,49 +233,75 @@ export default function ScriptView({ onNext }) {
       </div>
 
       {/* ── RIGHT: AI COPILOT (25%) ──────────────────────────────────────── */}
-      <div className="w-full md:w-1/4 min-w-[280px] border-l border-border/50 bg-surface/40 flex flex-col shrink-0 min-h-[300px] md:min-h-0">
-        <div className="h-14 border-b border-border/50 px-4 flex items-center gap-2 shrink-0 bg-surface/80 backdrop-blur">
-          <Icon name="sparkles" size={16} className="text-brand-red" />
-          <span className="text-xs font-bold uppercase tracking-widest text-text-primary">AI Copilot</span>
+      <div className="w-full md:w-1/4 min-w-[320px] border-l border-border/50 bg-surface/40 flex flex-col shrink-0 min-h-[400px] md:min-h-0 relative">
+        <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-ai/5 via-transparent to-transparent opacity-50 z-0"></div>
+
+        <div className="h-16 px-5 border-b border-border/50 flex items-center justify-between z-10 bg-canvas/50 backdrop-blur-md shrink-0">
+          <div className="flex items-center gap-2 text-ai">
+             <Icon name="sparkles" size={16} />
+             <span className="text-xs font-bold uppercase tracking-widest">AutoTube Copilot</span>
+          </div>
+          <span className="text-[10px] font-bold tracking-wider text-text-muted bg-surface px-2 py-1 rounded border border-border">Script QA</span>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-6">
+        <div className="flex-1 overflow-y-auto p-5 space-y-8 relative z-10 hide-scrollbar">
 
-          <div className="space-y-2">
-            <h4 className="text-[11px] font-bold uppercase tracking-widest text-text-muted mb-3">Quick Actions</h4>
+          <div className="space-y-3">
+            <h4 className="text-[10px] font-bold uppercase tracking-widest text-text-muted">Smart Actions</h4>
             <div className="grid grid-cols-2 gap-2">
-               <button onClick={() => handleAiAction('improve')} disabled={aiWorking} className="bg-canvas border border-border/60 hover:border-brand-red/40 hover:bg-surface py-2 rounded-lg text-xs font-semibold text-text-secondary transition-all disabled:opacity-50">
-                 Improve
+               <button onClick={() => handleAiAction('improve')} disabled={aiWorking} className="bg-canvas border border-border hover:border-ai/40 hover:text-ai py-2.5 rounded-xl text-xs font-bold text-text-secondary transition-all disabled:opacity-50 hover:-translate-y-0.5 hover:shadow-sm">
+                 Rewrite Scene
                </button>
-               <button onClick={() => handleAiAction('rewrite')} disabled={aiWorking} className="bg-canvas border border-border/60 hover:border-brand-red/40 hover:bg-surface py-2 rounded-lg text-xs font-semibold text-text-secondary transition-all disabled:opacity-50">
-                 Rewrite
+               <button onClick={() => handleAiAction('shorten')} disabled={aiWorking} className="bg-canvas border border-border hover:border-ai/40 hover:text-ai py-2.5 rounded-xl text-xs font-bold text-text-secondary transition-all disabled:opacity-50 hover:-translate-y-0.5 hover:shadow-sm">
+                 Make Shorter
                </button>
-               <button onClick={() => handleAiAction('shorten')} disabled={aiWorking} className="bg-canvas border border-border/60 hover:border-brand-red/40 hover:bg-surface py-2 rounded-lg text-xs font-semibold text-text-secondary transition-all disabled:opacity-50">
-                 Shorten
+               <button onClick={() => handleAiAction('expand')} disabled={aiWorking} className="bg-canvas border border-border hover:border-ai/40 hover:text-ai py-2.5 rounded-xl text-xs font-bold text-text-secondary transition-all disabled:opacity-50 hover:-translate-y-0.5 hover:shadow-sm">
+                 Make Longer
                </button>
-               <button onClick={() => handleAiAction('expand')} disabled={aiWorking} className="bg-canvas border border-border/60 hover:border-brand-red/40 hover:bg-surface py-2 rounded-lg text-xs font-semibold text-text-secondary transition-all disabled:opacity-50">
-                 Expand
+               <button onClick={() => handleAiAction('hook')} disabled={aiWorking} className="bg-canvas border border-border hover:border-ai/40 hover:text-ai py-2.5 rounded-xl text-xs font-bold text-text-secondary transition-all disabled:opacity-50 hover:-translate-y-0.5 hover:shadow-sm">
+                 Improve Hook
+               </button>
+               <button onClick={() => handleAiAction('scenes')} disabled={aiWorking} className="col-span-2 bg-ai/10 border border-ai/20 hover:bg-ai text-ai hover:text-white py-2.5 rounded-xl text-xs font-bold transition-all disabled:opacity-50 hover:-translate-y-0.5 hover:shadow-sm flex items-center justify-center gap-2">
+                 <Icon name="plus" size={14} /> Generate Next Scene
                </button>
             </div>
-            {aiWorking && <p className="text-[10px] text-brand-red font-mono animate-pulse mt-2 text-center">AI is thinking...</p>}
+            {aiWorking && (
+              <div className="flex items-center justify-center gap-2 text-[10px] text-ai font-mono animate-pulse mt-3 bg-ai/5 py-1.5 rounded-lg border border-ai/10">
+                <Icon name="loader" size={12} className="animate-spin" /> AutoTube AI is thinking...
+              </div>
+            )}
           </div>
 
-          <div className="h-px bg-border/40 my-4" />
-
-          <div className="bg-canvas border border-brand-red/20 rounded-xl p-4 relative overflow-hidden shadow-sm">
-             <div className="absolute top-0 left-0 w-1 h-full bg-brand-red"></div>
-             <p className="text-[10px] font-bold uppercase tracking-widest text-brand-red mb-2">Suggestion</p>
-             <p className="text-xs text-text-secondary italic mb-4 leading-relaxed">
-               "Consider opening with a stronger hook that directly questions the viewer's reality."
-             </p>
-
-             <div className="bg-surface/50 border border-border/40 p-2.5 rounded-lg mb-3">
-                <p className="text-xs text-text-primary font-medium">"In a world where AI creates videos instantly..."</p>
+          <div className="bg-surface/50 border border-border/40 rounded-xl p-4 mt-6">
+             <h4 className="text-[10px] font-bold uppercase tracking-widest text-text-muted mb-3 flex items-center justify-between">
+               <span>Version History</span>
+               {reverting && <Icon name="loader" size={12} className="animate-spin text-ai" />}
+             </h4>
+             <div className="space-y-2 max-h-[200px] overflow-y-auto custom-scrollbar">
+                {versions.length === 0 ? (
+                   <p className="text-xs text-text-muted italic text-center py-4 border border-dashed border-border/50 rounded">
+                     No previous versions yet.
+                   </p>
+                ) : (
+                   versions.map((v, i) => (
+                      <div key={v.id} className="flex flex-col gap-1 p-2 border border-border/50 rounded hover:bg-surface transition-colors group">
+                        <div className="flex justify-between items-center">
+                          <span className="text-[10px] font-mono text-text-muted">
+                            {new Date(v.created_at).toLocaleTimeString()}
+                          </span>
+                          <button
+                            onClick={() => handleRevert(v.id)}
+                            disabled={reverting}
+                            className="text-[10px] font-bold text-ai opacity-0 group-hover:opacity-100 transition-opacity hover:underline"
+                          >
+                            Revert
+                          </button>
+                        </div>
+                        <p className="text-xs text-text-secondary truncate">{v.full_text.substring(0, 40)}...</p>
+                      </div>
+                   ))
+                )}
              </div>
-
-             <button onClick={handleAiInsightApply} className="w-full bg-brand-red/10 text-brand-red hover:bg-brand-red hover:text-white transition-colors border border-brand-red/20 text-xs font-bold py-2 rounded-lg">
-               Apply Change
-             </button>
           </div>
 
         </div>

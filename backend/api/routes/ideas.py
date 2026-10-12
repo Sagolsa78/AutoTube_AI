@@ -14,6 +14,9 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.ai.gateway.llm_gateway import generate_structured
+from backend.ai.prompts.prompts import IDEAS_GENERATE_V1, IDEAS_IMPROVE_V1
+from backend.ai.schemas.schemas import IdeaBatch, ImprovedIdea
 from backend.auth.dependencies import get_current_user
 from backend.core.config import settings
 from backend.db.database import AsyncSessionLocal, get_db
@@ -178,25 +181,7 @@ async def generate_ideas(
         else "Title Style: Curiosity Gap"
     )
 
-    prompt = f"""You are a brilliant YouTube Shorts content strategist.
-Generate {body.count} highly trending, viral, and wildly interesting topic ideas for a '{niche}' channel.
-These should be things people are currently fascinated by or bizarre/mind-blowing facts that hook attention immediately.
-
-Context:
-- {audience_str}
-- {tone_str}
-- {style_str}
-
-{trends_str}
-{avoid_str}
-
-Respond ONLY with a JSON list of strings (no markdown, no other text).
-Example:
-[
-  "The terrifying physics of rogue waves",
-  "Why your brain creates fake memories",
-  "The deepest hole ever dug by humans"
-]"""
+    context_str = f"{audience_str}\n{tone_str}\n{style_str}\n{trends_str}\n{avoid_str}"
 
     # Release connection back to pool so it does not sit idle during LLM generation
     try:
@@ -205,45 +190,38 @@ Example:
         pass
 
     try:
-        preferred_prov = (
-            body.provider or user.preferred_ai_provider or settings.DEFAULT_AI_PROVIDER
+        batch, metadata = await generate_structured(
+            operation="generate_ideas",
+            prompt_template=IDEAS_GENERATE_V1,
+            schema=IdeaBatch,
+            context={
+                "channel_name": channel.name,
+                "niche": niche,
+                "context": context_str,
+            },
+            policy="fast",
         )
-        preferred_mod = (
-            body.model or user.preferred_ai_model or settings.DEFAULT_AI_MODEL
-        )
-        raw_response, provider, cost_data = await asyncio.to_thread(
-            generate_with_fallback,
-            prompt,
-            preferred_provider=preferred_prov,
-            preferred_model=preferred_mod,
-        )
-        topics = _extract_json_list(raw_response)
-
-        # Fallback if JSON parsing fails completely
+        topics = [idea.title for idea in batch.ideas][: body.count]
         if not topics:
-            topics = [
-                line.strip().lstrip("-*1234567890. ")
-                for line in raw_response.split("\n")
-                if line.strip()
-            ][: body.count]
-            if not topics:
-                raise ValueError("LLM returned empty or unparseable topics.")
+            raise ValueError("LLM returned empty topics.")
 
-        # Record cost
-        if cost_data:
-            from backend.models.models import CostEvent
+        # Record cost (using metadata from LangChain)
+        from backend.models.models import CostEvent
 
-            cost_event = CostEvent(
-                user_id=user.id,
-                channel_id=body.channel_id,
-                stage="Idea Generation",
-                provider=cost_data.get("provider"),
-                model=cost_data.get("model"),
-                tokens=cost_data.get("tokens", 0),
-                estimated_cost=cost_data.get("estimated_cost", 0.0),
-                operation="llm_generation",
-            )
-            db.add(cost_event)
+        usage = metadata.get("usage", {})
+        tokens = usage.get("total_tokens", 0) if isinstance(usage, dict) else 0
+
+        cost_event = CostEvent(
+            user_id=user.id,
+            channel_id=body.channel_id,
+            stage="Idea Generation",
+            provider=metadata.get("provider"),
+            model=metadata.get("model"),
+            tokens=tokens,
+            estimated_cost=0.0,  # calculate properly later
+            operation="llm_generation",
+        )
+        db.add(cost_event)
 
     except Exception as e:
         log.error("Idea generation failed: %s", e)
@@ -452,22 +430,20 @@ async def improve_idea(
     """
     Improves a rough idea/topic into a catchy YouTube Shorts hook.
     """
-    prompt = f"""You are an expert YouTube Shorts producer.
-Take this rough idea and improve it into a highly engaging, viral topic hook for a short-form video.
-Rough idea: "{body.topic}"
-
-Respond ONLY with the improved topic/hook string, no quotes or markdown. Keep it under 150 characters."""
-
-    preferred_prov = user.preferred_ai_provider or settings.DEFAULT_AI_PROVIDER
-    preferred_mod = user.preferred_ai_model or settings.DEFAULT_AI_MODEL
     try:
-        improved, _, _ = await asyncio.to_thread(
-            generate_with_fallback,
-            prompt,
-            preferred_provider=preferred_prov,
-            preferred_model=preferred_mod,
+        improved, metadata = await generate_structured(
+            operation="improve_idea",
+            prompt_template=IDEAS_IMPROVE_V1,
+            schema=ImprovedIdea,
+            context={
+                "title": body.topic,
+                "topic": body.topic,
+                "angle": "Make it viral",
+                "context": "",
+            },
+            policy="fast",
         )
-        return {"improved_topic": improved.strip(" \"'")}
+        return {"improved_topic": improved.title.strip(" \"'")}
     except Exception as e:
         log.error("Failed to improve idea: %s", e)
         raise HTTPException(500, f"Failed to improve idea: {e}")

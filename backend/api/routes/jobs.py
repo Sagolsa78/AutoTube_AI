@@ -63,9 +63,7 @@ async def verify_worker_auth(
     worker_secret = settings.WORKER_SECRET
     if settings.APP_ENV == "production":
         if not worker_secret:
-            raise HTTPException(
-                status_code=500, detail="Worker secret is not configured in production"
-            )
+            raise RuntimeError("WORKER_SECRET must be configured in production")
         if not x_worker_secret or x_worker_secret != worker_secret:
             raise HTTPException(
                 status_code=403, detail="Invalid or missing X-Worker-Secret header"

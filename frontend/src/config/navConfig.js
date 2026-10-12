@@ -1,45 +1,37 @@
 export const navConfig = [
   {
-    id: 'primary',
+    id: 'create',
+    label: 'CREATE',
     items: [
-      { id: 'home', label: 'Home', icon: 'home', path: '/app', matchMode: 'exact' }
+      { id: 'dashboard', label: 'Home', icon: 'home', path: '/app', matchMode: 'exact' },
+      { id: 'ideas', label: 'Ideas', icon: 'lightbulb', path: '/app/ideas', matchMode: 'prefix' },
+      { id: 'scripts', label: 'Scripts', icon: 'file-text', path: '/app/scripts', matchMode: 'prefix' },
+      { id: 'library', label: 'Library', icon: 'folder', path: '/app/library', matchMode: 'prefix' }
     ]
   },
   {
-    id: 'content',
-    label: 'Content',
-    items: [
-      { id: 'all-videos', label: 'All', icon: 'folder', path: '/app/videos', matchMode: 'exact' },
-      { id: 'ideas', label: 'Ideas', icon: 'lightbulb', path: '/app/ideas', matchMode: 'prefix', badgeKey: 'ideas' },
-      { id: 'scripts', label: 'Scripts', icon: 'file-text', path: '/app/scripts', matchMode: 'prefix', badgeKey: 'scripts' },
-      { id: 'review', label: 'Review', icon: 'eye', path: '/app/videos', query: '?filter=review', matchMode: 'query', badgeKey: 'review' },
-      { id: 'failed', label: 'Failed', icon: 'alert-triangle', path: '/app/videos', query: '?filter=failed', matchMode: 'query', badgeKey: 'failed' },
-      { id: 'published', label: 'Published', icon: 'check-circle', path: '/app/videos', query: '?filter=published', matchMode: 'query', badgeKey: 'published' }
-    ]
-  },
-  {
-    id: 'publishing',
-    label: 'Publishing',
+    id: 'publish',
+    label: 'PUBLISH',
     items: [
       { id: 'calendar', label: 'Calendar', icon: 'calendar', path: '/app/calendar', matchMode: 'prefix' },
-      { id: 'queue', label: 'Queue', icon: 'list-ordered', path: '/app/publications', query: '?filter=queue', matchMode: 'query' },
-      { id: 'publications', label: 'Publications', icon: 'globe', path: '/app/publications', matchMode: 'exact' }
+      { id: 'queue', label: 'Queue', icon: 'list', path: '/app/queue', matchMode: 'prefix' },
+      { id: 'publications', label: 'Publications', icon: 'share-2', path: '/app/publications', matchMode: 'prefix' }
     ]
   },
   {
     id: 'insights',
-    label: 'Insights',
+    label: 'INSIGHTS',
     items: [
-      { id: 'analytics', label: 'Analytics', icon: 'bar-chart-3', path: '/app/analytics', matchMode: 'prefix' }
+      { id: 'analytics', label: 'Analytics', icon: 'bar-chart-2', path: '/app/analytics', matchMode: 'prefix' }
     ]
   },
   {
-    id: 'settings',
-    label: 'Settings',
+    id: 'system',
+    label: 'SYSTEM',
     items: [
       { id: 'channels', label: 'Channels', icon: 'tv', path: '/app/channels', matchMode: 'prefix' },
-      { id: 'settings', label: 'Settings', icon: 'settings', path: '/app/profile', matchMode: 'prefix' },
-      { id: 'plan', label: 'Plan & Usage', icon: 'credit-card', path: '/app/costs', matchMode: 'prefix' }
+      { id: 'settings', label: 'Settings', icon: 'settings', path: '/app/settings', matchMode: 'prefix' },
+      { id: 'usage', label: 'Usage', icon: 'activity', path: '/app/usage', matchMode: 'prefix' }
     ]
   }
 ];

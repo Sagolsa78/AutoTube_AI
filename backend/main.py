@@ -26,6 +26,7 @@ from backend.api.routes import (
     integrations,
     jobs,
     profile,
+    projects,
     scripts,
     system,
     videos,
@@ -104,6 +105,7 @@ app.mount(
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(profile.router, prefix="/api/profile", tags=["profile"])
 app.include_router(channels.router, prefix="/api/channels", tags=["channels"])
+app.include_router(projects.router, prefix="/api/projects", tags=["projects"])
 app.include_router(ideas.router, prefix="/api/ideas", tags=["ideas"])
 app.include_router(scripts.router, prefix="/api/scripts", tags=["scripts"])
 app.include_router(videos.router, prefix="/api/videos", tags=["videos"])

@@ -7,6 +7,7 @@ import PageHeader from '../../../components/layout/PageHeader';
 import FilterBar from '../../../components/FilterBar';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '../../../components/Card';
 import Button from '../../../components/Button';
+import Select from '../../../components/ui/Select';
 import EmptyState from '../../../components/EmptyState';
 import Skeleton from '../../../components/Skeleton';
 import { toast } from 'sonner';
@@ -116,7 +117,8 @@ export default function Ideas() {
 
   const filteredIdeas = sortedIdeas.filter(i => {
     if (i.status !== activeTab) return false;
-    if (searchQuery && !i.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    const searchTarget = (i.topic || i.title || '').toLowerCase();
+    if (searchQuery && !searchTarget.includes(searchQuery.toLowerCase())) return false;
     return true;
   });
   const pendingCount = sortedIdeas.filter(i => i.status === 'pending').length;
@@ -233,14 +235,14 @@ export default function Ideas() {
                 className="pl-8 pr-3 py-1.5 rounded-lg bg-surface border border-border text-xs focus:outline-none focus:border-brand-red w-48"
               />
             </div>
-            <select
+            <Select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
-              className="bg-surface border border-border text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:border-brand-red"
-            >
-              <option value="date">Newest</option>
-              <option value="score">Highest Score</option>
-            </select>
+              options={[
+                { value: 'date', label: 'Newest' },
+                { value: 'score', label: 'Highest Score' }
+              ]}
+            />
           </div>
         </div>
 
@@ -296,7 +298,7 @@ export default function Ideas() {
                           )}
                         </div>
                         <h3 className="font-bold text-base text-text-primary leading-tight group-hover:text-brand-red transition-colors line-clamp-3">
-                          {i.title}
+                          {i.topic || i.title || 'Untitled Idea'}
                         </h3>
                       </div>
                       {/* Score Bubble */}

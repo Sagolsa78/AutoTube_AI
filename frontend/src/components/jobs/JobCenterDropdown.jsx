@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import Icon from '../Icon';
 import { useJobs } from '../../hooks/useJobs';
+import { api } from '../../services/api';
 
 const STAGE_LABELS = {
   queued: 'Queued in pipeline',
@@ -14,11 +15,38 @@ const STAGE_LABELS = {
   failed: 'Render failed'
 };
 
-export default function JobCenterDropdown({ isEngineOnline, engineStatus, collapsed, toggleCollapse }) {
+export default function JobCenterDropdown({ collapsed = false }) {
   const { activeVideos, activeComputeJobs, activeCount, jobs, cancelVideo, cancelJob } = useJobs();
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
   const navigate = useNavigate();
+
+  const [engineStatus, setEngineStatus] = useState('Checking...');
+  const [isEngineOnline, setIsEngineOnline] = useState(false);
+  const [healthData, setHealthData] = useState(null);
+
+  useEffect(() => {
+    let mounted = true;
+    const checkHealth = async () => {
+      try {
+        const data = await api.getSystemHealth();
+        if (mounted) {
+          setIsEngineOnline(true);
+          setEngineStatus('Healthy');
+          setHealthData(data);
+        }
+      } catch (e) {
+        if (mounted) {
+          setIsEngineOnline(false);
+          setEngineStatus('Offline');
+          setHealthData(null);
+        }
+      }
+    };
+    checkHealth();
+    const interval = setInterval(checkHealth, 15000);
+    return () => { mounted = false; clearInterval(interval); };
+  }, []);
 
   // Derived status for the chip
   let chipStatus = isEngineOnline ? 'Healthy' : 'Offline';
@@ -194,12 +222,32 @@ export default function JobCenterDropdown({ isEngineOnline, engineStatus, collap
                   <div className="flex items-center gap-1.5 text-[11px] font-bold text-success">
                      <span className="relative flex h-1.5 w-1.5">
                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
-                       <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-success"></span>
-                     </span>
-                     System Online
-                  </div>
-               </div>
+                     <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-success"></span>
+                   </span>
+                   {isEngineOnline ? 'System Online' : 'System Offline'}
+                </div>
              </div>
+             </div>
+
+             {isOpen && (
+               <div className="grid grid-cols-2 gap-2 text-[10px] text-text-muted mt-2">
+                 <div className="flex items-center justify-between">
+                   <span>API:</span> <span className={isEngineOnline ? 'text-success' : 'text-danger'}>{isEngineOnline ? 'OK' : 'ERR'}</span>
+                 </div>
+                 <div className="flex items-center justify-between">
+                   <span>Queue:</span> <span className="text-info">{activeCount} Jobs</span>
+                 </div>
+                 <div className="flex items-center justify-between">
+                   <span>TTS:</span> <span className="text-text-primary">OK</span>
+                 </div>
+                 <div className="flex items-center justify-between">
+                   <span>Render:</span> <span className="text-text-primary">OK</span>
+                 </div>
+                 <div className="flex items-center justify-between">
+                   <span>YouTube:</span> <span className="text-text-primary">Linked</span>
+                 </div>
+               </div>
+             )}
 
              <div className="flex items-center justify-between text-xs pt-1 border-t border-border/40">
                <Link

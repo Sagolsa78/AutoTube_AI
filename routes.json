@@ -1,0 +1,16 @@
+[
+  {
+    "path": "/",
+    "name": "root",
+    "methods": [
+      "GET"
+    ]
+  },
+  {
+    "path": "/health",
+    "name": "health",
+    "methods": [
+      "GET"
+    ]
+  }
+]

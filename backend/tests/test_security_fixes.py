@@ -19,24 +19,23 @@ def client():
 
 def test_production_secret_validation():
     """Fix A: Ensure production secrets are validated and fail if missing."""
-    with patch("backend.core.config.settings.APP_ENV", "production"), patch(
-        "backend.core.config.settings.JWT_SECRET", None
-    ):
-        from backend.core.config import validate_production_secrets
+    from backend.core.config import Settings
 
+    with patch.dict(os.environ, {"APP_ENV": "production", "JWT_SECRET": ""}):
         with pytest.raises(
-            RuntimeError, match="Missing critical production secret: JWT_SECRET"
+            ValueError, match="Missing or invalid mandatory production secrets"
         ):
-            validate_production_secrets()
+            Settings(APP_ENV="production", JWT_SECRET="")
 
 
 def test_encryption_fallback_blocked_in_production():
     """Fix B: Ensure encrypt_value does not fallback to plaintext in production."""
-    with patch("backend.security.settings.APP_ENV", "production"), patch(
-        "backend.security.settings.ENCRYPTION_KEY", None
-    ):
+    with patch("backend.security.APP_ENV", "production"), patch(
+        "backend.security._ENCRYPTION_KEY", None
+    ), patch("backend.security.get_fernet", return_value=None):
         with pytest.raises(
-            RuntimeError, match="ENCRYPTION_KEY is required in production"
+            RuntimeError,
+            match="Encryption is not configured but required in production. Cannot encrypt value.",
         ):
             encrypt_value("test_secret")
 
@@ -51,11 +50,7 @@ def test_preview_video_auth_requires_cookie(client):
 
 def test_worker_auth_blocked_without_secret():
     """Fix D: Ensure worker endpoints cannot be accessed if WORKER_SECRET is missing in prod."""
-    from fastapi import Request
-
     from backend.api.routes.jobs import verify_worker_auth
-
-    mock_request = MagicMock(spec=Request)
 
     with patch("backend.api.routes.jobs.settings.APP_ENV", "production"), patch(
         "backend.api.routes.jobs.settings.WORKER_SECRET", None
@@ -63,7 +58,9 @@ def test_worker_auth_blocked_without_secret():
         with pytest.raises(
             RuntimeError, match="WORKER_SECRET must be configured in production"
         ):
-            verify_worker_auth(mock_request)
+            import asyncio
+
+            asyncio.run(verify_worker_auth(None))
 
 
 def test_job_dispatch_failure_reverts_video_status():

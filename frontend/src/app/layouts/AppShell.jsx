@@ -5,8 +5,6 @@ import TopBar from '../../components/layout/TopBar';
 import { api } from '../../services/api';
 import { navConfig, getActiveNavItem } from '../../config/navConfig';
 import useContentStore from '../../store/contentStore';
-import { useChannel } from '../../contexts/ChannelContext';
-import JobCenterDropdown from '../../components/jobs/JobCenterDropdown';
 
 // Mobile bottom nav items
 const mobileNav = [
@@ -40,12 +38,12 @@ function NavItem({ item, collapsed, counts }) {
       aria-current={active ? "page" : undefined}
       className={`relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-red ${
         active
-          ? 'bg-surface text-text-primary font-bold'
-          : 'text-text-secondary hover:text-text-primary hover:bg-surface-2 font-medium'
+          ? 'bg-bg-1 text-text-primary font-bold'
+          : 'text-text-secondary hover:text-text-primary hover:bg-bg-2 font-medium'
       } ${collapsed ? 'justify-center px-2' : ''}`}
     >
       {active && (
-         <div className="absolute left-0 top-1 bottom-1 w-0.5 bg-brand-red rounded-r-full" />
+         <div className="absolute left-0 top-1 bottom-1 w-0.5 bg-brand rounded-r-full" />
       )}
 
       <Icon name={item.icon} size={18} className={`shrink-0 ${active ? 'text-text-primary' : 'text-text-muted group-hover:text-text-primary transition-colors'}`} />
@@ -58,7 +56,7 @@ function NavItem({ item, collapsed, counts }) {
         </span>
       )}
       {collapsed && count > 0 && (
-         <div className="absolute top-1 right-1 w-2 h-2 rounded-full bg-brand-red border-2 border-canvas" />
+         <div className="absolute top-1 right-1 w-2 h-2 rounded-full bg-brand border-2 border-bg-0" />
       )}
     </Link>
   );
@@ -70,34 +68,8 @@ export default function AppShell() {
     return localStorage.getItem('autotube_sidebar_collapsed') === 'true';
   });
 
-  const [engineStatus, setEngineStatus] = useState('Checking...');
-  const [isEngineOnline, setIsEngineOnline] = useState(false);
-  const [channelDropdownOpen, setChannelDropdownOpen] = useState(false);
-
   const { getMetrics } = useContentStore();
   const counts = getMetrics();
-  const { channels, activeChannel, setActiveChannelId, loadingChannels } = useChannel();
-
-  useEffect(() => {
-    let mounted = true;
-    const checkHealth = async () => {
-      try {
-        await api.getSystemHealth();
-        if (mounted) {
-          setIsEngineOnline(true);
-          setEngineStatus('Healthy');
-        }
-      } catch (e) {
-        if (mounted) {
-          setIsEngineOnline(false);
-          setEngineStatus('Offline');
-        }
-      }
-    };
-    checkHealth();
-    const interval = setInterval(checkHealth, 15000);
-    return () => { mounted = false; clearInterval(interval); };
-  }, []);
 
   const toggleCollapse = () => {
     const next = !collapsed;
@@ -106,10 +78,10 @@ export default function AppShell() {
   };
 
   return (
-    <div className="min-h-screen bg-canvas text-text-primary flex flex-col md:flex-row antialiased font-sans">
+    <div className="min-h-screen bg-bg-0 text-text-primary flex flex-col md:flex-row antialiased font-sans">
       {/* ── Desktop Sidebar ─────── */}
       <aside
-        className={`hidden md:flex flex-col shrink-0 sticky top-0 h-screen bg-canvas border-r border-border/40 z-40 select-none transition-all duration-300 ${
+        className={`hidden md:flex flex-col shrink-0 sticky top-0 h-screen bg-bg-0 border-r border-border z-40 select-none transition-all duration-300 ${
           collapsed ? 'w-[72px]' : 'w-[240px]'
         }`}
         aria-label="Sidebar Navigation"
@@ -117,75 +89,27 @@ export default function AppShell() {
         {/* Brand Header */}
         <div className="h-16 flex items-center justify-between px-4">
           <Link to="/app" className="flex items-center gap-2.5 group overflow-hidden" title="AutoTube">
-            <span className="w-8 h-8 rounded-lg bg-brand-red flex items-center justify-center text-white shadow-brand-glow transition-transform group-hover:scale-105 shrink-0">
+            <span className="w-8 h-8 rounded-lg bg-brand flex items-center justify-center text-white shadow-brand-glow transition-transform group-hover:scale-105 shrink-0">
               <Icon name="film" size={16} />
             </span>
             {!collapsed && (
               <span className="font-bold text-base text-text-primary tracking-tight truncate">
-                AutoTube<span className="text-brand-red">.AI</span>
+                AutoTube<span className="text-brand">.AI</span>
               </span>
             )}
           </Link>
         </div>
 
-        {/* Channel Switcher */}
-        {!loadingChannels && channels.length > 0 && (
-          <div className="px-3 pb-4">
-            <div className="relative">
-              <button
-                onClick={() => setChannelDropdownOpen(!channelDropdownOpen)}
-                className={`w-full flex items-center gap-2 p-1.5 rounded-lg bg-surface border border-border hover:bg-surface-hover transition-colors select-none ${collapsed ? 'justify-center' : 'justify-between'}`}
-                aria-label="Active Channel"
-              >
-                <div className="flex items-center gap-2 overflow-hidden">
-                  <div className="w-6 h-6 rounded-md bg-brand-red flex items-center justify-center text-white text-[11px] font-bold shrink-0">
-                    {activeChannel?.name?.charAt(0).toUpperCase() || 'C'}
-                  </div>
-                  {!collapsed && (
-                    <span className="truncate text-xs font-semibold text-text-primary">
-                      {activeChannel?.name || 'Channel'}
-                    </span>
-                  )}
-                </div>
-                {!collapsed && (
-                  <Icon name="chevron-down" size={14} className="text-text-muted shrink-0 mr-1" />
-                )}
-              </button>
-
-              {channelDropdownOpen && !collapsed && (
-                <div className="absolute left-0 top-full mt-1 w-[216px] bg-surface border border-border rounded-xl shadow-dropdown py-1 z-50 animate-in fade-in zoom-in-95">
-                  <div className="px-3 py-2 text-[11px] font-bold text-text-muted uppercase tracking-wider border-b border-border/80">
-                    Switch Workspace
-                  </div>
-                  <div className="max-h-60 overflow-y-auto p-1 divide-y divide-border/30 hide-scrollbar">
-                    {channels.map(c => (
-                      <button
-                        key={c.id}
-                        onClick={() => {
-                          setActiveChannelId(c.id);
-                          setChannelDropdownOpen(false);
-                        }}
-                        className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs text-left transition-colors ${
-                          activeChannel?.id === c.id
-                            ? 'bg-elevated text-brand-red font-bold'
-                            : 'text-text-primary hover:bg-surface-hover'
-                        }`}
-                      >
-                        <div className="w-5 h-5 rounded bg-surface border border-border flex items-center justify-center text-[10px] font-bold shrink-0">
-                          {c.name.charAt(0).toUpperCase()}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate">{c.name}</div>
-                        </div>
-                        {activeChannel?.id === c.id && <Icon name="check" size={14} className="ml-auto text-brand-red" />}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+        {/* Primary Action */}
+        <div className="px-3 pb-2 pt-2">
+           <Link
+             to="/app/create"
+             className={`w-full flex items-center justify-center gap-2 p-2.5 rounded-lg bg-brand hover:bg-brand-hover text-white transition-all shadow-brand-glow hover:shadow-lg font-bold group ${collapsed ? 'px-0' : ''}`}
+           >
+             <Icon name="plus" size={18} className="group-hover:scale-110 transition-transform" />
+             {!collapsed && <span>Create video</span>}
+           </Link>
+        </div>
 
         {/* Navigation Sections */}
         <div className="flex-1 overflow-y-auto py-3 px-3 space-y-6 hide-scrollbar">
@@ -207,17 +131,10 @@ export default function AppShell() {
         </div>
 
         {/* System Footer Status */}
-        <div className="p-3 border-t border-border/40 bg-canvas space-y-2 shrink-0">
-          <JobCenterDropdown
-             isEngineOnline={isEngineOnline}
-             engineStatus={engineStatus}
-             collapsed={collapsed}
-             toggleCollapse={toggleCollapse}
-          />
-
+        <div className="p-3 border-t border-border/40 bg-bg-0 space-y-2 shrink-0">
           <button
             onClick={toggleCollapse}
-            className={`w-full flex ${collapsed ? 'justify-center' : 'justify-start px-2 gap-3'} items-center p-2 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-2 transition-colors`}
+            className={`w-full flex ${collapsed ? 'justify-center' : 'justify-start px-2 gap-3'} items-center p-2 rounded-lg text-text-muted hover:text-text-primary hover:bg-bg-2 transition-colors`}
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
             <Icon name={collapsed ? "chevron-right" : "chevron-left"} size={16} />
@@ -226,7 +143,7 @@ export default function AppShell() {
         </div>
       </aside>
 
-      <div className="flex-1 flex flex-col min-w-0 min-h-screen pb-20 md:pb-8 bg-surface">
+      <div className="flex-1 flex flex-col min-w-0 min-h-screen pb-20 md:pb-8 bg-bg-1">
         <TopBar />
         <main className={`flex-1 w-full flex flex-col ${loc.pathname.startsWith('/app/create') ? '' : 'p-6 lg:p-8 w-full max-w-[1680px] mx-auto'}`}>
           <Outlet />
@@ -235,7 +152,7 @@ export default function AppShell() {
 
       {/* ── Mobile Bottom Navigation Bar (<= 768px only) ─────────── */}
       <nav
-        className="mobile-only md:hidden fixed bottom-0 inset-x-0 bg-surface/95 backdrop-blur-lg border-t border-border z-50 flex items-center justify-around h-[60px] safe-area-bottom select-none shadow-dropdown"
+        className="mobile-only md:hidden fixed bottom-0 inset-x-0 bg-bg-1/95 backdrop-blur-lg border-t border-border z-50 flex items-center justify-around h-[60px] safe-area-bottom select-none shadow-dropdown"
         aria-label="Mobile Navigation"
       >
         {mobileNav.map(n => {
@@ -249,12 +166,12 @@ export default function AppShell() {
                 to={n.to}
                 className="flex flex-col items-center justify-center -mt-4 group"
               >
-                <div className={`w-12 h-12 rounded-full flex items-center justify-center shadow-brand-glow transition-transform active:scale-95 border-2 border-canvas ${
-                  active ? 'bg-brand-red text-white' : 'bg-surface text-brand-red border-brand-red/20'
+                <div className={`w-12 h-12 rounded-full flex items-center justify-center shadow-brand-glow transition-transform active:scale-95 border-2 border-bg-0 ${
+                  active ? 'bg-brand text-white' : 'bg-bg-1 text-brand border-brand/20'
                 }`}>
                   <Icon name={n.icon} size={22} />
                 </div>
-                <span className={`text-[10px] font-bold mt-1 ${active ? 'text-brand-red' : 'text-text-muted'}`}>Create</span>
+                <span className={`text-[10px] font-bold mt-1 ${active ? 'text-brand' : 'text-text-muted'}`}>Create</span>
               </Link>
             );
           }
@@ -264,10 +181,10 @@ export default function AppShell() {
               key={n.to}
               to={n.to}
               className={`flex flex-col items-center justify-center w-16 h-full space-y-1 transition-colors relative ${
-                active ? 'text-brand-red' : 'text-text-muted hover:text-text-secondary'
+                active ? 'text-brand' : 'text-text-muted hover:text-text-secondary'
               }`}
             >
-              {active && <div className="absolute top-0 inset-x-2 h-[3px] bg-brand-red rounded-b-md shadow-[0_0_8px_rgba(255,59,48,0.5)]" />}
+              {active && <div className="absolute top-0 inset-x-2 h-[3px] bg-brand rounded-b-md shadow-[0_0_8px_rgba(255,90,77,0.5)]" />}
               <Icon name={n.icon} size={20} />
               <span className={`text-[10px] font-medium tracking-tight ${active ? 'font-bold' : ''}`}>
                 {n.label}

@@ -302,9 +302,7 @@ def build_karaoke_ass(
             import re
 
             safe_text = re.sub(r"[\x00-\x1F\x7F]", "", w["text"])
-            safe_text = (
-                safe_text.replace("{", "｛").replace("}", "｝").replace("\\", "＼")
-            )
+            safe_text = safe_text.replace("{", "").replace("}", "").replace("\\", "")
             parts.append(f"{{\\kf{cs}}}{safe_text} ")
 
         text = (

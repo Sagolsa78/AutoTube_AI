@@ -191,6 +191,47 @@ class Channel(Base):
 
     user = relationship("User", back_populates="channels")
     ideas = relationship("Idea", back_populates="channel", cascade="all, delete-orphan")
+    projects = relationship(
+        "Project", back_populates="channel", cascade="all, delete-orphan"
+    )
+
+
+class Project(Base):
+    __tablename__ = "projects"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    user_id = Column(
+        String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    channel_id = Column(
+        String,
+        ForeignKey("channels.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    title = Column(String, default="Untitled Project")
+
+    # Pipeline State
+    current_stage = Column(String, default="idea")
+    pipeline_state = Column(JSON, default=dict)
+
+    # Linked Entities
+    idea_id = Column(String, ForeignKey("ideas.id", ondelete="SET NULL"), nullable=True)
+    script_id = Column(
+        String, ForeignKey("scripts.id", ondelete="SET NULL"), nullable=True
+    )
+    video_id = Column(
+        String, ForeignKey("videos.id", ondelete="SET NULL"), nullable=True
+    )
+
+    created_at = Column(DateTime(timezone=True), default=utc_now)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+
+    channel = relationship("Channel", back_populates="projects")
+    idea = relationship("Idea")
+    script = relationship("Script")
+    video = relationship("Video")
+    jobs = relationship("Job", back_populates="project", cascade="all, delete-orphan")
 
 
 class Idea(Base):
@@ -250,6 +291,26 @@ class Script(Base):
         cascade="all, delete-orphan",
         order_by="Scene.scene_number",
     )
+    versions = relationship(
+        "ScriptVersion",
+        back_populates="script",
+        cascade="all, delete-orphan",
+        order_by="ScriptVersion.created_at",
+    )
+
+
+class ScriptVersion(Base):
+    __tablename__ = "script_versions"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    script_id = Column(
+        String, ForeignKey("scripts.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    full_text = Column(Text, nullable=False)
+    body = Column(JSON, nullable=False)  # The scene specs
+    created_at = Column(DateTime(timezone=True), default=utc_now)
+
+    script = relationship("Script", back_populates="versions")
 
 
 class Scene(Base):
@@ -464,12 +525,16 @@ class Job(Base):
     user_id = Column(
         String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    project_id = Column(
+        String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=True, index=True
+    )
     channel_id = Column(
         String, ForeignKey("channels.id", ondelete="CASCADE"), nullable=True, index=True
     )
     capability = Column(String, nullable=False, index=True)
     status = Column(SAEnum(JobStatus), default=JobStatus.CREATED, index=True)
     current_stage = Column(SAEnum(PipelineStage), nullable=True)
+    progress = Column(Float, default=0.0)
     priority = Column(Integer, default=1)
     attempt_number = Column(Integer, default=1)
     max_attempts = Column(Integer, default=3)
@@ -489,6 +554,8 @@ class Job(Base):
     created_at = Column(DateTime(timezone=True), default=utc_now)
     started_at = Column(DateTime(timezone=True), nullable=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
+
+    project = relationship("Project", back_populates="jobs")
 
     def can_transition_to(self, new_status: JobStatus) -> bool:
         current = self.status

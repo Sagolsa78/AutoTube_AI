@@ -12,6 +12,14 @@ const useStudioStore = create((set, get) => ({
     visualStrategy: 'auto',
   },
 
+  pipelineState: {
+    status: 'not_started',
+    current_stage: 'concept',
+    blockingIssues: [],
+    warnings: [],
+    lastJob: null
+  },
+
   selectedIdea: null,
   script: null,
   editingScenes: [],
@@ -63,6 +71,8 @@ const useStudioStore = create((set, get) => ({
   setProject: (projectUpdates) => set((state) => ({
     project: { ...state.project, ...projectUpdates }
   })),
+
+  setPipelineState: (pipelineState) => set({ pipelineState }),
 
   // Idea Actions
   setSelectedIdea: (selectedIdea) => set({ selectedIdea }),

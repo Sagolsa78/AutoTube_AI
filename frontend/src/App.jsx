@@ -20,6 +20,7 @@ const Analytics = lazy(() => import('./app/features/analytics/Analytics'));
 const Costs = lazy(() => import('./app/features/settings/Costs'));
 const Logs = lazy(() => import('./app/features/system/Logs'));
 const Health = lazy(() => import('./app/features/system/Health'));
+const NotFound = lazy(() => import('./app/features/system/NotFound'));
 import AppShell from './app/layouts/AppShell';
 import ErrorBoundary from './components/ErrorBoundary';
 import { Toaster } from 'sonner';
@@ -83,23 +84,29 @@ export default function App() {
           <Route element={<ProtectedRoute />}>
               <Route path="/app" element={<AppShell />}>
                 <Route index element={<Dashboard />} />
-            <Route path="create" element={<StudioShell />} />
-            <Route path="ideas" element={<Ideas />} />
-            <Route path="scripts" element={<Scripts />} />
-            <Route path="videos" element={<Videos />} />
-            <Route path="calendar" element={<Calendar />} />
-            <Route path="jobs/:id" element={<JobDetail />} />
-            <Route path="best" element={<Videos filter="best" />} />
-            <Route path="publications" element={<Publications />} />
-            <Route path="analytics" element={<Analytics />} />
-            <Route path="costs" element={<Costs />} />
-            <Route path="channels" element={<Channels />} />
-            <Route path="logs" element={<Logs />} />
-            <Route path="health" element={<Health />} />
+                <Route path="create" element={<StudioShell />} />
+                <Route path="ideas" element={<Ideas />} />
+                <Route path="scripts" element={<Scripts />} />
+                <Route path="library" element={<Videos />} />
+                <Route path="calendar" element={<Calendar />} />
+                <Route path="queue" element={<Publications />} />
+                <Route path="publications" element={<Publications />} />
+                <Route path="analytics" element={<Analytics />} />
+                <Route path="channels" element={<Channels />} />
+                <Route path="settings" element={<Profile />} />
+                <Route path="usage" element={<Costs />} />
+
+                {/* Legacy/Other Routes */}
+                <Route path="videos" element={<Videos />} />
+                <Route path="jobs/:id" element={<JobDetail />} />
+                <Route path="best" element={<Videos filter="best" />} />
+                <Route path="costs" element={<Costs />} />
+                <Route path="logs" element={<Logs />} />
+                <Route path="health" element={<Health />} />
                 <Route path="profile" element={<Profile />} />
               </Route>
           </Route>
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </Suspense>
     </ErrorBoundary>

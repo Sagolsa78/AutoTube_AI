@@ -3,6 +3,7 @@ import { useLocation, Link } from 'react-router-dom';
 import Icon from '../Icon';
 import JobCenterDropdown from '../jobs/JobCenterDropdown';
 import CommandPalette from '../navigation/CommandPalette';
+import ChannelSwitcher from './ChannelSwitcher';
 
 export default function TopBar() {
   const loc = useLocation();
@@ -42,14 +43,14 @@ export default function TopBar() {
 
   return (
     <>
-      <header className="h-14 border-b border-border bg-canvas/90 backdrop-blur-md sticky top-0 z-30 flex items-center justify-between px-4 sm:px-6 lg:px-8">
+      <header className="h-14 border-b border-border bg-bg-0/90 backdrop-blur-md sticky top-0 z-30 flex items-center justify-between px-4 sm:px-6 lg:px-8">
         {/* Left: Mobile Branding & View Title / Desktop Breadcrumb */}
         <div className="flex items-center gap-3">
-          <Link to="/app" className="md:hidden flex items-center gap-2 text-brand-red font-bold tracking-tight">
-            <span className="w-7 h-7 rounded-lg bg-brand-red flex items-center justify-center text-white shadow-brand-glow">
+          <Link to="/app" className="md:hidden flex items-center gap-2 text-brand font-bold tracking-tight">
+            <span className="w-7 h-7 rounded-lg bg-brand flex items-center justify-center text-white shadow-brand-glow">
               <Icon name="film" size={15} />
             </span>
-            <span className="text-text-primary text-base">AutoTube<span className="text-brand-red">.AI</span></span>
+            <span className="text-text-primary text-base">AutoTube<span className="text-brand">.AI</span></span>
           </Link>
           <span className="hidden sm:inline-block md:hidden text-text-muted">/</span>
           <span className="hidden sm:inline-block md:hidden text-xs font-semibold text-text-secondary uppercase tracking-wider">
@@ -81,7 +82,12 @@ export default function TopBar() {
         </div>
 
         {/* Right: Job Center + Actions */}
-        <div className="flex items-center gap-2.5 ml-auto">
+        <div className="flex items-center gap-3 ml-auto">
+
+          {/* Channel Switcher */}
+          <div className="hidden sm:block">
+            <ChannelSwitcher />
+          </div>
 
           {/* Global Job Center */}
           <JobCenterDropdown />

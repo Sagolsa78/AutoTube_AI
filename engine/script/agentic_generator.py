@@ -1,22 +1,27 @@
 """
 Agentic Script generator using LangGraph.
-Upgrades the single-shot generator to a multi-step iterative workflow.
+Upgrades the single-shot generator to a multi-step iterative workflow using centralized AI gateway and structured schemas.
 """
 
-import json
 import logging
-from typing import Any, Dict, List, TypedDict
+from typing import Any, Dict, List, Optional, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
+from backend.ai.gateway.llm_gateway import generate_structured
+from backend.ai.prompts.prompts import (
+    SCRIPT_CRITIQUE_V1,
+    SCRIPT_DRAFT_V2,
+    SCRIPT_OUTLINE_V1,
+    SCRIPT_REFINE_V1,
+)
+from backend.ai.schemas.schemas import ScriptCritique, ScriptDraft, ScriptOutline
 from engine.story.schemas import StorySpec
-from engine.story.validator import StoryValidator
-from integrations.providers.ai_providers import generate_with_fallback
 
 log = logging.getLogger(__name__)
 
 
-class ScriptState(TypedDict):
+class ScriptState(TypedDict, total=False):
     # Inputs
     topic: str
     niche: str
@@ -28,154 +33,92 @@ class ScriptState(TypedDict):
     preferred_model: str
 
     # Workflow State
-    outline: str
-    draft_script: str
-    feedback: str
-    raw_json: str
+    outline: Optional[ScriptOutline]
+    draft_script: Optional[ScriptDraft]
+    feedback: Optional[ScriptCritique]
 
     # Outputs
-    story_spec: StorySpec
+    story_spec: Optional[StorySpec]
     provider_used: str
     cost_data: dict
     errors: list[str]
 
 
-def node_outline(state: ScriptState) -> dict:
+async def node_outline(state: ScriptState) -> dict:
     """Generate the initial outline (Hook, Build, Climax)."""
     log.info("Agentic Node: Generating Outline")
-    prompt = f"""
-    Create a 5-part script outline for a YouTube {state['content_type']} about: {state['topic']}.
-    Target Duration: {state['target_duration_seconds']} seconds.
-    Language: {state['language']}.
-    Custom Prompt: {state.get('custom_prompt', 'None')}
+    context = {
+        "content_type": state.get("content_type", "short"),
+        "topic": state.get("topic", ""),
+        "duration": state.get("target_duration_seconds", 30),
+        "language": state.get("language", "en"),
+        "custom_prompt": state.get("custom_prompt") or "None",
+    }
 
-    Structure MUST include:
-    1. HOOK (first 3 seconds)
-    2. ESCALATION
-    3. EXPLANATION
-    4. PAYOFF
-    5. CTA
-
-    Only return the raw outline, no pleasantries.
-    """
-    response, provider, cost = generate_with_fallback(
-        prompt,
-        preferred_provider=state.get("preferred_provider"),
-        preferred_model=state.get("preferred_model"),
+    parsed, meta = await generate_structured(
+        "generate_outline",
+        SCRIPT_OUTLINE_V1,
+        ScriptOutline,
+        context,
+        policy="reasoning",
     )
-    return {"outline": response, "provider_used": provider, "cost_data": cost}
+
+    return {
+        "outline": parsed,
+        "provider_used": meta.get("provider", "unknown"),
+        "cost_data": meta,
+    }
 
 
-def node_draft(state: ScriptState) -> dict:
+async def node_draft(state: ScriptState) -> dict:
     """Expand the outline into a full script with visual cues."""
     log.info("Agentic Node: Generating Draft")
-    prompt = f"""
-    Using this outline, write a full script with visual cues.
+    outline = state.get("outline")
+    outline_json = outline.model_dump_json() if outline else ""
 
-    OUTLINE:
-    {state['outline']}
+    context = {"outline": outline_json}
 
-    REQUIREMENTS:
-    - Include specific 'stock_query' for every scene.
-    - Include 'camera_motion' (zoom_in, pan_left, etc)
-    - Include 'transition' (cut, fade, etc)
-    - Include the exact spoken 'text'.
-
-    Draft it in a clear scene-by-scene format.
-    """
-    response, provider, cost = generate_with_fallback(
-        prompt,
-        preferred_provider=state.get("preferred_provider"),
-        preferred_model=state.get("preferred_model"),
+    parsed, meta = await generate_structured(
+        "generate_draft", SCRIPT_DRAFT_V2, ScriptDraft, context, policy="reasoning"
     )
-    # Aggregate costs
-    new_cost = state.get("cost_data", {}).copy()
-    for k, v in cost.items():
-        if isinstance(v, (int, float)):
-            new_cost[k] = new_cost.get(k, 0) + v
 
-    return {"draft_script": response, "cost_data": new_cost}
+    return {"draft_script": parsed}
 
 
-def node_critique(state: ScriptState) -> dict:
+async def node_critique(state: ScriptState) -> dict:
     """Self-critique the draft for engagement and pacing."""
     log.info("Agentic Node: Critiquing Draft")
-    prompt = f"""
-    Critique this short-form script draft for retention and pacing.
-    Is the hook strong enough? Are scenes too long? Are visuals concrete?
+    draft = state.get("draft_script")
+    draft_json = draft.model_dump_json() if draft else ""
 
-    DRAFT:
-    {state['draft_script']}
+    context = {"draft": draft_json}
 
-    Provide a short bulleted list of 2-3 specific improvements.
-    If it's perfect, output "PERFECT".
-    """
-    response, provider, cost = generate_with_fallback(
-        prompt,
-        preferred_provider=state.get("preferred_provider"),
-        preferred_model=state.get("preferred_model"),
+    parsed, meta = await generate_structured(
+        "critique_draft", SCRIPT_CRITIQUE_V1, ScriptCritique, context, policy="fast"
     )
-    new_cost = state.get("cost_data", {}).copy()
-    for k, v in cost.items():
-        if isinstance(v, (int, float)):
-            new_cost[k] = new_cost.get(k, 0) + v
 
-    return {"feedback": response, "cost_data": new_cost}
+    return {"feedback": parsed}
 
 
-def node_refine_and_format(state: ScriptState) -> dict:
+async def node_refine_and_format(state: ScriptState) -> dict:
     """Apply critique and format into strict StorySpec JSON."""
     log.info("Agentic Node: Refining and Formatting to JSON")
-    schema_dict = StorySpec.model_json_schema()
-    schema_json = json.dumps(schema_dict, indent=2)
+    draft = state.get("draft_script")
+    feedback = state.get("feedback")
 
-    prompt = f"""
-    You have a draft script and some critique feedback.
-    Apply the feedback, refine the script, and output it matching the strict JSON schema.
+    draft_json = draft.model_dump_json() if draft else ""
+    feedback_json = feedback.model_dump_json() if feedback else ""
 
-    DRAFT:
-    {state['draft_script']}
+    context = {"draft": draft_json, "feedback": feedback_json}
 
-    FEEDBACK:
-    {state['feedback']}
-
-    You MUST respond ONLY with a valid JSON object matching this schema:
-    {schema_json}
-    """
-    response, provider, cost = generate_with_fallback(
-        prompt,
-        preferred_provider=state.get("preferred_provider"),
-        preferred_model=state.get("preferred_model"),
+    parsed, meta = await generate_structured(
+        "refine_script", SCRIPT_REFINE_V1, StorySpec, context, policy="reasoning"
     )
-    new_cost = state.get("cost_data", {}).copy()
-    for k, v in cost.items():
-        if isinstance(v, (int, float)):
-            new_cost[k] = new_cost.get(k, 0) + v
 
-    return {"raw_json": response, "cost_data": new_cost}
+    if parsed:
+        parsed.topic = state.get("topic", "Untitled")
 
-
-def node_validate(state: ScriptState) -> dict:
-    """Validate the JSON output."""
-    log.info("Agentic Node: Validating JSON")
-    raw = state["raw_json"]
-    import re
-
-    cleaned = re.sub(r"```(?:json)?", "", raw).strip().rstrip("```").strip()
-    start_idx = cleaned.find("{")
-    end_idx = cleaned.rfind("}")
-    if start_idx != -1 and end_idx != -1 and start_idx <= end_idx:
-        cleaned = cleaned[start_idx : end_idx + 1]
-
-    try:
-        parsed_data = json.loads(cleaned)
-        if "topic" not in parsed_data:
-            parsed_data["topic"] = state["topic"]
-        story_spec = StoryValidator.validate_story_dict(parsed_data)
-        return {"story_spec": story_spec, "errors": []}
-    except Exception as e:
-        log.error(f"Validation failed: {e}")
-        return {"errors": [str(e)]}
+    return {"story_spec": parsed}
 
 
 # Define the graph
@@ -187,7 +130,6 @@ def build_script_graph():
     workflow.add_node("draft", node_draft)
     workflow.add_node("critique", node_critique)
     workflow.add_node("refine_and_format", node_refine_and_format)
-    workflow.add_node("validate", node_validate)
 
     # Add edges
     workflow.add_edge(START, "outline")
@@ -196,32 +138,15 @@ def build_script_graph():
 
     # Conditional logic
     def check_feedback(state: ScriptState):
-        if "PERFECT" in state["feedback"].upper():
-            return "refine_and_format"  # Just format
-        return (
-            "refine_and_format"  # Currently linear, but forces revision incorporation
-        )
+        fb = state.get("feedback")
+        if fb and getattr(fb, "approved", False):
+            return "refine_and_format"
+        return "refine_and_format"
 
     workflow.add_conditional_edges(
         "critique", check_feedback, {"refine_and_format": "refine_and_format"}
     )
-
-    workflow.add_edge("refine_and_format", "validate")
-
-    # Retry on validation failure
-    def check_validation(state: ScriptState):
-        if state.get("errors") and len(state["errors"]) > 0:
-            # Simple retry back to format
-            if len(state["errors"]) < 3:  # prevent infinite loop
-                return "refine_and_format"
-            return END
-        return END
-
-    workflow.add_conditional_edges(
-        "validate",
-        check_validation,
-        {"refine_and_format": "refine_and_format", END: END},
-    )
+    workflow.add_edge("refine_and_format", END)
 
     return workflow.compile()
 
@@ -229,7 +154,7 @@ def build_script_graph():
 graph = build_script_graph()
 
 
-def generate_script_agentic(
+async def generate_script_agentic(
     topic: str,
     niche: str = "science_wow",
     language: str = "en",
@@ -260,11 +185,17 @@ def generate_script_agentic(
     }
 
     log.info(f"Starting Agentic Script Generation for: {topic}")
-    result = graph.invoke(initial_state)
+
+    # Run the compiled LangGraph workflow asynchronously
+    result = await graph.ainvoke(initial_state)
 
     if not result.get("story_spec"):
         raise RuntimeError(
             f"Agentic workflow failed to produce valid StorySpec. Errors: {result.get('errors')}"
         )
 
-    return result["story_spec"], result["provider_used"], result["cost_data"]
+    return (
+        result["story_spec"],
+        result.get("provider_used", "unknown"),
+        result.get("cost_data", {}),
+    )

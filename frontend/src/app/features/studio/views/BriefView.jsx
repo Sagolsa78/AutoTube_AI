@@ -1,16 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import Icon from '../../../../components/Icon';
 import useStudioStore from '../../../../store/studioStore';
+import { useChannel } from '../../../../contexts/ChannelContext';
 import { api } from '../../../../services/api';
 import { toast } from 'sonner';
 
 export default function BriefView({ onNext, onAutoPilot }) {
+  const { activeChannelId } = useChannel();
   const selectedIdea = useStudioStore((s) => s.selectedIdea);
-  const contentType = useStudioStore((s) => s.contentType);
+  const contentType = useStudioStore((s) => s.project?.contentType || 'short');
   const setContentType = useStudioStore((s) => s.setContentType);
-  const targetDuration = useStudioStore((s) => s.targetDuration);
+  const targetDuration = useStudioStore((s) => s.project?.targetDuration || '60');
   const setTargetDuration = useStudioStore((s) => s.setTargetDuration);
-  const language = useStudioStore((s) => s.language);
+  const language = useStudioStore((s) => s.audio?.language || 'en');
   const setLanguage = useStudioStore((s) => s.setLanguage);
 
   // Additional metadata for new spec
@@ -18,35 +20,54 @@ export default function BriefView({ onNext, onAutoPilot }) {
   const [visualStrategy, setVisualStrategy] = useState('auto');
   const [audience, setAudience] = useState('general');
 
-  const [topic, setTopic] = useState(selectedIdea?.topic || '');
+  const [topic, setTopic] = useState(selectedIdea?.topic || selectedIdea?.title || '');
   const [generating, setGenerating] = useState(false);
   const [generationStep, setGenerationStep] = useState('');
 
   const setScript = useStudioStore((s) => s.setScript);
   const setSelectedIdea = useStudioStore((s) => s.setSelectedIdea);
   const setRender = useStudioStore((s) => s.setRender);
-  const voiceSettings = useStudioStore((s) => s.voiceSettings);
-  const formatType = useStudioStore((s) => s.project?.formatType || '9:16');
+  const project = useStudioStore((s) => s.project);
+  const voiceId = useStudioStore((s) => s.audio?.voice);
+  const formatType = contentType === 'long' ? '16:9' : '9:16';
 
   const [improving, setImproving] = useState(false);
   const [aiInsight, setAiInsight] = useState(null);
+  const [hooks, setHooks] = useState(null);
+  const [loadingHooks, setLoadingHooks] = useState(false);
 
-  // Auto-fetch insights when topic changes significantly (debounced)
+  // Auto-fetch insights removed to avoid unprompted API calls. User must click 'Improve idea' now.
   useEffect(() => {
     if (topic.length < 20) {
       setAiInsight(null);
-      return;
+      setHooks(null);
     }
-    const timer = setTimeout(async () => {
-      try {
-         // Real API call would go here to get a hook suggestion based on the topic.
-         // Since we don't have a dedicated getInsights endpoint, we'll simulate an insight request
-         // or call improveIdea passively if such endpoint existed.
-         // For now, we'll keep it empty unless the user clicks "Improve idea"
-      } catch(e) {}
-    }, 1000);
-    return () => clearTimeout(timer);
   }, [topic]);
+
+  const handleGenerateHooks = async () => {
+    if (!topic.trim()) return;
+    setLoadingHooks(true);
+    try {
+      let ideaId = selectedIdea?.id;
+      if (!ideaId) {
+        const newIdea = await api.createIdea({
+          topic,
+          channel_id: activeChannelId || null,
+          angle: `Tone: ${tone}, Audience: ${audience}`
+        });
+        ideaId = newIdea.id;
+        setSelectedIdea(newIdea);
+      }
+      const data = await api.getHooks(ideaId);
+      setHooks(data);
+      toast.success("Hooks generated successfully!");
+    } catch(e) {
+      console.error(e);
+      toast.error('Failed to generate hooks: ' + e.message);
+    } finally {
+      setLoadingHooks(false);
+    }
+  };
 
   const handleDraftScript = async () => {
     if (!topic.trim()) return;
@@ -57,7 +78,7 @@ export default function BriefView({ onNext, onAutoPilot }) {
       if (!ideaId) {
         const newIdea = await api.createIdea({
           topic,
-          channel_id: null,
+          channel_id: activeChannelId || null,
           angle: `Tone: ${tone}, Audience: ${audience}`
         });
         ideaId = newIdea.id;
@@ -65,15 +86,26 @@ export default function BriefView({ onNext, onAutoPilot }) {
       }
 
       setGenerationStep('Building hook');
-      await new Promise(r => setTimeout(r, 1000)); // UI delay for polish
+      await new Promise(r => setTimeout(r, 600));
 
       setGenerationStep('Generating script');
       const scriptData = await api.generateScript(ideaId, language, 'US', contentType, targetDuration);
 
       setGenerationStep('Checking quality');
-      await new Promise(r => setTimeout(r, 800)); // UI delay for polish
+      await new Promise(r => setTimeout(r, 400));
 
       setScript(scriptData);
+
+      // Advance pipeline
+      if (project?.id) {
+        await api.updateProject(project.id, {
+          idea_id: ideaId,
+          script_id: scriptData.id,
+          current_stage: 'script',
+          title: scriptData.topic || topic
+        });
+      }
+
       onNext();
     } catch (err) {
       console.error(err);
@@ -90,7 +122,7 @@ export default function BriefView({ onNext, onAutoPilot }) {
     if (!topic.trim() || improving) return;
     setImproving(true);
     try {
-      const res = await api.improveIdea(topic);
+      const res = await api.improveIdea(topic, activeChannelId || null);
       if (res.improved_topic) {
         setAiInsight(res.improved_topic);
         toast.success("AI suggested a new angle!");
@@ -112,7 +144,7 @@ export default function BriefView({ onNext, onAutoPilot }) {
       if (!ideaId) {
         const newIdea = await api.createIdea({
           topic,
-          channel_id: null,
+          channel_id: activeChannelId || null,
           angle: `Tone: ${tone}, Audience: ${audience}`
         });
         ideaId = newIdea.id;
@@ -129,7 +161,7 @@ export default function BriefView({ onNext, onAutoPilot }) {
         style: 'cinematic', // default fallback
         caption_style: 'auto',
         custom_cta: null,
-        voice_override: voiceSettings?.voiceId,
+        voice_override: voiceId,
         visual_strategy: 'auto',
         content_type: contentType,
         target_duration_seconds: targetDuration,
@@ -138,6 +170,18 @@ export default function BriefView({ onNext, onAutoPilot }) {
       };
       const video = await api.renderVideoFull(opts);
       setRender({ videoId: video.id });
+
+      // Advance pipeline
+      if (project?.id) {
+        await api.updateProject(project.id, {
+          idea_id: ideaId,
+          script_id: scriptData.id,
+          video_id: video.id,
+          current_stage: 'output',
+          title: scriptData.topic || topic
+        });
+      }
+
       onAutoPilot();
     } catch (err) {
       console.error(err);
@@ -163,8 +207,8 @@ export default function BriefView({ onNext, onAutoPilot }) {
         <div className="max-w-2xl mx-auto space-y-8">
 
           <div className="space-y-2">
-            <h2 className="text-3xl font-bold tracking-tight text-text-primary">What should we create?</h2>
-            <p className="text-text-secondary text-sm">Tell AutoTube what you want to make, and we'll handle the rest.</p>
+            <h2 className="text-3xl font-bold tracking-tight text-text-primary">Create something worth watching.</h2>
+            <p className="text-text-secondary text-sm">Describe the video you want AutoTube to make.</p>
           </div>
 
           <div className="space-y-6">
@@ -268,14 +312,14 @@ export default function BriefView({ onNext, onAutoPilot }) {
               <button
                 onClick={handleDraftScript}
                 disabled={generating || !topic.trim()}
-                className="w-full md:w-auto px-6 py-3.5 bg-surface border border-border/80 text-text-primary text-base font-bold rounded-xl hover:bg-surface-hover hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:hover:translate-y-0"
+                className="w-full md:w-auto px-6 py-3.5 bg-surface border border-border text-text-primary text-base font-bold rounded-xl hover:bg-elevated hover:border-border-strong hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:hover:translate-y-0"
               >
-                Draft Script Only
+                Generate Script
               </button>
               <button
                 onClick={handleAutoPilot}
                 disabled={generating || !topic.trim()}
-                className="w-full md:flex-1 px-8 py-3.5 bg-brand-red text-white text-base font-bold rounded-xl shadow-[0_4px_14px_0_rgba(230,57,47,0.39)] hover:shadow-[0_6px_20px_rgba(230,57,47,0.23)] hover:-translate-y-0.5 transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-none relative overflow-hidden group"
+                className="w-full md:flex-1 px-8 py-3.5 bg-brand-red text-white text-base font-bold rounded-xl shadow-brand-glow hover:shadow-lg hover:-translate-y-0.5 transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-none relative overflow-hidden group"
               >
                 <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
                 {generating ? (
@@ -295,58 +339,70 @@ export default function BriefView({ onNext, onAutoPilot }) {
         </div>
       </div>
 
-      {/* ── RIGHT: Live Preview & AI Insights (40%) ──────────────────────────────── */}
-      <div className="w-full lg:w-[40%] bg-surface/30 flex flex-col shrink-0 relative">
-        <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-brand-red/5 via-transparent to-transparent opacity-50"></div>
+      {/* ── RIGHT: AutoTube Copilot (40%) ──────────────────────────────── */}
+      <div className="w-full lg:w-[40%] bg-surface/40 flex flex-col shrink-0 relative border-l border-border/50">
+        <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-ai/10 via-transparent to-transparent opacity-50"></div>
 
-        <div className="p-6 border-b border-border/30 flex items-center justify-between z-10 bg-canvas/50 backdrop-blur-md">
-          <span className="text-xs font-bold uppercase tracking-widest text-text-muted">Live Preview</span>
-          <span className="text-xs font-mono text-text-secondary bg-surface px-2.5 py-1 rounded-md border border-border/50">Abstract</span>
+        <div className="h-16 px-6 border-b border-border/50 flex items-center justify-between z-10 bg-canvas/50 backdrop-blur-md shrink-0">
+          <div className="flex items-center gap-2 text-ai">
+             <Icon name="sparkles" size={16} />
+             <span className="text-xs font-bold uppercase tracking-widest">AutoTube Copilot</span>
+          </div>
+          <span className="text-[10px] font-bold tracking-wider text-text-muted bg-surface px-2 py-1 rounded border border-border">AI Assistant</span>
         </div>
 
-        <div className="flex-1 p-6 flex flex-col items-center justify-center z-10 relative">
-          <div className="w-[260px] aspect-[9/16] bg-canvas border border-border/50 rounded-3xl flex flex-col items-center justify-center relative overflow-hidden shadow-2xl">
-            {/* Abstract visualizer for IDEA stage */}
-            <div className="absolute inset-0 flex items-center justify-center opacity-30">
-              <div className="w-48 h-48 bg-brand-red/20 rounded-full blur-3xl animate-pulse"></div>
-            </div>
-            <Icon name="lightbulb" size={32} className="text-brand-red/80 mb-4" />
-            <p className="text-base font-semibold text-text-primary text-center px-4">Concept Stage</p>
-            <p className="text-xs text-text-muted mt-2 text-center px-6">Provide a topic to begin the creative process.</p>
-          </div>
-        </div>
+        <div className="flex-1 p-6 flex flex-col gap-4 overflow-y-auto z-10 relative hide-scrollbar">
 
-        {/* AI Insight Panel */}
-        <div className="m-6 bg-surface border border-border/60 rounded-2xl p-5 shadow-lg relative overflow-hidden z-10 group transition-all hover:border-brand-red/30">
-          <div className="absolute top-0 left-0 w-1 h-full bg-brand-red rounded-l-2xl"></div>
-
-          <div className="flex items-center gap-2 mb-3">
-            <Icon name="sparkles" size={16} className="text-brand-red" />
-            <span className="text-xs font-bold uppercase tracking-widest text-text-primary">AI Insight</span>
-          </div>
-
-          <div className="flex flex-col gap-4">
-            {aiInsight ? (
-              <>
-                <p className="text-sm text-text-secondary leading-relaxed">
-                  <span className="font-semibold text-text-primary block mb-1">Stronger hook available:</span>
-                  "{aiInsight}"
-                </p>
-                <div className="flex justify-end">
-                  <button
-                    onClick={applyInsight}
-                    className="text-xs font-bold bg-brand-red/10 text-brand-red border border-brand-red/20 hover:bg-brand-red hover:text-white px-4 py-1.5 rounded-lg transition-colors"
-                  >
-                    Use this hook
+          <div className="bg-surface border border-border rounded-xl p-4 shadow-sm hover:border-ai/30 transition-colors group">
+            <h4 className="text-xs font-bold text-text-muted uppercase tracking-widest mb-2 flex items-center gap-2">
+              Topic Improvement {improving && <span className="w-2 h-2 rounded-full bg-ai animate-pulse" />}
+            </h4>
+            <p className={`text-sm leading-relaxed ${aiInsight ? 'text-text-primary' : 'text-text-muted italic'}`}>
+              {aiInsight || 'Describe your idea and click "Improve idea" to get an AI optimized topic...'}
+            </p>
+            {aiInsight && (
+               <div className="mt-4 flex justify-end">
+                  <button onClick={applyInsight} className="text-xs font-bold bg-ai/10 text-ai hover:bg-ai hover:text-white px-3 py-1.5 rounded-lg transition-colors border border-ai/20 hover:border-ai">
+                    Apply Suggestion
                   </button>
-                </div>
-              </>
-            ) : (
-              <p className="text-sm text-text-muted italic leading-relaxed">
-                Describe your idea and AutoTube will suggest hooks and improvements.
-              </p>
+               </div>
             )}
           </div>
+
+          <div className="bg-surface border border-border rounded-xl p-4 shadow-sm flex flex-col gap-3">
+             <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold text-text-muted uppercase tracking-widest flex items-center gap-2">
+                  Hook Candidates
+                </h4>
+                <button
+                  onClick={handleGenerateHooks}
+                  disabled={loadingHooks || !topic.trim()}
+                  className="text-xs font-bold text-ai hover:text-white bg-ai/10 hover:bg-ai px-2.5 py-1 rounded transition-colors disabled:opacity-50"
+                >
+                  {loadingHooks ? 'Generating...' : 'Generate Hooks'}
+                </button>
+             </div>
+
+             {hooks && hooks.candidates ? (
+               <div className="flex flex-col gap-3 mt-2">
+                 {hooks.candidates.map((c, i) => (
+                   <div key={i} className={`p-3 rounded border ${i === hooks.best_hook_index ? 'border-ai bg-ai/10' : 'border-border/50 bg-bg-2'}`}>
+                     <div className="flex justify-between items-start gap-2 mb-1">
+                       <span className="text-[10px] font-bold text-ai uppercase tracking-wider">{c.angle}</span>
+                       <span className="text-[10px] font-mono text-text-muted">Score: {c.expected_retention_score}</span>
+                     </div>
+                     <p className="text-sm font-semibold text-text-primary">"{c.hook_text}"</p>
+                     <p className="text-xs text-text-muted mt-2">👁️ {c.visual_suggestion}</p>
+                   </div>
+                 ))}
+               </div>
+             ) : (
+               <div className="text-sm text-text-muted italic py-4 text-center border border-dashed border-border/50 rounded">
+                 Generate hooks to see options...
+               </div>
+             )}
+          </div>
+
         </div>
       </div>
     </div>

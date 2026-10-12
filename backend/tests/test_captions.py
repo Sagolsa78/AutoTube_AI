@@ -18,12 +18,12 @@ def test_malicious_subtitle_text():
         build_karaoke_ass(boundaries, out_path)
         content = open(out_path).read()
 
-        # Ensure { and } are escaped
+        # Ensure { and } are stripped
         assert "{\\pos" not in content
-        assert "Hello｛＼pos(0,0)｝" in content
+        assert "Hellopos(0,0)" in content
 
-        # Ensure backslashes are escaped
-        assert "world＼N" in content
+        # Ensure backslashes are stripped
+        assert "worldN" in content
 
         # Ensure control characters are stripped
         assert "\x00bad" not in content

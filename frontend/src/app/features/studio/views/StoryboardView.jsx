@@ -5,7 +5,7 @@ import TimelineTrack from '../components/TimelineTrack';
 import { api } from '../../../../services/api';
 import { toast } from 'sonner';
 
-export default function StoryboardView() {
+export default function StoryboardView({ onNext }) {
   const { editingScenes, setEditingScenes, project, script } = useStudioStore();
 
   const [selectedSceneIdx, setSelectedSceneIdx] = useState(0);
@@ -105,6 +105,17 @@ export default function StoryboardView() {
     }
   };
 
+  const handleNext = async () => {
+    if (project?.id) {
+      try {
+        await api.updateProject(project.id, { current_stage: 'output' });
+      } catch (err) {
+        console.error("Failed to advance project state", err);
+      }
+    }
+    if (onNext) onNext();
+  };
+
   return (
     <div className="flex-1 flex flex-col overflow-y-auto lg:overflow-hidden bg-surface">
 
@@ -112,87 +123,69 @@ export default function StoryboardView() {
       <div className="flex-1 flex flex-col lg:flex-row divide-y lg:divide-y-0 lg:divide-x divide-border/50 lg:min-h-0 overflow-y-auto lg:overflow-hidden">
 
         {/* Left: Asset Library (20%) */}
-        <div className="flex w-full h-64 lg:h-auto lg:w-72 bg-canvas flex-col shrink-0 border-b lg:border-b-0 lg:border-r border-border/50">
-           <div className="p-4 border-b border-border/50 space-y-3">
-             <div className="flex items-center justify-between">
-               <h3 className="text-xs font-bold uppercase tracking-widest text-text-primary">Assets</h3>
-             </div>
-
-             {/* Tabs */}
-             <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-1">
-               {['Search', 'Stock', 'AI', 'Uploads'].map(tab => (
-                 <button
-                   key={tab}
-                   onClick={() => setAssetTab(tab.toLowerCase())}
-                   className={`text-[10px] font-bold uppercase px-3 py-1.5 rounded-full whitespace-nowrap transition-colors ${
-                     assetTab === tab.toLowerCase() ? 'bg-text-primary text-canvas' : 'bg-surface text-text-muted hover:text-text-primary'
-                   }`}
-                 >
-                   {tab}
-                 </button>
-               ))}
-             </div>
-
-             <div className="relative">
-               <Icon name="search" size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
-               <input
-                 type="text"
-                 placeholder="Search library..."
-                 value={searchQuery}
-                 onChange={e => setSearchQuery(e.target.value)}
-                 onKeyDown={e => e.key === 'Enter' && searchAssets(searchQuery)}
-                 className="w-full bg-surface/50 border border-border/60 rounded-xl pl-9 pr-3 py-2.5 text-xs text-text-primary focus:border-brand-red focus:outline-none focus:ring-1 focus:ring-brand-red/20 transition-all"
-               />
-             </div>
+        <div className="flex w-full h-96 lg:h-auto lg:w-80 bg-canvas/80 flex-col shrink-0 border-b lg:border-b-0 lg:border-r border-border/50 backdrop-blur-xl">
+           <div className="p-4 border-b border-border/50 flex items-center gap-2 bg-surface/50">
+             <Icon name="image" size={14} className="text-brand-red" />
+             <h3 className="text-[10px] font-bold uppercase tracking-widest text-text-primary">Asset Library</h3>
            </div>
 
-           <div className="flex-1 overflow-y-auto p-3 hide-scrollbar relative bg-surface/20">
-             {searching ? (
-                <div className="absolute inset-0 flex flex-col items-center justify-center text-text-muted gap-3">
-                  <Icon name="loader" size={24} className="animate-spin text-brand-red/50" />
-                  <span className="text-xs font-semibold uppercase tracking-wider">Searching...</span>
-                </div>
-             ) : assets.length === 0 ? (
-                <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center">
-                  <Icon name="image" size={40} className="text-border mb-3" />
-                  <p className="text-xs font-bold text-text-primary mb-1">No assets found</p>
-                  <p className="text-[10px] text-text-muted mb-4">Try a different search or generate an AI visual.</p>
-                  <div className="flex flex-col gap-2 w-full">
-                    <button onClick={handleGenerateAsset} className="bg-brand-red text-white text-[11px] font-bold py-2 rounded-lg hover:bg-brand-red-hover transition-colors shadow-sm">
-                      Generate AI visual
-                    </button>
-                    <button onClick={() => searchAssets('nature', 'stock')} className="bg-surface text-text-primary text-[11px] font-bold py-2 rounded-lg border border-border hover:bg-elevated transition-colors">
-                      Search Stock
-                    </button>
-                  </div>
-                </div>
-             ) : (
-                <div className="grid grid-cols-2 gap-3 pb-4">
-                  {assets.map((asset, i) => (
-                    <div
-                      key={asset.id || i}
-                      onClick={() => handleAssignAsset(asset)}
-                      className="aspect-[9/16] bg-canvas rounded-xl border border-border/60 flex items-center justify-center hover:border-brand-red cursor-pointer group relative overflow-hidden shadow-sm hover:shadow-md transition-all"
-                    >
-                      {asset.thumbnail_url || asset.url ? (
-                          <img src={asset.thumbnail_url || asset.url} alt="asset" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                      ) : (
-                          <Icon name="video" size={20} className="text-border" />
-                      )}
-                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                        <div className="bg-brand-red text-white p-1.5 rounded-full shadow-lg scale-50 group-hover:scale-100 transition-transform">
-                          <Icon name="check" size={14} />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-             )}
+           <div className="flex flex-col h-full space-y-4 p-4">
+              <div className="relative">
+                <Icon name="search" size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+                <input
+                  type="text"
+                  placeholder="Search library..."
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && searchAssets(searchQuery)}
+                  className="w-full bg-surface border border-border/60 rounded-xl pl-9 pr-3 py-2.5 text-xs text-text-primary focus:border-brand-red focus:outline-none focus:ring-1 focus:ring-brand-red/20 transition-all shadow-sm"
+                />
+              </div>
+
+              <div className="flex-1 relative min-h-[300px] overflow-y-auto hide-scrollbar">
+                {searching ? (
+                   <div className="absolute inset-0 flex flex-col items-center justify-center text-text-muted gap-3">
+                     <Icon name="loader" size={24} className="animate-spin text-brand-red/50" />
+                     <span className="text-xs font-semibold uppercase tracking-wider">Searching...</span>
+                   </div>
+                ) : assets.length === 0 ? (
+                   <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center">
+                     <Icon name="image" size={40} className="text-border mb-3" />
+                     <p className="text-xs font-bold text-text-primary mb-1">No assets found</p>
+                     <p className="text-[10px] text-text-muted mb-4">Try a different search or generate an AI visual.</p>
+                     <button onClick={handleGenerateAsset} className="bg-ai/10 text-ai border border-ai/20 hover:bg-ai hover:text-white px-4 py-2 rounded-lg transition-colors text-[11px] font-bold shadow-sm">
+                       Generate AI visual
+                     </button>
+                   </div>
+                ) : (
+                   <div className="grid grid-cols-2 gap-3 pb-4">
+                     {assets.map((asset, i) => (
+                       <div
+                         key={asset.id || i}
+                         onClick={() => handleAssignAsset(asset)}
+                         className="aspect-[9/16] bg-canvas rounded-xl border border-border/60 flex items-center justify-center hover:border-brand-red cursor-pointer group relative overflow-hidden shadow-sm hover:shadow-md transition-all"
+                       >
+                         {asset.thumbnail_url || asset.url ? (
+                             <img src={asset.thumbnail_url || asset.url} alt="asset" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                         ) : (
+                             <Icon name="video" size={20} className="text-border" />
+                         )}
+                         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                           <div className="bg-brand-red text-white p-2 rounded-full shadow-lg scale-50 group-hover:scale-100 transition-transform">
+                             <Icon name="check" size={16} />
+                           </div>
+                         </div>
+                       </div>
+                     ))}
+                   </div>
+                )}
+              </div>
            </div>
         </div>
 
-        {/* Center: Video Preview Player (55%) */}
-        <div className="flex-1 flex flex-col bg-surface/40 relative shrink-0 min-h-[450px] lg:min-h-0">
+        {/* Center: Video Preview Player + Storyboard Canvas (55%) */}
+        <div className="flex-1 flex flex-col bg-surface/40 relative shrink-0 min-h-[600px] lg:min-h-0">
+
            {/* Preview Header */}
            <div className="absolute top-0 inset-x-0 p-5 flex justify-between items-center z-10">
               <div className="flex items-center gap-2">
@@ -202,19 +195,25 @@ export default function StoryboardView() {
                   {String(Math.floor(totalDuration / 60)).padStart(2, '0')}:{String(Math.floor(totalDuration % 60)).padStart(2, '0')}
                 </span>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-3 items-center">
                 <button className="text-text-secondary hover:text-text-primary bg-surface/80 border border-border/50 p-2 rounded-lg backdrop-blur shadow-sm transition-colors">
                   <Icon name="maximize" size={14} />
+                </button>
+                <button
+                  onClick={handleNext}
+                  className="bg-brand-red text-white text-xs font-bold px-4 py-2 rounded-lg shadow-[0_2px_10px_rgba(230,57,47,0.39)] hover:bg-brand-red-hover hover:-translate-y-0.5 transition-all flex items-center gap-2"
+                >
+                  Continue to Output <Icon name="arrow-right" size={14} />
                 </button>
               </div>
            </div>
 
-           {/* Canvas */}
-           <div className="flex-1 flex items-center justify-center p-6 md:p-12 relative overflow-hidden min-h-0">
+           {/* Canvas Preview Area */}
+           <div className="flex-1 flex items-center justify-center p-6 md:p-12 relative overflow-hidden min-h-0 pb-0">
               {/* Subtle background glow */}
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] h-[300px] bg-brand-red/5 rounded-full blur-[100px] pointer-events-none"></div>
 
-              <div className="h-full aspect-[9/16] bg-canvas border border-border/50 rounded-[2rem] shadow-2xl flex flex-col items-center justify-center relative overflow-hidden group">
+              <div className="h-full max-h-[500px] aspect-[9/16] bg-canvas border border-border/50 rounded-[2rem] shadow-2xl flex flex-col items-center justify-center relative overflow-hidden group">
                 {selectedScene?.video_url ? (
                   <video src={selectedScene.video_url} className="w-full h-full object-cover" controls={false} />
                 ) : selectedScene?.image_url || selectedScene?.asset_url ? (
@@ -244,7 +243,7 @@ export default function StoryboardView() {
            </div>
 
            {/* Transport Controls */}
-           <div className="h-20 border-t border-border/40 bg-surface/50 backdrop-blur flex items-center justify-center gap-8 px-6">
+           <div className="h-16 flex items-center justify-center gap-8 px-6 shrink-0 relative z-10">
              <button className="text-text-muted hover:text-text-primary transition-colors"><Icon name="skip-back" size={20} /></button>
              <button
                onClick={() => setIsPlaying(!isPlaying)}
@@ -254,98 +253,141 @@ export default function StoryboardView() {
              </button>
              <button className="text-text-muted hover:text-text-primary transition-colors"><Icon name="skip-forward" size={20} /></button>
            </div>
+
+           {/* Horizontal Storyboard Canvas */}
+           <div className="h-[220px] bg-canvas/80 backdrop-blur-md border-t border-border/50 shrink-0 flex flex-col">
+              <div className="px-4 py-2 border-b border-border/50 flex justify-between items-center bg-surface/50">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-text-primary">Storyboard Canvas</span>
+              </div>
+              <div className="flex-1 overflow-x-auto p-4 flex gap-4 hide-scrollbar items-center">
+                 {editingScenes.map((scene, idx) => (
+                    <div
+                      key={scene.id || idx}
+                      onClick={() => setSelectedSceneIdx(idx)}
+                      className={`group w-32 shrink-0 bg-surface border rounded-xl overflow-hidden cursor-pointer transition-all duration-300 ${idx === selectedSceneIdx ? 'border-brand-red shadow-[0_0_20px_rgba(230,57,47,0.15)] ring-1 ring-brand-red scale-[1.02]' : 'border-border/60 hover:border-border hover:shadow-sm'}`}
+                    >
+                       <div className="aspect-[9/16] bg-canvas relative overflow-hidden">
+                          {scene.thumbnail_url || scene.image_url || scene.asset_url ? (
+                             <img src={scene.thumbnail_url || scene.image_url || scene.asset_url} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
+                          ) : (
+                             <div className="absolute inset-0 flex flex-col items-center justify-center text-border group-hover:text-text-muted transition-colors bg-surface/30">
+                               <Icon name="image" size={24} className="mb-2 opacity-50" />
+                               <span className="text-[9px] font-bold uppercase tracking-widest opacity-50">Empty</span>
+                             </div>
+                          )}
+
+                          <div className="absolute top-2 left-2 bg-black/60 backdrop-blur-md text-white text-[9px] font-bold px-1.5 py-0.5 rounded border border-white/10 uppercase tracking-widest">
+                            SC {String(idx+1).padStart(2, '0')}
+                          </div>
+
+                          {idx === selectedSceneIdx && (
+                            <div className="absolute inset-0 border-[3px] border-brand-red rounded-xl pointer-events-none" />
+                          )}
+                       </div>
+                    </div>
+                 ))}
+              </div>
+           </div>
+
         </div>
 
         {/* Right: Scene Inspector (25%) */}
-        <div className="w-full lg:w-[320px] bg-canvas flex flex-col shrink-0 min-h-[400px] lg:min-h-0">
-          <div className="h-14 border-b border-border/50 flex items-center justify-between px-5">
-            <h3 className="text-xs font-bold uppercase tracking-widest text-text-primary">Inspector</h3>
-            <span className="text-[10px] font-bold bg-brand-red/10 text-brand-red px-2 py-1 rounded">Scene {String(selectedSceneIdx + 1).padStart(2, '0')}</span>
+        <div className="w-full lg:w-[340px] bg-canvas flex flex-col shrink-0 min-h-[400px] lg:min-h-0 border-l border-border/50">
+
+          <div className="h-14 border-b border-border/50 flex items-center px-4 gap-2 bg-surface/50 backdrop-blur-md shrink-0">
+             <Icon name="sliders" size={14} className="text-text-muted" />
+             <h3 className="text-[10px] font-bold uppercase tracking-widest text-text-primary">Inspector</h3>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-5 space-y-6 hide-scrollbar">
-            {selectedScene ? (
-              <>
-                {/* Visual Strategy */}
-                <div className="space-y-2">
-                   <div className="flex justify-between items-center">
-                     <label className="text-[10px] font-bold text-text-muted uppercase tracking-widest">Visual Prompt</label>
-                     <button onClick={handleRegeneratePrompt} className="text-[10px] text-brand-red font-bold hover:text-brand-red-hover flex items-center gap-1 transition-colors">
-                       <Icon name="refresh-cw" size={10} /> Regenerate
-                     </button>
-                   </div>
-                   <textarea
-                     value={selectedScene.visual_prompt || selectedScene.visual_description || ''}
-                     onChange={handlePromptUpdate}
-                     className="w-full bg-surface border border-border/60 rounded-xl p-3 text-xs focus:border-brand-red/50 focus:outline-none resize-none h-28 text-text-primary leading-relaxed transition-colors"
-                     placeholder="Describe the visual for this scene..."
-                   />
-                </div>
+          <div className="flex-1 overflow-y-auto p-5 hide-scrollbar">
+              <div className="space-y-6">
+                {selectedScene ? (
+                  <>
+                    <div className="flex items-center gap-3 p-3 bg-surface border border-border/60 rounded-xl mb-2">
+                       <div className="w-10 h-10 rounded-lg bg-canvas border border-border flex items-center justify-center text-xs font-bold text-text-secondary">
+                         {String(selectedSceneIdx + 1).padStart(2, '0')}
+                       </div>
+                       <div>
+                         <div className="text-xs font-bold text-text-primary">Scene {selectedSceneIdx + 1}</div>
+                         <div className="text-[10px] font-mono text-text-muted">Est. {selectedScene?.duration_est || 5}s</div>
+                       </div>
+                    </div>
 
-                {/* Script Line */}
-                <div className="space-y-2">
-                   <label className="text-[10px] font-bold text-text-muted uppercase tracking-widest">Narration / Subtitles</label>
-                   <textarea
-                     value={selectedScene.text || selectedScene.narration || ''}
-                     onChange={handleTextUpdate}
-                     className="w-full bg-surface border border-border/60 rounded-xl p-3 text-xs focus:border-brand-red/50 focus:outline-none resize-none h-24 text-text-secondary leading-relaxed transition-colors"
-                     placeholder="Text that appears on screen..."
-                   />
-                </div>
+                    {/* Visual Strategy */}
+                    <div className="space-y-3">
+                       <div className="flex justify-between items-center">
+                         <label className="text-[10px] font-bold text-text-muted uppercase tracking-widest flex items-center gap-1.5"><Icon name="image" size={12} /> Visual Prompt</label>
+                         <button onClick={handleRegeneratePrompt} className="text-[10px] text-ai font-bold hover:text-ai-hover flex items-center gap-1 transition-colors">
+                           <Icon name="refresh-cw" size={10} /> Regenerate
+                         </button>
+                       </div>
+                       <textarea
+                         value={selectedScene.visual_prompt || selectedScene.visual_description || ''}
+                         onChange={handlePromptUpdate}
+                         className="w-full bg-surface border border-border/60 rounded-xl p-4 text-xs focus:border-ai/50 focus:outline-none resize-none h-32 text-text-primary leading-relaxed transition-colors shadow-sm"
+                         placeholder="Describe the visual for this scene..."
+                       />
 
-                <div className="h-px bg-border/40 my-2"></div>
+                       {/* AI Explainer matching Prompt */}
+                       <div className="bg-ai/5 border border-ai/20 rounded-lg p-3 flex gap-2">
+                         <Icon name="sparkles" size={12} className="text-ai shrink-0 mt-0.5" />
+                         <p className="text-[10px] text-ai leading-relaxed">
+                            <span className="font-bold">AI Suggestion:</span> Generating a visual for this scene will match the tone of "{script?.topic || 'the video'}".
+                         </p>
+                       </div>
 
-                {/* Settings Grid */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                     <label className="text-[10px] font-bold text-text-muted uppercase tracking-widest">Transition</label>
-                     <select className="w-full bg-surface border border-border/60 rounded-lg px-3 py-2.5 text-xs text-text-primary focus:border-brand-red/50 focus:outline-none cursor-pointer transition-colors">
-                       <option value="none">Cut</option>
-                       <option value="fade">Fade</option>
-                       <option value="slide_left">Slide Left</option>
-                     </select>
+                       <button onClick={handleGenerateAsset} className="w-full bg-ai/10 text-ai border border-ai/20 hover:bg-ai hover:text-white hover:shadow-sm text-xs font-bold py-2.5 rounded-xl transition-all flex items-center justify-center gap-2">
+                         <Icon name="sparkles" size={14} /> Generate Asset
+                       </button>
+                    </div>
+
+                    {/* Script Line */}
+                    <div className="space-y-3">
+                       <label className="text-[10px] font-bold text-text-muted uppercase tracking-widest flex items-center gap-1.5"><Icon name="type" size={12} /> Subtitles</label>
+                       <textarea
+                         value={selectedScene.text || selectedScene.narration || ''}
+                         onChange={handleTextUpdate}
+                         className="w-full bg-surface/50 border border-border/40 rounded-xl p-4 text-xs focus:border-brand-red/30 focus:outline-none resize-none h-24 text-text-secondary leading-relaxed transition-colors"
+                         placeholder="Text that appears on screen..."
+                       />
+                    </div>
+
+                    <div className="h-px bg-border/40 my-4"></div>
+
+                    {/* Settings Grid */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                         <label className="text-[10px] font-bold text-text-muted uppercase tracking-widest">Transition</label>
+                         <select className="w-full bg-surface border border-border/60 rounded-lg px-3 py-2.5 text-xs text-text-primary focus:border-brand-red/50 focus:outline-none cursor-pointer transition-colors shadow-sm">
+                           <option value="none">Cut</option>
+                           <option value="fade">Fade</option>
+                           <option value="slide_left">Slide Left</option>
+                         </select>
+                      </div>
+
+                      <div className="space-y-2">
+                         <label className="text-[10px] font-bold text-text-muted uppercase tracking-widest">Motion</label>
+                         <select className="w-full bg-surface border border-border/60 rounded-lg px-3 py-2.5 text-xs text-text-primary focus:border-brand-red/50 focus:outline-none cursor-pointer transition-colors shadow-sm">
+                           <option value="none">Static</option>
+                           <option value="pan_right">Pan Right</option>
+                           <option value="zoom_in">Zoom In</option>
+                         </select>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-full text-center py-10 opacity-60">
+                    <Icon name="mouse-pointer" size={32} className="text-border mb-3" />
+                    <p className="text-xs text-text-muted max-w-[180px]">Select a scene from the canvas to edit its properties.</p>
                   </div>
-
-                  <div className="space-y-2">
-                     <label className="text-[10px] font-bold text-text-muted uppercase tracking-widest">Motion</label>
-                     <select className="w-full bg-surface border border-border/60 rounded-lg px-3 py-2.5 text-xs text-text-primary focus:border-brand-red/50 focus:outline-none cursor-pointer transition-colors">
-                       <option value="none">Static</option>
-                       <option value="pan_right">Pan Right</option>
-                       <option value="zoom_in">Zoom In</option>
-                     </select>
-                  </div>
-
-                  <div className="space-y-2">
-                     <label className="text-[10px] font-bold text-text-muted uppercase tracking-widest">Visual Mode</label>
-                     <select className="w-full bg-surface border border-border/60 rounded-lg px-3 py-2.5 text-xs text-text-primary focus:border-brand-red/50 focus:outline-none cursor-pointer transition-colors">
-                       <option value="fill">Fill</option>
-                       <option value="fit">Fit (Blur bg)</option>
-                     </select>
-                  </div>
-
-                  <div className="space-y-2">
-                     <label className="text-[10px] font-bold text-text-muted uppercase tracking-widest">Duration</label>
-                     <input
-                       type="text"
-                       value={`${selectedScene.duration_est || 5}s`}
-                       disabled
-                       className="w-full bg-surface/50 border border-transparent rounded-lg px-3 py-2.5 text-xs text-text-secondary cursor-not-allowed"
-                     />
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div className="flex flex-col items-center justify-center h-full text-center py-10 opacity-60">
-                <Icon name="mouse-pointer" size={32} className="text-border mb-3" />
-                <p className="text-xs text-text-muted max-w-[180px]">Select a scene from the timeline below to edit its properties.</p>
+                )}
               </div>
-            )}
           </div>
         </div>
       </div>
 
       {/* ── Bottom: Timeline (Fixed Height) ──────────────────────────────────────── */}
-      <div className="h-56 bg-canvas border-t border-border/50 flex flex-col shrink-0 relative z-20">
+      <div className="h-48 bg-canvas border-t border-border/50 flex flex-col shrink-0 relative z-20">
          {/* Timeline Toolbar */}
          <div className="h-10 border-b border-border/30 flex items-center px-5 justify-between bg-surface/80 backdrop-blur">
             <div className="flex items-center gap-6">

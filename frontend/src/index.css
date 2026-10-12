@@ -1,36 +1,60 @@
 @import "tailwindcss";
 
 @theme {
-  --color-canvas: #0E1015; /* Slightly softer near-black */
-  --color-background: #0E1015;
-  --color-surface: #14171F; /* Soft graphite */
-  --color-surface-hover: #1A1D27;
-  --color-surface-input: #11141B;
-  --color-elevated: #1A1D27;
-  --color-elevated-hover: #212532;
-  --color-border: #222631; /* More subtle borders */
-  --color-border-subtle: #191C25;
-  --color-border-strong: #2D3240;
-  --color-border-focus: #E6392F;
-  --color-brand-red: #E6392F;
-  --color-brand-red-hover: #FF5045;
-  --color-brand-red-active: #CC2D24;
-  --color-text-primary: #F3F1EC;
-  --color-text-secondary: #A7ABB4;
-  --color-text-muted: #737984;
-  --color-success: #32C48D;
-  --color-warning: #E8B04B;
-  --color-danger: #E5484D;
-  --color-info: #5C8FE8;
+  /* ── Surface Layers ──────────────────────────────── */
+  --color-bg-0: #0B0D12;
+  --color-bg-1: #11141B;
+  --color-bg-2: #171B24;
+  --color-bg-3: #1E2330;
 
-  --font-sans: 'Manrope', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-display: 'Fraunces', Georgia, serif;
-  --font-ui: 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Geist Mono', ui-monospace, 'SF Mono', monospace;
+  --color-canvas: #0B0D12;
+  --color-surface: #11141B;
+  --color-surface-hover: #171B24;
+  --color-elevated: #171B24;
+  --color-elevated-hover: #1E2330;
 
-  --shadow-brand-glow: 0 0 24px rgba(230, 57, 47, 0.25);
-  --shadow-card-subtle: 0 2px 12px rgba(0, 0, 0, 0.4);
-  --shadow-dropdown: 0 8px 32px rgba(0, 0, 0, 0.65);
+  /* ── Borders ─────────────────────────────────────── */
+  --color-border: #262C3A;
+  --color-border-subtle: #1B2030;
+  --color-border-strong: #3A4154;
+  --color-border-focus: #FF5A4D;
+
+  /* ── Brand Primary (Red) ─────────────────────────── */
+  --color-brand: #FF5A4D;
+  --color-brand-red: #FF5A4D;
+  --color-brand-hover: #FF776D;
+  --color-brand-red-hover: #FF776D;
+  --color-brand-active: #E0483E;
+
+  /* ── AI Accent (Violet / Blue) ───────────────────── */
+  --color-ai: #7C6CFF;
+  --color-ai-start: #7C6CFF;
+  --color-ai-end: #4EA8FF;
+  --color-ai-hover: #9B8FFF;
+
+  /* ── Supplemental Brand Colors ───────────────────── */
+  --color-brand-blue: #4EA8FF;
+
+  /* ── Text ─────────────────────────────────────────── */
+  --color-text-primary: #E8EAF0;
+  --color-text-secondary: #A3A9BA;
+  --color-text-muted: #6B7285;
+
+  /* ── Semantic Feedback ───────────────────────────── */
+  --color-success: #2FD38A;
+  --color-warning: #F5B544;
+  --color-danger: #FF5C6C;
+  --color-info: #4EA8FF;
+
+  /* ── Typography ──────────────────────────────────── */
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* ── Shadows ─────────────────────────────────────── */
+  --shadow-ai-glow: 0 0 24px rgba(124, 108, 255, 0.25);
+  --shadow-brand-glow: 0 0 24px rgba(255, 90, 77, 0.25);
+  --shadow-card-subtle: 0 1px 3px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(38, 44, 58, 0.5);
+  --shadow-dropdown: 0 8px 30px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(38, 44, 58, 0.5);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════
@@ -39,50 +63,51 @@
 
 :root {
   /* Surfaces */
-  --canvas:         #0E1015;
-  --surface:        #14171F;
-  --surface-hover:  #1A1D27;
-  --surface-input:  #11141B;
-  --elevated:       #1A1D27;
-  --elevated-hover: #212532;
+  --bg-0: #0B0D12;
+  --bg-1: #11141B;
+  --bg-2: #171B24;
+  --bg-3: #1E2330;
 
   /* Borders */
-  --border:         #222631;
-  --border-subtle:  #191C25;
-  --border-strong:  #2D3240;
-  --border-focus:   #E6392F;
+  --border: #262C3A;
+  --border-subtle: #1B2030;
+  --border-strong: #3A4154;
+  --border-focus: #FF5A4D;
 
-  /* Brand Primary (Strict: Brand, primary actions, important states — never decorative) */
-  --brand-red:        #E6392F;
-  --brand-red-hover:  #FF5045;
-  --brand-red-active: #CC2D24;
-  --brand-red-muted:  rgba(230, 57, 47, 0.12);
+  /* Brand Primary */
+  --brand: #FF5A4D;
+  --brand-hover: #FF776D;
+  --brand-active: #E0483E;
+  --brand-muted: rgba(255, 90, 77, 0.12);
+
+  /* AI Accent */
+  --ai-start: #7C6CFF;
+  --ai-end: #4EA8FF;
+  --ai-muted: rgba(124, 108, 255, 0.12);
 
   /* Semantic Feedback */
-  --success:        #32C48D;
-  --success-muted:  rgba(50, 196, 141, 0.12);
-  --warning:        #E8B04B;
-  --warning-muted:  rgba(232, 176, 75, 0.12);
-  --danger:         #E5484D;
-  --danger-muted:   rgba(229, 72, 77, 0.12);
-  --info:           #5C8FE8;
-  --info-muted:     rgba(92, 143, 232, 0.12);
+  --success: #2FD38A;
+  --success-muted: rgba(47, 211, 138, 0.12);
+  --warning: #F5B544;
+  --warning-muted: rgba(245, 181, 68, 0.12);
+  --danger: #FF5C6C;
+  --danger-muted: rgba(255, 92, 108, 0.12);
+  --info: #4EA8FF;
+  --info-muted: rgba(78, 168, 255, 0.12);
 
   /* Typography Colors */
-  --text-primary:   #F3F1EC;
-  --text-secondary: #A7ABB4;
-  --text-muted:     #737984;
+  --text-primary: #E8EAF0;
+  --text-secondary: #A3A9BA;
+  --text-muted: #6B7285;
 
   /* Typography Fonts */
-  --font-sans:      'Manrope', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-display:   'Fraunces', Georgia, serif;
-  --font-ui:        'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-mono:      'JetBrains Mono', 'Geist Mono', ui-monospace, 'SF Mono', monospace;
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
 
   /* Layout Dimensions */
-  --sidebar-w:      240px;
-  --topbar-h:       56px;
-  --bottom-nav-h:   60px;
+  --sidebar-w: 240px;
+  --topbar-h: 56px;
+  --bottom-nav-h: 60px;
 }
 
 /* ── Base Resets ───────────────────────────────────────────────────────────── */
@@ -94,7 +119,7 @@
 
 html {
   font-size: 14px;
-  background-color: var(--canvas);
+  background-color: var(--bg-0);
   color: var(--text-primary);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
@@ -103,7 +128,7 @@ html {
 }
 
 body {
-  background-color: var(--canvas);
+  background-color: var(--bg-0);
   color: var(--text-primary);
   min-height: 100vh;
   overflow-x: hidden;
@@ -130,7 +155,7 @@ input, textarea, select {
 
 /* Accessible focus rings */
 :focus-visible {
-  outline: 2px solid var(--brand-red);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 :focus:not(:focus-visible) {
@@ -252,26 +277,26 @@ input, textarea, select {
 
 /* Primary Button — Brand Red */
 .btn-primary {
-  background-color: var(--brand-red);
+  background-color: var(--brand);
   color: #FFFFFF;
-  border-color: var(--brand-red);
+  border-color: var(--brand);
 }
 .btn-primary:hover:not(:disabled) {
-  background-color: var(--brand-red-hover);
-  border-color: var(--brand-red-hover);
+  background-color: var(--brand-hover);
+  border-color: var(--brand-hover);
 }
 .btn-primary:active:not(:disabled) {
-  background-color: var(--brand-red-active);
+  background-color: var(--brand-active);
 }
 
 /* Secondary Button — Elevated Neutral */
 .btn-secondary {
-  background-color: var(--elevated);
+  background-color: var(--bg-2);
   color: var(--text-primary);
   border-color: var(--border);
 }
 .btn-secondary:hover:not(:disabled) {
-  background-color: var(--elevated-hover);
+  background-color: var(--bg-3);
   border-color: var(--border-strong);
 }
 
@@ -281,7 +306,7 @@ input, textarea, select {
   color: var(--text-secondary);
 }
 .btn-ghost:hover:not(:disabled) {
-  background-color: var(--surface-hover);
+  background-color: var(--bg-2);
   color: var(--text-primary);
 }
 
@@ -372,7 +397,7 @@ input, textarea, select {
   border-color: rgba(92, 143, 232, 0.25);
 }
 .badge-draft, .badge-neutral {
-  background-color: var(--elevated);
+  background-color: var(--bg-2);
   color: var(--text-secondary);
   border-color: var(--border);
 }
@@ -384,14 +409,14 @@ input, textarea, select {
 
 /* ── Card Surfaces ─────────────────────────────────────────────────────────── */
 .card-base {
-  background-color: var(--surface);
+  background-color: var(--bg-1);
   border: 1px solid var(--border);
   border-radius: 0.75rem;
   padding: 1.25rem;
 }
 
 .card-elevated {
-  background-color: var(--elevated);
+  background-color: var(--bg-2);
   border: 1px solid var(--border);
   border-radius: 0.75rem;
   padding: 1.25rem;
@@ -411,4 +436,79 @@ input, textarea, select {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   MICRO-ANIMATIONS & GLASSMORPHISM
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* Entrance animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-in {
+  animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+.animate-scale-in {
+  animation: scaleIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-shimmer {
+  background: linear-gradient(90deg, transparent 33%, rgba(255,255,255,0.05) 50%, transparent 66%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* Glassmorphism utility */
+.glass {
+  background: rgba(17, 20, 27, 0.7);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(38, 44, 58, 0.6);
+}
+
+.glass-strong {
+  background: rgba(17, 20, 27, 0.85);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(38, 44, 58, 0.8);
+}
+
+/* Custom scrollbar for code / version areas */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 9999px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
 }

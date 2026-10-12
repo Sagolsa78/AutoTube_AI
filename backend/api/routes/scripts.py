@@ -24,6 +24,7 @@ from backend.models.models import (
     Scene,
     Script,
     ScriptStatus,
+    ScriptVersion,
     User,
 )
 
@@ -61,6 +62,13 @@ class ScriptOut(BaseModel):
     claims: list | None = None
     latest_video_status: str | None = None
     latest_video_error: str | None = None
+
+
+class ScriptVersionOut(BaseModel):
+    id: str
+    script_id: str
+    full_text: str
+    created_at: str
 
 
 class ScriptUpdateIn(BaseModel):
@@ -172,8 +180,7 @@ async def generate_script_for_idea(
     from engine.script.agentic_generator import generate_script_agentic
 
     try:
-        story_spec, provider_used, cost_data = await asyncio.to_thread(
-            generate_script_agentic,
+        story_spec, provider_used, cost_data = await generate_script_agentic(
             idea_topic,
             niche=niche,
             language=final_language,
@@ -315,6 +322,12 @@ async def update_script(
             400, "Cannot edit a script that is already used in a render."
         )
 
+    # Save a version
+    version = ScriptVersion(
+        script_id=s.id, full_text=s.full_text or "", body=s.body or {}
+    )
+    db.add(version)
+
     if body.full_text is not None:
         s.full_text = body.full_text
 
@@ -401,6 +414,60 @@ async def regenerate_script(
     return await generate_script_for_idea(old_script.idea_id, user=user, db=db)
 
 
+class AIEditIn(BaseModel):
+    action: str
+
+
+@router.post("/{script_id}/scenes/{scene_id}/ai-edit", response_model=SceneOut)
+async def ai_edit_scene(
+    script_id: str,
+    scene_id: str,
+    body: AIEditIn,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    user_id_val = user.id
+    q = (
+        select(Script)
+        .join(Idea)
+        .join(Channel)
+        .where(Channel.user_id == user_id_val, Script.id == script_id)
+        .options(selectinload(Script.scenes))
+    )
+    res = await db.execute(q)
+    s = res.scalars().first()
+    if not s:
+        raise HTTPException(404, "Script not found")
+
+    scene = next((sc for sc in s.scenes if sc.id == scene_id), None)
+    if not scene:
+        raise HTTPException(404, "Scene not found")
+
+    from backend.ai.gateway.llm_gateway import generate_structured
+    from backend.ai.prompts.prompts import SCRIPT_SCENE_EDIT_V1
+    from backend.ai.schemas.schemas import SceneEditResult
+
+    # Check if the prompt wants a structural change rather than text rewrite
+    # if body.action == "scenes": then it generates new scenes... but let's stick to narration rewrite for now.
+
+    try:
+        parsed, meta = await generate_structured(
+            operation="edit_scene",
+            prompt_template=SCRIPT_SCENE_EDIT_V1,
+            schema=SceneEditResult,
+            context={"action": body.action, "narration": scene.narration or ""},
+            policy="fast",
+        )
+        return {
+            "id": scene.id,
+            "scene_number": scene.scene_number,
+            "narration": parsed.narration,
+            "visual_description": scene.visual_description or "",
+        }
+    except Exception as e:
+        raise HTTPException(500, f"AI edit failed: {str(e)}")
+
+
 @router.post("/{script_id}/discard", response_model=ScriptOut)
 async def discard_script(
     script_id: str,
@@ -426,6 +493,72 @@ async def discard_script(
 
     s.status = ScriptStatus.discarded
     await db.flush()
+    return _fmt(s)
+
+
+@router.get("/{script_id}/versions", response_model=list[ScriptVersionOut])
+async def get_script_versions(
+    script_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    q = (
+        select(ScriptVersion)
+        .join(Script)
+        .join(Idea)
+        .join(Channel)
+        .where(Channel.user_id == user.id, Script.id == script_id)
+        .order_by(ScriptVersion.created_at.desc())
+    )
+    res = await db.execute(q)
+    return [
+        {
+            "id": v.id,
+            "script_id": v.script_id,
+            "full_text": v.full_text,
+            "created_at": str(v.created_at),
+        }
+        for v in res.scalars().all()
+    ]
+
+
+@router.post("/{script_id}/versions/{version_id}/revert", response_model=ScriptOut)
+async def revert_script_version(
+    script_id: str,
+    version_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    q = (
+        select(Script)
+        .join(Idea)
+        .join(Channel)
+        .where(Channel.user_id == user.id, Script.id == script_id)
+        .options(selectinload(Script.scenes))
+    )
+    res = await db.execute(q)
+    s = res.scalars().first()
+    if not s:
+        raise HTTPException(404, "Script not found")
+
+    version_q = select(ScriptVersion).where(
+        ScriptVersion.id == version_id, ScriptVersion.script_id == script_id
+    )
+    version_res = await db.execute(version_q)
+    version = version_res.scalars().first()
+
+    if not version:
+        raise HTTPException(404, "Version not found")
+
+    # Apply version body to script
+    s.body = version.body
+    s.full_text = version.full_text
+
+    # Optional: Update scenes if we want to fully sync the scenes relationship.
+    # We will just rely on the frontend reloading and calling update_script or using s.body directly.
+    # In a full production system, we'd delete existing scenes and recreate them from version.body.
+
+    await db.commit()
     return _fmt(s)
 
 

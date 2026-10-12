@@ -84,10 +84,17 @@ export const api = {
   updateChannel:  (id, d) => request(`/channels/${id}`, { method: 'PATCH', body: JSON.stringify(d) }),
   deleteChannel:  (id) => request(`/channels/${id}`, { method: 'DELETE' }),
 
+  // ── Projects ─────────────────────────────────────
+  getProjectState: (id) => request(`/projects/${id}/state`),
+  getProjectPreflight: (id) => request(`/projects/${id}/preflight`),
+  createProject: (channelId, title) => request(`/projects?channel_id=${channelId}&title=${encodeURIComponent(title)}`, { method: 'POST' }),
+  updateProject: (id, data) => request(`/projects/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+
   // ── Ideas ────────────────────────────────────────
   getIdeas:       (channelId) => request(`/ideas/${channelId ? '?channel_id=' + channelId : ''}`),
   createIdea:     (data) => request('/ideas/', { method: 'POST', body: JSON.stringify(data) }),
   improveIdea:    (topic, channel_id = null) => request('/ideas/improve', { method: 'POST', body: JSON.stringify({ topic, channel_id }) }),
+  getHooks:       (ideaId) => request(`/ideas/${ideaId}/hooks`, { method: 'POST' }),
   generateIdeas:  (channelId, count, data) => request('/ideas/generate', { method: 'POST', body: JSON.stringify({ channel_id: channelId, count, ...(typeof data === 'string' ? { niche: data } : data) }), timeout: 120000 }),
   discardIdea:    (id) => request(`/ideas/${id}/discard`, { method: 'POST' }),
 
@@ -109,12 +116,15 @@ export const api = {
   generateScript:   (ideaId, language = 'en', locale = 'US', contentType = 'short', targetDuration = 30) => request(`/scripts/generate/${ideaId}?language=${language}&locale=${locale}&content_type=${contentType}&target_duration_seconds=${targetDuration}`, { method: 'POST', timeout: 120000 }),
   regenerateScript: (id) => request(`/scripts/${id}/regenerate`, { method: 'POST', timeout: 120000 }),
   updateScript:   (id, data) => request(`/scripts/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  aiEditScene:    (scriptId, sceneId, action) => request(`/scripts/${scriptId}/scenes/${sceneId}/ai-edit`, { method: 'POST', body: JSON.stringify({ action }), timeout: 60000 }),
+  getScriptVersions: (scriptId) => request(`/scripts/${scriptId}/versions`),
+  revertScriptVersion: (scriptId, versionId) => request(`/scripts/${scriptId}/versions/${versionId}/revert`, { method: 'POST' }),
   discardScript:  (id) => request(`/scripts/${id}/discard`, { method: 'POST' }),
 
   // ── Assets & Scenes ──────────────────────────────
-  searchAssets:   (query) => request(`/assets/search?query=${encodeURIComponent(query)}`),
-  assignAssetToScene: (sceneId, asset) => request(`/scenes/${sceneId}/asset`, { method: 'POST', body: JSON.stringify(asset) }),
-  generateAsset:  (prompt, type = 'IMAGE') => request(`/assets/generate`, { method: 'POST', body: JSON.stringify({ prompt, type }), timeout: 120000 }),
+  searchAssets:   (query, count = 10) => request(`/assets/search?query=${encodeURIComponent(query)}&count=${count}`),
+  assignAssetToScene: (sceneId, assetData) => request(`/assets/scenes/${sceneId}/assign`, { method: 'POST', body: JSON.stringify(assetData) }),
+  generateAsset:  (prompt, mode = 'IMAGE') => request(`/assets/generate?prompt=${encodeURIComponent(prompt)}&mode=${encodeURIComponent(mode)}`, { method: 'POST' }),
 
   // ── Videos ───────────────────────────────────────
   getVideos:      (channelId) => request(`/videos/${channelId ? '?channel_id=' + channelId : ''}`),
@@ -161,11 +171,6 @@ export const api = {
   getAnalytics:   (videoId) => request(`/analytics/${videoId}`),
   analyticsCleanup: () => request('/analytics/cleanup', { method: 'POST' }),
   getSystemLogs:   (lines = 100) => request(`/analytics/logs?lines=${lines}`),
-
-  // ── Assets ───────────────────────────────────────
-  searchAssets:   (query, count = 8) => request(`/assets/search?query=${encodeURIComponent(query)}&count=${count}`),
-  assignAssetToScene: (sceneId, assetData) => request(`/assets/scenes/${sceneId}/assign`, { method: 'POST', body: JSON.stringify(assetData) }),
-  generateAsset:  (prompt, mode) => request(`/assets/generate?prompt=${encodeURIComponent(prompt)}&mode=${mode}`, { method: 'POST' }),
 
   // ── System & Compute Plane ────────────────────────
   getSystemHealth: () => request('/system/health'),
@@ -215,14 +220,6 @@ export const api = {
 
   // ── Multi-Platform Publishing ────────────────────────
   publishUniversal: (payload) => request('/publishing/compose', { method: 'POST', body: JSON.stringify(payload) }),
-
-  // ── Assets ─────────────────────────────────────────
-  searchAssets: (query) => request(`/assets/search?query=${encodeURIComponent(query)}`),
-  assignAssetToScene: (sceneId, assetData) => request(`/assets/scenes/${sceneId}/assign`, {
-    method: 'POST',
-    body: JSON.stringify(assetData)
-  }),
-  generateAsset: (prompt, mode) => request(`/assets/generate?prompt=${encodeURIComponent(prompt)}&mode=${encodeURIComponent(mode)}`, { method: 'POST' }),
 
   // ── Calendar ───────────────────────────────────────
   getCalendar: (startDate, endDate, channelId) => {
